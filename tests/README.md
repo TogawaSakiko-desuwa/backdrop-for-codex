@@ -24,3 +24,19 @@ Run the Edge/CDP startup-readiness checks:
 $env:BACKDROP_FOR_CODEX_RUN_STARTUP_RACE_TESTS = "1"
 dotnet test .\BackdropForCodex.slnx --filter "FullyQualifiedName~PuppeteerWallpaperSessionStartupReadinessTests"
 ```
+
+Run the notification-area lifecycle smoke test from an unlocked Windows 11 desktop after building
+the selected configuration:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File .\tests\Smoke\TrayLifecycle.ps1 `
+  -Configuration Debug `
+  -ProbeBeforeClose
+```
+
+The smoke test launches its own Backdrop for Codex process, closes the main window, and verifies
+through Windows UI Automation that the process remains alive and its uniquely named icon is
+discoverable in either the visible notification area or the hidden-icons panel. It refuses to take
+over an existing matching process and only stops the PID it launched. GitHub-hosted runners do not
+provide the interactive Explorer desktop this check requires, so run it locally before a release.

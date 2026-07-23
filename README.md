@@ -129,6 +129,15 @@ dotnet test .\BackdropForCodex.slnx `
   --filter "Category!=Integration"
 ```
 
+通知区域生命周期需要已解锁的 Windows 11 交互桌面；构建 Debug 版本后可运行本地冒烟测试，确认关闭主窗口前后都能发现托盘图标：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File .\tests\Smoke\TrayLifecycle.ps1 `
+  -Configuration Debug `
+  -ProbeBeforeClose
+```
+
 集成测试必须显式选择。机器兼容性测试要求安装受审 Store/MSIX Codex，其中进程核验用例还要求 Codex 正在当前用户会话中运行；启动就绪测试会启动本机 Edge/CDP 测试页。确认环境后可分别运行：
 
 ```powershell

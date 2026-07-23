@@ -86,7 +86,9 @@ public partial class App : System.Windows.Application
                 _mainWindow.ContentRendered += AutoLaunchAfterRender;
             }
 
+            MainWindow = _mainWindow;
             _mainWindow.Show();
+            _trayController.Register();
         }
         catch (Exception exception)
         {

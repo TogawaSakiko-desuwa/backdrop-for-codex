@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-07-23
+
 ### Added
 
 - 加入基于 WPF-UI 的 Windows 11 Fluent/Mica 工作台，提供本地图片/视频预览、代表性 Codex 可读性预览、拖放选择与最近媒体缩略图。
@@ -16,6 +18,10 @@
 - 主窗口改为宽屏双栏、窄屏上下排列的响应式工作台，并区分编辑草稿、已保存目标与当前活动快照，避免应用失败后错误显示为已生效。
 - 通知区域实现迁移到 WPF-UI.Tray；关闭主窗口现在隐藏到通知区域并仅在首次显示说明，退出仍执行完整清理。
 - CI 现在执行格式检查、App/Core Release 构建、非集成测试与单文件发布形态检查。
+
+### Fixed
+
+- 修复通知区域图标在主窗口获得原生句柄前静默注册失败的问题；现在窗口关闭后仍可从托盘重新打开、恢复官方背景或退出。
 
 ### Security
 
@@ -50,5 +56,6 @@
 - 复验完整 MSIX 包名、激活 PID、进程启动时间、Windows 会话和监听器所有权；媒体服务保持已校验文件的只读句柄。
 - 明确禁止 CSP bypass；关闭、更换或 lease 到期时移除媒体 `src`、撤销 `blob:` URL，并仅删除带有本项目 owner/generation 的节点和样式。
 
-[Unreleased]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.0.0...HEAD
-[1.0.0]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/releases/tag/v1.0.0
+[Unreleased]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/releases/tag/v1.1.0
+[1.0.0]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/commit/ec1e464
