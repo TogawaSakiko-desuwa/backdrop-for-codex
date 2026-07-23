@@ -26,6 +26,7 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
 
         var glassRule = Assert.Single(rules, IsReviewedRightPanelGlassRule);
         var clearRule = Assert.Single(rules, IsReviewedRightPanelClearRule);
+        var generalGlassRule = Assert.Single(rules, IsGeneralGlassRule);
 
         Assert.Equal(
             [
@@ -56,8 +57,17 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
             ["right-panel-glass-shell"],
             SelectFixtureIds(fixture, glassRule.Selectors));
         Assert.Equal(
+            ["file-layout-shell"],
+            SelectFixtureIds(fixture, [clearRule.Selectors[0]]));
+        Assert.Equal(
+            ["markdown-shell"],
+            SelectFixtureIds(fixture, [clearRule.Selectors[1]]));
+        Assert.Equal(
             ["file-layout-shell", "markdown-shell"],
             SelectFixtureIds(fixture, clearRule.Selectors));
+        Assert.Equal(
+            ["left-panel-lookalike"],
+            SelectFixtureIds(fixture, generalGlassRule.Selectors));
     }
 
     [Fact]
@@ -105,6 +115,15 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
         rule.Selectors.Any(
             selector => selector.Contains(
                 "[data-app-shell-tab-panel-controller=\"right\"]",
+                StringComparison.Ordinal));
+
+    private static bool IsGeneralGlassRule(CssRule rule) =>
+        rule.Declarations.Contains(
+            "background-color: var(--codex-wallpaper-glass) !important",
+            StringComparison.Ordinal) &&
+        rule.Selectors.Any(
+            selector => selector.Contains(
+                "aside:not([data-app-shell-focus-area=\"right-panel\"])",
                 StringComparison.Ordinal));
 
     private static string ExtractGeneratedStyleSheet()
@@ -265,6 +284,38 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
 
     private static bool MatchesSimpleSelector(XElement element, string selector)
     {
+        if (selector.StartsWith(":is(", StringComparison.Ordinal))
+        {
+            var closingParenthesis = FindMatchingParenthesis(selector, 3);
+            if (closingParenthesis != selector.Length - 1)
+            {
+                throw new InvalidOperationException(
+                    $"Unsupported selector after :is(): '{selector}'.");
+            }
+
+            return SplitTopLevel(selector[4..closingParenthesis], ',')
+                .Any(alternative => MatchesSimpleSelector(element, alternative));
+        }
+
+        var notIndex = selector.IndexOf(":not(", StringComparison.Ordinal);
+        if (notIndex >= 0)
+        {
+            var closingParenthesis = FindMatchingParenthesis(selector, notIndex + 4);
+            if (closingParenthesis != selector.Length - 1)
+            {
+                throw new InvalidOperationException(
+                    $"Unsupported selector after :not(): '{selector}'.");
+            }
+
+            var excludedSelector = selector[(notIndex + 5)..closingParenthesis];
+            if (MatchesSimpleSelector(element, excludedSelector))
+            {
+                return false;
+            }
+
+            selector = selector[..notIndex];
+        }
+
         var hasIndex = selector.IndexOf(":has(", StringComparison.Ordinal);
         if (hasIndex >= 0)
         {
@@ -488,14 +539,14 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
                            data-fixture-id="popcorn-surface" />
                     </div>
 
-                    <div class="relative rounded-lg bg-token-main-surface-primary"
-                         data-fixture-id="markdown-shell">
-                      <article class="markdown">
-                        <p>Reviewed file details</p>
-                      </article>
-                    </div>
-
                     <section>
+                      <div class="relative rounded-lg bg-token-main-surface-primary"
+                           data-fixture-id="markdown-shell">
+                        <article class="markdown">
+                          <p>Reviewed file details</p>
+                        </article>
+                      </div>
+
                       <div class="relative rounded-lg bg-token-main-surface-primary"
                            data-fixture-id="rounded-surface-without-markdown">
                         <article>Not Markdown</article>
