@@ -24,7 +24,6 @@
                  SizeChanged="Window_SizeChanged">
   <ui:FluentWindow.Resources>
     <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
-    <converters:WallpaperFitToStretchConverter x:Key="FitToStretchConverter" />
     <converters:MediaThumbnailConverter x:Key="MediaThumbnailConverter" />
     <converters:UiStatusToneToInfoBarSeverityConverter x:Key="StatusToneConverter" />
   </ui:FluentWindow.Resources>
@@ -79,29 +78,43 @@
                 MinHeight="220"
                 Background="#171A20"
                 ClipToBounds="True">
-            <Image x:Name="ImagePreview"
-                   Stretch="{Binding Fit, Converter={StaticResource FitToStretchConverter}}"
-                   Visibility="Collapsed">
-              <Image.Effect>
-                <BlurEffect Radius="{Binding BlurPx}"
-                            RenderingBias="Performance" />
-              </Image.Effect>
-            </Image>
-            <MediaElement x:Name="VideoPreview"
-                          Stretch="{Binding Fit, Converter={StaticResource FitToStretchConverter}}"
-                          LoadedBehavior="Manual"
-                          UnloadedBehavior="Stop"
-                          IsMuted="True"
-                          ScrubbingEnabled="True"
-                          Visibility="Collapsed"
-                          MediaOpened="VideoPreview_MediaOpened"
-                          MediaEnded="VideoPreview_MediaEnded"
-                          MediaFailed="VideoPreview_MediaFailed">
-              <MediaElement.Effect>
-                <BlurEffect Radius="{Binding BlurPx}"
-                            RenderingBias="Performance" />
-              </MediaElement.Effect>
-            </MediaElement>
+            <Grid x:Name="MediaViewport"
+                  ClipToBounds="True"
+                  SizeChanged="MediaViewport_SizeChanged">
+              <Canvas x:Name="MediaCanvas"
+                      ClipToBounds="True"
+                      IsHitTestVisible="False">
+                <Image x:Name="ImagePreview"
+                       Stretch="Fill"
+                       Visibility="Collapsed">
+                  <Image.Effect>
+                    <BlurEffect Radius="{Binding BlurPx}"
+                                RenderingBias="Performance" />
+                  </Image.Effect>
+                </Image>
+                <MediaElement x:Name="VideoPreview"
+                              Stretch="Fill"
+                              LoadedBehavior="Manual"
+                              UnloadedBehavior="Stop"
+                              IsMuted="True"
+                              ScrubbingEnabled="True"
+                              Visibility="Collapsed"
+                              MediaOpened="VideoPreview_MediaOpened"
+                              MediaEnded="VideoPreview_MediaEnded"
+                              MediaFailed="VideoPreview_MediaFailed">
+                  <MediaElement.Effect>
+                    <BlurEffect Radius="{Binding BlurPx}"
+                                RenderingBias="Performance" />
+                  </MediaElement.Effect>
+                </MediaElement>
+              </Canvas>
+            </Grid>
+
+            <!-- Theme-aware readability veil: media, veil, then the simulated Codex UI. -->
+            <Border x:Name="PreviewThemeOverlay"
+                    Background="Black"
+                    Visibility="Collapsed"
+                    IsHitTestVisible="False" />
 
             <Border x:Name="EmptyPreview"
                     Margin="32"
@@ -295,6 +308,45 @@
                 </StackPanel>
               </Grid>
             </Grid>
+
+            <Border x:Name="FocusInteractionSurface"
+                    Background="#01FFFFFF"
+                    IsEnabled="{Binding CanAdjustFocus}"
+                    IsHitTestVisible="{Binding CanAdjustFocus}"
+                    Focusable="{Binding CanAdjustFocus}"
+                    ClipToBounds="True"
+                    Cursor="SizeAll"
+                    ToolTip="{localization:Loc Focus_AutomationHelp, Fallback='Drag to set the crop focus. Arrow keys move one percent; hold Shift to move ten percent.'}"
+                    AutomationProperties.Name="{localization:Loc Focus_AutomationName, Fallback='Wallpaper crop focus'}"
+                    AutomationProperties.HelpText="{localization:Loc Focus_AutomationHelp, Fallback='Drag to set the crop focus. Arrow keys move one percent; hold Shift to move ten percent.'}"
+                    AutomationProperties.ItemStatus="{Binding FocusLabel}"
+                    MouseLeftButtonDown="FocusInteractionSurface_MouseLeftButtonDown"
+                    MouseMove="FocusInteractionSurface_MouseMove"
+                    MouseLeftButtonUp="FocusInteractionSurface_MouseLeftButtonUp"
+                    LostMouseCapture="FocusInteractionSurface_LostMouseCapture"
+                    KeyDown="FocusInteractionSurface_KeyDown">
+              <Canvas IsHitTestVisible="False">
+                <Grid x:Name="FocusIndicator"
+                      Width="34"
+                      Height="34"
+                      Opacity="0">
+                  <Ellipse Fill="#66000000"
+                           Stroke="White"
+                           StrokeThickness="2" />
+                  <Line X1="17" Y1="5" X2="17" Y2="29"
+                        Stroke="White"
+                        StrokeThickness="1" />
+                  <Line X1="5" Y1="17" X2="29" Y2="17"
+                        Stroke="White"
+                        StrokeThickness="1" />
+                  <Ellipse Width="5"
+                           Height="5"
+                           Fill="White"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center" />
+                </Grid>
+              </Canvas>
+            </Border>
 
             <Border HorizontalAlignment="Left"
                     VerticalAlignment="Bottom"
@@ -521,17 +573,42 @@
                          Text="{localization:Loc Section_Appearance, Fallback=Appearance}" />
 
               <TextBlock Style="{StaticResource InspectorLabelStyle}"
-                         Text="{localization:Loc Label_Fit, Fallback='Image fit'}" />
+                         Text="{localization:Loc Label_Fit, Fallback='Media fit'}" />
               <ComboBox Margin="0,0,0,16"
                         SelectedValue="{Binding Fit, Mode=TwoWay}"
                         SelectedValuePath="Tag"
-                        AutomationProperties.Name="{localization:Loc Label_Fit, Fallback='Image fit'}"
+                        AutomationProperties.Name="{localization:Loc Label_Fit, Fallback='Media fit'}"
                         IsEnabled="{Binding CanEdit}">
-                <ComboBoxItem Content="{localization:Loc Fit_Cover, Fallback='Fill frame'}"
+                <ComboBoxItem Content="{localization:Loc Fit_Cover, Fallback='Crop to fill'}"
                               Tag="{x:Static settings:WallpaperFit.Cover}" />
-                <ComboBoxItem Content="{localization:Loc Fit_Contain, Fallback='Show entire image'}"
+                <ComboBoxItem Content="{localization:Loc Fit_Contain, Fallback='Show entire media'}"
                               Tag="{x:Static settings:WallpaperFit.Contain}" />
+                <ComboBoxItem Content="{localization:Loc Fit_Stretch, Fallback='Stretch to fit'}"
+                              Tag="{x:Static settings:WallpaperFit.Stretch}" />
               </ComboBox>
+
+              <StackPanel Margin="0,0,0,16"
+                          Visibility="{Binding IsCoverFit, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <Grid>
+                  <TextBlock Style="{StaticResource InspectorLabelStyle}"
+                             Text="{localization:Loc Label_Focus, Fallback='Crop focus'}" />
+                  <StackPanel HorizontalAlignment="Right"
+                              Orientation="Horizontal">
+                    <TextBlock Margin="0,0,8,0"
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                               Text="{Binding FocusLabel}" />
+                    <ui:Button Padding="8,2"
+                               Appearance="Secondary"
+                               Content="{localization:Loc Action_CenterFocus, Fallback=Center}"
+                               IsEnabled="{Binding CanAdjustFocus}"
+                               AutomationProperties.Name="{localization:Loc Action_CenterFocus, Fallback='Center crop focus'}"
+                               Click="CenterFocus_Click" />
+                  </StackPanel>
+                </Grid>
+                <TextBlock Style="{StaticResource CaptionTextStyle}"
+                           Text="{localization:Loc Hint_FocusControl, Fallback='Drag the marker or use the arrow keys. Hold Shift for larger steps.'}" />
+              </StackPanel>
 
               <Grid>
                 <TextBlock Style="{StaticResource InspectorLabelStyle}"
@@ -562,6 +639,35 @@
                       Value="{Binding BlurPx, Mode=TwoWay}"
                       IsEnabled="{Binding CanEdit}"
                       AutomationProperties.Name="{localization:Loc Label_Blur, Fallback='Background blur'}" />
+
+              <Grid Margin="0,16,0,0">
+                <TextBlock Style="{StaticResource InspectorLabelStyle}"
+                           Text="{localization:Loc Label_DarkOverlay, Fallback='Dark theme overlay'}" />
+                <TextBlock HorizontalAlignment="Right"
+                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                           Text="{Binding DarkOverlayPercent}" />
+              </Grid>
+              <Slider Minimum="0"
+                      Maximum="0.60"
+                      TickFrequency="0.01"
+                      Value="{Binding DarkOverlay, Mode=TwoWay}"
+                      IsEnabled="{Binding CanEdit}"
+                      AutomationProperties.Name="{localization:Loc Label_DarkOverlay, Fallback='Dark theme overlay'}"
+                      Margin="0,0,0,16" />
+
+              <Grid>
+                <TextBlock Style="{StaticResource InspectorLabelStyle}"
+                           Text="{localization:Loc Label_LightOverlay, Fallback='Light theme overlay'}" />
+                <TextBlock HorizontalAlignment="Right"
+                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                           Text="{Binding LightOverlayPercent}" />
+              </Grid>
+              <Slider Minimum="0"
+                      Maximum="0.60"
+                      TickFrequency="0.01"
+                      Value="{Binding LightOverlay, Mode=TwoWay}"
+                      IsEnabled="{Binding CanEdit}"
+                      AutomationProperties.Name="{localization:Loc Label_LightOverlay, Fallback='Light theme overlay'}" />
             </StackPanel>
           </ui:Card>
 

@@ -42,6 +42,8 @@ public sealed record RecentMediaItem(
 /// </summary>
 public sealed class MainWindowViewModel : ObservableObject, IDisposable
 {
+    public const double MaximumOverlay = 0.60;
+
     private static readonly string[] ImageExtensions = [".png", ".jpg", ".jpeg", ".webp"];
     private static readonly string[] VideoExtensions = [".mp4", ".webm"];
 
@@ -62,8 +64,12 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private string? _selectedMediaPath;
     private MediaKind _selectedMediaKind;
     private WallpaperFit _fit = WallpaperFit.Cover;
+    private double _focusX = 0.5;
+    private double _focusY = 0.5;
     private double _panelOpacity = 0.78;
     private double _blurPx = 14;
+    private double _darkOverlay = 0.30;
+    private double _lightOverlay = 0.18;
     private bool _acceptedCdpRisk;
     private bool _isMediaMissing;
     private bool _isPaused;
@@ -143,6 +149,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             {
                 OnPropertyChanged(nameof(IsBusy));
                 OnPropertyChanged(nameof(CanEdit));
+                OnPropertyChanged(nameof(CanAdjustFocus));
                 NotifyCommandStateChanged();
             }
         }
@@ -175,6 +182,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                 OnPropertyChanged(nameof(SelectedMediaName));
                 OnPropertyChanged(nameof(HasSelectedMedia));
                 OnPropertyChanged(nameof(IsVideoSelected));
+                OnPropertyChanged(nameof(CanAdjustFocus));
                 SynchronizeDraftState();
             }
         }
@@ -214,10 +222,44 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         {
             if (SetProperty(ref _fit, value))
             {
+                OnPropertyChanged(nameof(IsCoverFit));
+                OnPropertyChanged(nameof(CanAdjustFocus));
                 SynchronizeDraftState();
             }
         }
     }
+
+    public bool IsCoverFit => Fit == WallpaperFit.Cover;
+
+    public bool CanAdjustFocus => CanEdit && HasSelectedMedia && IsCoverFit;
+
+    public double FocusX
+    {
+        get => _focusX;
+        set
+        {
+            if (SetProperty(ref _focusX, Math.Clamp(value, 0, 1)))
+            {
+                OnPropertyChanged(nameof(FocusLabel));
+                SynchronizeDraftState();
+            }
+        }
+    }
+
+    public double FocusY
+    {
+        get => _focusY;
+        set
+        {
+            if (SetProperty(ref _focusY, Math.Clamp(value, 0, 1)))
+            {
+                OnPropertyChanged(nameof(FocusLabel));
+                SynchronizeDraftState();
+            }
+        }
+    }
+
+    public string FocusLabel => $"{FocusX:P0}, {FocusY:P0}";
 
     public double PanelOpacity
     {
@@ -248,6 +290,36 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     }
 
     public string BlurLabel => $"{BlurPx:N0} px";
+
+    public double DarkOverlay
+    {
+        get => _darkOverlay;
+        set
+        {
+            if (SetProperty(ref _darkOverlay, ClampOverlay(value)))
+            {
+                OnPropertyChanged(nameof(DarkOverlayPercent));
+                SynchronizeDraftState();
+            }
+        }
+    }
+
+    public string DarkOverlayPercent => $"{DarkOverlay:P0}";
+
+    public double LightOverlay
+    {
+        get => _lightOverlay;
+        set
+        {
+            if (SetProperty(ref _lightOverlay, ClampOverlay(value)))
+            {
+                OnPropertyChanged(nameof(LightOverlayPercent));
+                SynchronizeDraftState();
+            }
+        }
+    }
+
+    public string LightOverlayPercent => $"{LightOverlay:P0}";
 
     public bool AcceptedCdpRisk
     {
@@ -334,6 +406,17 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         ? Text("Action_ResumeVideo", "Resume video")
         : Text("Action_PauseVideo", "Pause video");
 
+    public void SetFocus(double focusX, double focusY)
+    {
+        FocusX = focusX;
+        FocusY = focusY;
+    }
+
+    public void ResetFocus() => SetFocus(0.5, 0.5);
+
+    public void NudgeFocus(double horizontalDelta, double verticalDelta) =>
+        SetFocus(FocusX + horizontalDelta, FocusY + verticalDelta);
+
     public Task InitializeAsync()
     {
         lock (_initializationLock)
@@ -392,7 +475,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         {
             var saved = await _wallpaper
                 .SaveSettingsAsync(
-                    SavedDesired with { AcceptedCdpRisk = true },
+                    ClampLegacyOverlays(SavedDesired) with { AcceptedCdpRisk = true },
                     _operationCancellation!.Token)
                 .ConfigureAwait(true);
             SetPersistedSettings(saved, synchronizeEditor: false);
@@ -426,7 +509,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         {
             var saved = await _wallpaper
                 .SaveSettingsAsync(
-                    SavedDesired with { AcceptedCdpRisk = false },
+                    ClampLegacyOverlays(SavedDesired) with { AcceptedCdpRisk = false },
                     _operationCancellation!.Token)
                 .ConfigureAwait(true);
             SetPersistedSettings(saved, synchronizeEditor: false);
@@ -526,7 +609,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         {
             var saved = await _wallpaper
                 .SaveSettingsAsync(
-                    SavedDesired.RemoveRecentMediaPath(mediaPath),
+                    ClampLegacyOverlays(SavedDesired).RemoveRecentMediaPath(mediaPath),
                     _operationCancellation!.Token)
                 .ConfigureAwait(true);
             SetPersistedSettings(saved, synchronizeEditor: false);
@@ -561,7 +644,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             operationStarted = true;
             var saved = await _wallpaper
                 .SaveSettingsAsync(
-                    SavedDesired.ClearRecentMediaPaths(),
+                    ClampLegacyOverlays(SavedDesired).ClearRecentMediaPaths(),
                     _operationCancellation!.Token)
                 .ConfigureAwait(true);
             SetPersistedSettings(saved, synchronizeEditor: false);
@@ -1007,8 +1090,12 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             SelectedMediaKind = settings.MediaKind;
             SelectedMediaPath = settings.MediaPath;
             Fit = settings.Fit;
+            FocusX = settings.FocusX;
+            FocusY = settings.FocusY;
             PanelOpacity = settings.PanelOpacity;
             BlurPx = settings.BlurPx;
+            DarkOverlay = settings.DarkOverlay;
+            LightOverlay = settings.LightOverlay;
             AcceptedCdpRisk = settings.AcceptedCdpRisk;
             IsMediaMissing =
                 settings.MediaPath is not null &&
@@ -1028,8 +1115,12 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             MediaPath = SelectedMediaPath,
             MediaKind = SelectedMediaPath is null ? MediaKind.None : SelectedMediaKind,
             Fit = Fit,
+            FocusX = FocusX,
+            FocusY = FocusY,
             PanelOpacity = PanelOpacity,
             BlurPx = BlurPx,
+            DarkOverlay = DarkOverlay,
+            LightOverlay = LightOverlay,
             AcceptedCdpRisk = AcceptedCdpRisk,
         };
 
@@ -1187,6 +1278,16 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             ? MediaKind.Video
             : MediaKind.None;
     }
+
+    private static double ClampOverlay(double value) =>
+        Math.Clamp(value, 0, MaximumOverlay);
+
+    private static SettingsV1 ClampLegacyOverlays(SettingsV1 settings) =>
+        settings with
+        {
+            DarkOverlay = ClampOverlay(settings.DarkOverlay),
+            LightOverlay = ClampOverlay(settings.LightOverlay),
+        };
 
     private static async Task TryStepAsync(
         Func<Task> operation,

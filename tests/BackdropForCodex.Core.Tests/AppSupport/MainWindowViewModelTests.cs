@@ -28,8 +28,12 @@ public sealed class MainWindowViewModelTests
                 MediaPath = mediaPath,
                 MediaKind = MediaKind.Image,
                 Fit = WallpaperFit.Contain,
+                FocusX = 0.25,
+                FocusY = 0.75,
                 PanelOpacity = 0.84,
                 BlurPx = 7,
+                DarkOverlay = 0.42,
+                LightOverlay = 0.21,
                 AcceptedCdpRisk = true,
                 RecentMediaPaths = [mediaPath, missingRecentPath],
             };
@@ -51,8 +55,12 @@ public sealed class MainWindowViewModelTests
             Assert.Equal(mediaPath, viewModel.SelectedMediaPath);
             Assert.Equal(MediaKind.Image, viewModel.SelectedMediaKind);
             Assert.Equal(WallpaperFit.Contain, viewModel.Fit);
+            Assert.Equal(0.25, viewModel.FocusX);
+            Assert.Equal(0.75, viewModel.FocusY);
             Assert.Equal(0.84, viewModel.PanelOpacity);
             Assert.Equal(7, viewModel.BlurPx);
+            Assert.Equal(0.42, viewModel.DarkOverlay);
+            Assert.Equal(0.21, viewModel.LightOverlay);
             Assert.True(viewModel.AcceptedCdpRisk);
             Assert.False(viewModel.IsMediaMissing);
             Assert.False(viewModel.IsDraftDirty);
@@ -132,8 +140,11 @@ public sealed class MainWindowViewModelTests
             await viewModel.InitializeAsync();
             viewModel.SelectMedia(mediaPath);
             viewModel.Fit = WallpaperFit.Contain;
+            viewModel.SetFocus(0.2, 0.8);
             viewModel.PanelOpacity = 0.86;
             viewModel.BlurPx = 6;
+            viewModel.DarkOverlay = 0.44;
+            viewModel.LightOverlay = 0.16;
 
             var applied = await viewModel.ApplyAsync();
 
@@ -145,8 +156,12 @@ public sealed class MainWindowViewModelTests
             Assert.Equal(mediaPath, viewModel.SavedDesired.MediaPath);
             Assert.Equal(MediaKind.Image, viewModel.SavedDesired.MediaKind);
             Assert.Equal(WallpaperFit.Contain, viewModel.SavedDesired.Fit);
+            Assert.Equal(0.2, viewModel.SavedDesired.FocusX);
+            Assert.Equal(0.8, viewModel.SavedDesired.FocusY);
             Assert.Equal(0.86, viewModel.SavedDesired.PanelOpacity);
             Assert.Equal(6, viewModel.SavedDesired.BlurPx);
+            Assert.Equal(0.44, viewModel.SavedDesired.DarkOverlay);
+            Assert.Equal(0.16, viewModel.SavedDesired.LightOverlay);
             Assert.False(viewModel.IsDraftDirty);
             Assert.Equal(UiStatusTone.Error, viewModel.StatusTone);
             Assert.Equal("Wallpaper could not be applied", viewModel.StatusTitle);
@@ -175,6 +190,75 @@ public sealed class MainWindowViewModelTests
         Assert.True(viewModel.AcceptedCdpRisk);
         Assert.False(viewModel.IsDraftDirty);
         Assert.Equal(UiStatusTone.Success, viewModel.StatusTone);
+    }
+
+    [Fact]
+    public async Task LegacyOverlaysAreClampedInTheEditorAndNormalizedOnTheNextSave()
+    {
+        var wallpaper = new FakeWallpaperApplicationService(
+            SettingsV1.CreateDefault() with
+            {
+                DarkOverlay = 0.90,
+                LightOverlay = 0.75,
+            });
+        using var preferencesStore = new FakeAppPreferencesStore();
+        using var viewModel = CreateViewModel(wallpaper, preferencesStore);
+
+        await viewModel.InitializeAsync();
+
+        Assert.Equal(MainWindowViewModel.MaximumOverlay, viewModel.DarkOverlay);
+        Assert.Equal(MainWindowViewModel.MaximumOverlay, viewModel.LightOverlay);
+        Assert.Equal(0.90, viewModel.SavedDesired.DarkOverlay);
+        Assert.Equal(0.75, viewModel.SavedDesired.LightOverlay);
+        Assert.True(viewModel.IsDraftDirty);
+
+        await viewModel.AcceptRiskAsync();
+
+        Assert.NotNull(wallpaper.LastSavedSettings);
+        Assert.Equal(
+            MainWindowViewModel.MaximumOverlay,
+            wallpaper.LastSavedSettings.DarkOverlay);
+        Assert.Equal(
+            MainWindowViewModel.MaximumOverlay,
+            wallpaper.LastSavedSettings.LightOverlay);
+        Assert.Equal(
+            MainWindowViewModel.MaximumOverlay,
+            viewModel.SavedDesired.DarkOverlay);
+        Assert.Equal(
+            MainWindowViewModel.MaximumOverlay,
+            viewModel.SavedDesired.LightOverlay);
+        Assert.False(viewModel.IsDraftDirty);
+    }
+
+    [Fact]
+    public async Task CropFocusEditingIsCoverOnlyAndClampsKeyboardStyleNudges()
+    {
+        var mediaPath = CreateTemporaryMediaFile(".png");
+        try
+        {
+            var wallpaper = new FakeWallpaperApplicationService(
+                SettingsV1.CreateDefault());
+            using var preferencesStore = new FakeAppPreferencesStore();
+            using var viewModel = CreateViewModel(wallpaper, preferencesStore);
+            await viewModel.InitializeAsync();
+            viewModel.SelectMedia(mediaPath);
+
+            Assert.True(viewModel.CanAdjustFocus);
+
+            viewModel.SetFocus(0.98, 0.02);
+            viewModel.NudgeFocus(0.10, -0.10);
+
+            Assert.Equal(1, viewModel.FocusX);
+            Assert.Equal(0, viewModel.FocusY);
+
+            viewModel.Fit = WallpaperFit.Contain;
+
+            Assert.False(viewModel.CanAdjustFocus);
+        }
+        finally
+        {
+            File.Delete(mediaPath);
+        }
     }
 
     [Fact]

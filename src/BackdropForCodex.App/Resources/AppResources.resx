@@ -37,15 +37,23 @@
   <data name="Section_SafetyPrivacy" xml:space="preserve"><value>Safety &amp; privacy</value></data>
   <data name="Section_About" xml:space="preserve"><value>About</value></data>
   <data name="Section_DangerZone" xml:space="preserve"><value>Danger zone</value></data>
-  <data name="Label_Fit" xml:space="preserve"><value>Image fit</value></data>
+  <data name="Label_Fit" xml:space="preserve"><value>Media fit</value></data>
+  <data name="Label_Focus" xml:space="preserve"><value>Crop focus</value></data>
+  <data name="Hint_FocusControl" xml:space="preserve"><value>Drag the marker or use the arrow keys. Hold Shift for larger steps.</value></data>
+  <data name="Action_CenterFocus" xml:space="preserve"><value>Center</value></data>
+  <data name="Focus_AutomationName" xml:space="preserve"><value>Wallpaper crop focus</value></data>
+  <data name="Focus_AutomationHelp" xml:space="preserve"><value>Drag to set the crop focus. Arrow keys move one percent; hold Shift to move ten percent.</value></data>
   <data name="Label_PanelOpacity" xml:space="preserve"><value>Panel opacity</value></data>
   <data name="Label_Blur" xml:space="preserve"><value>Background blur</value></data>
+  <data name="Label_DarkOverlay" xml:space="preserve"><value>Dark theme overlay</value></data>
+  <data name="Label_LightOverlay" xml:space="preserve"><value>Light theme overlay</value></data>
   <data name="Label_Theme" xml:space="preserve"><value>App theme</value></data>
   <data name="Theme_System" xml:space="preserve"><value>Use system setting</value></data>
   <data name="Theme_Light" xml:space="preserve"><value>Light</value></data>
   <data name="Theme_Dark" xml:space="preserve"><value>Dark</value></data>
-  <data name="Fit_Cover" xml:space="preserve"><value>Fill frame</value></data>
-  <data name="Fit_Contain" xml:space="preserve"><value>Show entire image</value></data>
+  <data name="Fit_Cover" xml:space="preserve"><value>Crop to fill</value></data>
+  <data name="Fit_Contain" xml:space="preserve"><value>Show entire media</value></data>
+  <data name="Fit_Stretch" xml:space="preserve"><value>Stretch to fit</value></data>
   <data name="Media_Image" xml:space="preserve"><value>Image</value></data>
   <data name="Media_Video" xml:space="preserve"><value>Video</value></data>
   <data name="Media_None" xml:space="preserve"><value>No media selected</value></data>
