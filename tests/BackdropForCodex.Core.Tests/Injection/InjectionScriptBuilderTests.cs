@@ -145,6 +145,68 @@ public sealed class InjectionScriptBuilderTests
     }
 
     [Fact]
+    public void BuildInstall_GlassesOnlyPortalHomeSuggestionCardsWithThemeAwareOpacity()
+    {
+        var script = InjectionScriptBuilder.BuildInstall(CreateOptions(
+            glass: new GlassEffectOptions(opacity: 0.78, blurPixels: 18, saturation: 1.2)));
+        var cappedScript = InjectionScriptBuilder.BuildInstall(CreateOptions(
+            glass: new GlassEffectOptions(opacity: 0.97, blurPixels: 18, saturation: 1.2)));
+        var normalizedScript = string.Join(
+            '\n',
+            Array.ConvertAll(
+                script.ReplaceLineEndings("\n").Split('\n'),
+                static line => line.TrimStart()));
+        var forcedColorsBlockStart = normalizedScript.IndexOf(
+            "@media (forced-colors: none) {",
+            StringComparison.Ordinal);
+        Assert.True(forcedColorsBlockStart >= 0);
+        var nextRuleStart = normalizedScript.IndexOf(
+            "\nbody :is(aside,",
+            forcedColorsBlockStart,
+            StringComparison.Ordinal);
+        Assert.True(nextRuleStart > forcedColorsBlockStart);
+        var forcedColorsBlock = normalizedScript[forcedColorsBlockStart..nextRuleStart];
+
+        Assert.Contains("\"glassOpacity\":0.78", script, StringComparison.Ordinal);
+        Assert.Contains("\"homeSuggestionHoverOpacity\":0.86", script, StringComparison.Ordinal);
+        Assert.Contains("\"homeSuggestionHoverOpacity\":1", cappedScript, StringComparison.Ordinal);
+        Assert.Contains(
+            """
+            body [role="main"]:has([data-home-ambient-suggestions])
+            section[class~="group/home-suggestions"]
+            button[type="button"][aria-labelledby] {
+            """,
+            forcedColorsBlock,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "color-mix(in srgb, var(--color-token-main-surface-primary) " +
+            "var(--codex-wallpaper-home-suggestion-opacity), transparent)",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "button[type=\"button\"][aria-labelledby]:not(:disabled):is(:hover, :focus-visible) {",
+            forcedColorsBlock,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "color-mix(in srgb, var(--color-token-main-surface-primary) " +
+            "var(--codex-wallpaper-home-suggestion-hover-opacity), transparent)",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "-webkit-backdrop-filter: blur(var(--codex-wallpaper-blur)) " +
+            "saturate(var(--codex-wallpaper-saturation))",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "backdrop-filter: blur(var(--codex-wallpaper-blur)) " +
+            "saturate(var(--codex-wallpaper-saturation))",
+            script,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("body main button", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("background-image", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BuildInstall_AddsReadableConversationBubblesWithoutCoveringMain()
     {
         var script = InjectionScriptBuilder.BuildInstall(CreateOptions());
