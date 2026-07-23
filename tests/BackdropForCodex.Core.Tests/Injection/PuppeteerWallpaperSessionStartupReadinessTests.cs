@@ -119,15 +119,54 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
                 <meta http-equiv="Content-Security-Policy"
                       content="default-src 'none'; img-src 'self' app: blob: data: https:; media-src 'self' app: blob: data:; style-src 'self' 'unsafe-inline'">
                 <title>Codex</title>
+                <style>
+                  button {
+                    transition: none !important;
+                  }
+                  #home-unrelated-button {
+                    background-color: rgb(7 61 109);
+                    -webkit-backdrop-filter: none;
+                    backdrop-filter: none;
+                  }
+                  #home-list-button {
+                    background-color: rgb(139 83 17);
+                    -webkit-backdrop-filter: none;
+                    backdrop-filter: none;
+                  }
+                </style>
               </head>
               <body>
                 <div id="root">
                   <aside><nav>sidebar</nav></aside>
-                  <main>
+                  <main role="main"
+                        style="--color-token-main-surface-primary: rgb(24 24 24)">
                     <div data-response-annotation-conversation="conversation"
                          data-response-annotation-target="message">assistant</div>
                     <div data-user-message-bubble="true">user</div>
                     <div data-local-conversation-item-target-ids="activity">activity</div>
+                    <div data-home-ambient-suggestions></div>
+                    <section class="group/home-suggestions">
+                      <span id="home-card-focus-sentinel" tabindex="0">focus sentinel</span>
+                      <button id="home-card"
+                              type="button"
+                              aria-labelledby="home-card-label">
+                        <span id="home-card-label">target</span>
+                      </button>
+                      <button id="home-disabled-card"
+                              type="button"
+                              aria-labelledby="home-disabled-card-label"
+                              disabled>
+                        <span id="home-disabled-card-label">disabled</span>
+                      </button>
+                      <div data-expanded-home-suggestion-list>
+                        <button id="home-list-button" type="button">list item</button>
+                      </div>
+                    </section>
+                    <button id="home-unrelated-button"
+                            type="button"
+                            aria-labelledby="home-unrelated-button-label">
+                      <span id="home-unrelated-button-label">unrelated</span>
+                    </button>
                   </main>
                 </div>
               </body>
@@ -146,18 +185,24 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
             await using var mediaServer = new LoopbackMediaServer();
             var mediaEndpoint = await mediaServer.StartAsync(mediaPath);
             await using var session = new PuppeteerWallpaperSession();
+            var glass = new GlassEffectOptions(
+                opacity: 0.78,
+                blurPixels: 18,
+                saturation: 1.2);
             var options = new WallpaperInjectionOptions(
                 generation: 1,
                 source: mediaEndpoint.Uri,
                 localMediaPath: mediaPath,
                 expectedContentLength: mediaEndpoint.ContentLength,
-                WallpaperMediaKind.Image);
+                WallpaperMediaKind.Image,
+                glass: glass);
 
             await session.ApplyAsync(endpoint, options);
 
             var rendered = await ReadOwnedImageFromIndependentConnectionAsync(
                 endpoint,
-                TimeSpan.FromSeconds(5));
+                TimeSpan.FromSeconds(5),
+                inspectHomeSuggestions: true);
             Assert.True(
                 rendered.NaturalWidth > 0,
                 "ApplyAsync returned successfully even though the owned image did not load.");
@@ -169,6 +214,35 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
             Assert.NotEqual("rgba(0, 0, 0, 0)", rendered.AssistantBubbleBackground);
             Assert.NotEqual("rgba(0, 0, 0, 0)", rendered.UserBubbleBackground);
             Assert.NotEqual("rgba(0, 0, 0, 0)", rendered.ActivityBackground);
+            Assert.NotNull(rendered.HomeSuggestions);
+            var homeSuggestions = rendered.HomeSuggestions!;
+            AssertRgba([24, 24, 24, 199], homeSuggestions.DarkBase);
+            AssertRgba([24, 24, 24, 219], homeSuggestions.DarkHover);
+            AssertRgba([24, 24, 24, 219], homeSuggestions.DarkFocus);
+            AssertRgba([24, 24, 24, 199], homeSuggestions.DisabledHover);
+            AssertRgba([255, 255, 255, 199], homeSuggestions.LightBase);
+            AssertRgba([255, 255, 255, 219], homeSuggestions.LightHover);
+            AssertRgba([7, 61, 109, 255], homeSuggestions.Unrelated);
+            AssertRgba([139, 83, 17, 255], homeSuggestions.List);
+            Assert.True(homeSuggestions.FocusVisible);
+            Assert.Contains(
+                "blur(18px)",
+                homeSuggestions.TargetBackdropFilter,
+                StringComparison.Ordinal);
+            Assert.Contains(
+                "saturate(1.2)",
+                homeSuggestions.TargetBackdropFilter,
+                StringComparison.Ordinal);
+            Assert.Contains(
+                "blur(18px)",
+                homeSuggestions.DisabledBackdropFilter,
+                StringComparison.Ordinal);
+            Assert.Contains(
+                "saturate(1.2)",
+                homeSuggestions.DisabledBackdropFilter,
+                StringComparison.Ordinal);
+            Assert.Equal("none", homeSuggestions.UnrelatedBackdropFilter);
+            Assert.Equal("none", homeSuggestions.ListBackdropFilter);
 
             await using var replacementMediaServer = new LoopbackMediaServer();
             var replacementEndpoint = await replacementMediaServer.StartAsync(replacementMediaPath);
@@ -177,7 +251,8 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
                 source: replacementEndpoint.Uri,
                 localMediaPath: replacementMediaPath,
                 expectedContentLength: replacementEndpoint.ContentLength,
-                WallpaperMediaKind.Image);
+                WallpaperMediaKind.Image,
+                glass: glass);
 
             await session.ApplyAsync(endpoint, replacementOptions);
 
@@ -230,7 +305,8 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
 
     private static async Task<RenderedWallpaperState> ReadOwnedImageFromIndependentConnectionAsync(
         VerifiedCdpEndpoint endpoint,
-        TimeSpan timeout)
+        TimeSpan timeout,
+        bool inspectHomeSuggestions = false)
     {
         var browser = await Puppeteer.ConnectAsync(new ConnectOptions
         {
@@ -259,7 +335,7 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
                     $"Boolean(document.querySelector('#{InjectionScriptBuilder.RootElementId} > img')?.complete)");
                 if (complete)
                 {
-                    return await page.EvaluateExpressionAsync<RenderedWallpaperState>(
+                    var rendered = await page.EvaluateExpressionAsync<RenderedWallpaperState>(
                         $$"""
                         (() => {
                           const background = selector => {
@@ -285,6 +361,13 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
                           };
                         })()
                         """);
+                    if (!inspectHomeSuggestions)
+                    {
+                        return rendered;
+                    }
+
+                    var homeSuggestions = await ReadHomeSuggestionRenderingAsync(page);
+                    return rendered with { HomeSuggestions = homeSuggestions };
                 }
 
                 await Task.Delay(50);
@@ -298,6 +381,125 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
         }
     }
 
+    private static async Task<HomeSuggestionRendering> ReadHomeSuggestionRenderingAsync(
+        IPage page)
+    {
+        const string targetSelector = "#home-card";
+        const string disabledSelector = "#home-disabled-card";
+        const string unrelatedSelector = "#home-unrelated-button";
+        const string listSelector = "#home-list-button";
+
+        var darkBase = await ReadNormalizedBackgroundAsync(page, targetSelector);
+        var unrelated = await ReadNormalizedBackgroundAsync(page, unrelatedSelector);
+        var list = await ReadNormalizedBackgroundAsync(page, listSelector);
+        var targetBackdropFilter = await ReadBackdropFilterAsync(page, targetSelector);
+        var unrelatedBackdropFilter = await ReadBackdropFilterAsync(page, unrelatedSelector);
+        var listBackdropFilter = await ReadBackdropFilterAsync(page, listSelector);
+
+        await page.HoverAsync(targetSelector);
+        var darkHover = await ReadNormalizedBackgroundAsync(page, targetSelector);
+
+        await page.HoverAsync(disabledSelector);
+        var disabledHover = await ReadNormalizedBackgroundAsync(page, disabledSelector);
+        var disabledBackdropFilter = await ReadBackdropFilterAsync(page, disabledSelector);
+
+        await page.HoverAsync(unrelatedSelector);
+        await page.FocusAsync("#home-card-focus-sentinel");
+        await page.Keyboard.PressAsync("Tab");
+        var focusVisible = await page.EvaluateExpressionAsync<bool>(
+            """
+            document.activeElement?.id === "home-card" &&
+              document.activeElement.matches(":focus-visible")
+            """);
+        var darkFocus = await ReadNormalizedBackgroundAsync(page, targetSelector);
+
+        await page.HoverAsync(unrelatedSelector);
+        await page.EvaluateExpressionAsync<bool>(
+            """
+            (() => {
+              document.activeElement?.blur();
+              document.querySelector('[role="main"]').style.setProperty(
+                "--color-token-main-surface-primary",
+                "rgb(255 255 255)");
+              return true;
+            })()
+            """);
+        var lightBase = await ReadNormalizedBackgroundAsync(page, targetSelector);
+
+        await page.HoverAsync(targetSelector);
+        var lightHover = await ReadNormalizedBackgroundAsync(page, targetSelector);
+
+        return new HomeSuggestionRendering(
+            darkBase,
+            darkHover,
+            darkFocus,
+            lightBase,
+            lightHover,
+            disabledHover,
+            unrelated,
+            list,
+            focusVisible,
+            targetBackdropFilter,
+            disabledBackdropFilter,
+            unrelatedBackdropFilter,
+            listBackdropFilter);
+    }
+
+    private static Task<int[]> ReadNormalizedBackgroundAsync(IPage page, string selector)
+    {
+        var serializedSelector = JsonSerializer.Serialize(selector);
+        return page.EvaluateExpressionAsync<int[]>(
+            $$"""
+            (() => {
+              const element = document.querySelector({{serializedSelector}});
+              if (!element) {
+                throw new Error(`Missing fixture element: ${{serializedSelector}}`);
+              }
+              const canvas = new OffscreenCanvas(1, 1);
+              const context = canvas.getContext("2d", { willReadFrequently: true });
+              if (!context) {
+                throw new Error("OffscreenCanvas 2D context is unavailable.");
+              }
+              context.clearRect(0, 0, 1, 1);
+              context.fillStyle = "rgba(0, 0, 0, 0)";
+              context.fillStyle = getComputedStyle(element).backgroundColor;
+              context.fillRect(0, 0, 1, 1);
+              return Array.from(context.getImageData(0, 0, 1, 1).data);
+            })()
+            """);
+    }
+
+    private static Task<string> ReadBackdropFilterAsync(IPage page, string selector)
+    {
+        var serializedSelector = JsonSerializer.Serialize(selector);
+        return page.EvaluateExpressionAsync<string>(
+            $$"""
+            (() => {
+              const element = document.querySelector({{serializedSelector}});
+              if (!element) {
+                throw new Error(`Missing fixture element: ${{serializedSelector}}`);
+              }
+              return getComputedStyle(element).backdropFilter;
+            })()
+            """);
+    }
+
+    private static void AssertRgba(
+        int[] expected,
+        int[] actual,
+        int tolerance = 1)
+    {
+        Assert.Equal(4, expected.Length);
+        Assert.Equal(expected.Length, actual.Length);
+        for (var index = 0; index < expected.Length; index++)
+        {
+            Assert.InRange(
+                actual[index],
+                expected[index] - tolerance,
+                expected[index] + tolerance);
+        }
+    }
+
     private sealed record RenderedWallpaperState(
         int NaturalWidth,
         long Generation,
@@ -308,7 +510,25 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
         string? NestedNavigationBackground,
         string? AssistantBubbleBackground,
         string? UserBubbleBackground,
-        string? ActivityBackground);
+        string? ActivityBackground)
+    {
+        public HomeSuggestionRendering? HomeSuggestions { get; init; }
+    }
+
+    private sealed record HomeSuggestionRendering(
+        int[] DarkBase,
+        int[] DarkHover,
+        int[] DarkFocus,
+        int[] LightBase,
+        int[] LightHover,
+        int[] DisabledHover,
+        int[] Unrelated,
+        int[] List,
+        bool FocusVisible,
+        string TargetBackdropFilter,
+        string DisabledBackdropFilter,
+        string UnrelatedBackdropFilter,
+        string ListBackdropFilter);
 
     private static int ReserveLoopbackPort()
     {

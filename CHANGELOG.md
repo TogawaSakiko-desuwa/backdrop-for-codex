@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-07-24
+
+### Fixed
+
+- 首页四张顶层建议卡片现在使用主题自适应的半透明玻璃底板，透明度与模糊跟随现有面板设置，同时保留原有悬停、键盘焦点、禁用态和高对比度行为。
+- 此修复不新增设置项或持久化字段，现有 schema 1 配置无需迁移。
+
 ## [1.1.0] - 2026-07-23
 
 ### Added
@@ -56,6 +63,7 @@
 - 复验完整 MSIX 包名、激活 PID、进程启动时间、Windows 会话和监听器所有权；媒体服务保持已校验文件的只读句柄。
 - 明确禁止 CSP bypass；关闭、更换或 lease 到期时移除媒体 `src`、撤销 `blob:` URL，并仅删除带有本项目 owner/generation 的节点和样式。
 
-[Unreleased]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/releases/tag/v1.1.1
 [1.1.0]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/releases/tag/v1.1.0
 [1.0.0]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/commit/ec1e464

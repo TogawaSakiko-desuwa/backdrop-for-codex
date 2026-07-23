@@ -48,6 +48,7 @@ public static class InjectionScriptBuilder
                 options.Glass.Green,
                 options.Glass.Blue,
                 options.Glass.Opacity,
+                Math.Min(options.Glass.Opacity + 0.08, 1),
                 options.Glass.BlurPixels,
                 options.Glass.Saturation),
             SerializerOptions);
@@ -110,6 +111,8 @@ public static class InjectionScriptBuilder
               style.textContent = `
                 :root {
                   --codex-wallpaper-glass: rgba(${cfg.glassRed}, ${cfg.glassGreen}, ${cfg.glassBlue}, ${cfg.glassOpacity});
+                  --codex-wallpaper-home-suggestion-opacity: ${cfg.glassOpacity * 100}%;
+                  --codex-wallpaper-home-suggestion-hover-opacity: ${cfg.homeSuggestionHoverOpacity * 100}%;
                   --codex-wallpaper-blur: ${cfg.glassBlurPixels}px;
                   --codex-wallpaper-saturation: ${cfg.glassSaturation};
                   --codex-wallpaper-border: rgb(255 255 255 / 0.14);
@@ -147,6 +150,22 @@ public static class InjectionScriptBuilder
                   background: transparent !important;
                   -webkit-backdrop-filter: none !important;
                   backdrop-filter: none !important;
+                }
+                @media (forced-colors: none) {
+                  body [role="main"]:has([data-home-ambient-suggestions])
+                    section[class~="group/home-suggestions"]
+                    button[type="button"][aria-labelledby] {
+                    background-color: color-mix(in srgb, var(--color-token-main-surface-primary) var(--codex-wallpaper-home-suggestion-opacity), transparent) !important;
+                    -webkit-backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
+                    backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
+                  }
+                  body [role="main"]:has([data-home-ambient-suggestions])
+                    section[class~="group/home-suggestions"]
+                    button[type="button"][aria-labelledby]:not(:disabled):is(:hover, :focus-visible) {
+                    background-color: color-mix(in srgb, var(--color-token-main-surface-primary) var(--codex-wallpaper-home-suggestion-hover-opacity), transparent) !important;
+                    -webkit-backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
+                    backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
+                  }
                 }
                 body :is(aside, .app-header-tint, [role="dialog"], [data-codex-wallpaper-glass]) {
                   background-color: var(--codex-wallpaper-glass) !important;
@@ -575,6 +594,7 @@ public static class InjectionScriptBuilder
         byte GlassGreen,
         byte GlassBlue,
         double GlassOpacity,
+        double HomeSuggestionHoverOpacity,
         double GlassBlurPixels,
         double GlassSaturation);
 }
