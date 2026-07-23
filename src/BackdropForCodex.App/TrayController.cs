@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using BackdropForCodex.App.Services.Localization;
 using Wpf.Ui.Tray.Controls;
 
@@ -53,7 +54,8 @@ internal sealed class TrayController : IAsyncDisposable
         _notifyIcon = new NotifyIcon
         {
             TooltipText = "Backdrop for Codex",
-            Icon = (ImageSource)System.Windows.Application.Current.FindResource("AppIconImage"),
+            Icon = CreateBitmapIcon(
+                (ImageSource)System.Windows.Application.Current.FindResource("AppIconImage")),
             Menu = menu,
             MenuOnRightClick = true,
             FocusOnLeftClick = true,
@@ -63,7 +65,22 @@ internal sealed class TrayController : IAsyncDisposable
 #pragma warning disable CS8622
         _notifyIcon.LeftDoubleClick += (_, _) => ShowWindow();
 #pragma warning restore CS8622
+    }
+
+    internal void Register()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (_notifyIcon.IsRegistered)
+        {
+            return;
+        }
+
         _notifyIcon.Register();
+        if (!_notifyIcon.IsRegistered)
+        {
+            throw new InvalidOperationException(
+                "The notification-area icon could not be registered after the main window opened.");
+        }
     }
 
     internal void ShowWindow()
@@ -131,6 +148,33 @@ internal sealed class TrayController : IAsyncDisposable
         return string.Equals(value, key, StringComparison.Ordinal)
             ? fallback
             : value;
+    }
+
+    private static BitmapSource CreateBitmapIcon(ImageSource source)
+    {
+        if (source is BitmapSource bitmapSource)
+        {
+            return bitmapSource;
+        }
+
+        const int iconSize = 32;
+        var visual = new DrawingVisual();
+        using (var drawingContext = visual.RenderOpen())
+        {
+            drawingContext.DrawImage(
+                source,
+                new Rect(0, 0, iconSize, iconSize));
+        }
+
+        var bitmap = new RenderTargetBitmap(
+            iconSize,
+            iconSize,
+            96,
+            96,
+            PixelFormats.Pbgra32);
+        bitmap.Render(visual);
+        bitmap.Freeze();
+        return bitmap;
     }
 
     private static void TryCleanup(Action cleanup)
