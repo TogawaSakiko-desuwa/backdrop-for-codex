@@ -251,6 +251,11 @@ public sealed class MainWindowViewModelTests
             Assert.Equal(1, viewModel.FocusX);
             Assert.Equal(0, viewModel.FocusY);
 
+            viewModel.ResetFocus();
+
+            Assert.Equal(0.5, viewModel.FocusX);
+            Assert.Equal(0.5, viewModel.FocusY);
+
             viewModel.Fit = WallpaperFit.Contain;
 
             Assert.False(viewModel.CanAdjustFocus);

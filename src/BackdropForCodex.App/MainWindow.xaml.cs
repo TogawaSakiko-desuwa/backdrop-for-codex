@@ -578,21 +578,15 @@ public partial class MainWindow : FluentWindow
             return;
         }
 
-        var step = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift) ? 0.10 : 0.01;
-        var (horizontalDelta, verticalDelta) = e.Key switch
-        {
-            Key.Left => (-step, 0d),
-            Key.Right => (step, 0d),
-            Key.Up => (0d, -step),
-            Key.Down => (0d, step),
-            _ => (0d, 0d),
-        };
-        if (horizontalDelta == 0 && verticalDelta == 0)
+        if (!MediaFocusInput.TryGetKeyboardDelta(
+                e.Key,
+                Keyboard.Modifiers,
+                out var delta))
         {
             return;
         }
 
-        _viewModel.NudgeFocus(horizontalDelta, verticalDelta);
+        _viewModel.NudgeFocus(delta.Horizontal, delta.Vertical);
         ShowFocusIndicator(scheduleFade: true);
         e.Handled = true;
     }
@@ -611,15 +605,17 @@ public partial class MainWindow : FluentWindow
 
     private void SetFocusFromPointer(Point point)
     {
-        if (FocusInteractionSurface.ActualWidth <= 0 ||
-            FocusInteractionSurface.ActualHeight <= 0)
+        if (!MediaFocusInput.TryNormalizePointer(
+                point.X,
+                point.Y,
+                FocusInteractionSurface.ActualWidth,
+                FocusInteractionSurface.ActualHeight,
+                out var focus))
         {
             return;
         }
 
-        _viewModel.SetFocus(
-            point.X / FocusInteractionSurface.ActualWidth,
-            point.Y / FocusInteractionSurface.ActualHeight);
+        _viewModel.SetFocus(focus.X, focus.Y);
     }
 
     private void EndFocusDrag()
@@ -804,7 +800,8 @@ public partial class MainWindow : FluentWindow
             return;
         }
 
-        var placement = MediaPreviewLayout.Calculate(
+        var plan = MediaPreviewLayout.CalculateForMedia(
+            _previewKind,
             MediaViewport.ActualWidth,
             MediaViewport.ActualHeight,
             _previewMediaWidth,
@@ -812,14 +809,15 @@ public partial class MainWindow : FluentWindow
             _viewModel.Fit,
             _viewModel.FocusX,
             _viewModel.FocusY);
-        if (placement.IsEmpty)
+        if (plan.IsEmpty)
         {
             return;
         }
 
-        FrameworkElement previewElement = _previewKind == MediaKind.Video
+        FrameworkElement previewElement = plan.MediaKind == MediaKind.Video
             ? VideoPreview
             : ImagePreview;
+        var placement = plan.Placement;
         previewElement.Width = placement.Width;
         previewElement.Height = placement.Height;
         Canvas.SetLeft(previewElement, placement.OffsetX);
@@ -853,13 +851,14 @@ public partial class MainWindow : FluentWindow
     {
         var applicationTheme = ApplicationThemeManager.GetAppTheme();
         var systemTheme = ApplicationThemeManager.GetSystemTheme();
-        var isLight = applicationTheme == ApplicationTheme.Light ||
-                      ((applicationTheme is ApplicationTheme.Unknown or
-                           ApplicationTheme.HighContrast) &&
-                       (systemTheme is SystemTheme.Light or SystemTheme.HCWhite));
-        PreviewThemeOverlay.Background = isLight ? Brushes.White : Brushes.Black;
-        PreviewThemeOverlay.Opacity =
-            isLight ? _viewModel.LightOverlay : _viewModel.DarkOverlay;
+        var overlay = PreviewThemeOverlayResolver.Resolve(
+            applicationTheme,
+            systemTheme,
+            _viewModel.DarkOverlay,
+            _viewModel.LightOverlay);
+        PreviewThemeOverlay.Background =
+            overlay.IsLight ? Brushes.White : Brushes.Black;
+        PreviewThemeOverlay.Opacity = overlay.Opacity;
     }
 
     private void Window_IsVisibleChanged(

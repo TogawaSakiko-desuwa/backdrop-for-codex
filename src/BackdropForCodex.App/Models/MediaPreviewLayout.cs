@@ -1,3 +1,4 @@
+using BackdropForCodex.Core.Media;
 using BackdropForCodex.Core.Settings;
 
 namespace BackdropForCodex.App.Models;
@@ -9,6 +10,33 @@ namespace BackdropForCodex.App.Models;
 /// </summary>
 public static class MediaPreviewLayout
 {
+    public static MediaPreviewPlan CalculateForMedia(
+        MediaKind mediaKind,
+        double viewportWidth,
+        double viewportHeight,
+        double mediaWidth,
+        double mediaHeight,
+        WallpaperFit fit,
+        double focusX,
+        double focusY)
+    {
+        if (mediaKind is not (MediaKind.Image or MediaKind.Video))
+        {
+            return MediaPreviewPlan.Empty;
+        }
+
+        return new MediaPreviewPlan(
+            mediaKind,
+            Calculate(
+                viewportWidth,
+                viewportHeight,
+                mediaWidth,
+                mediaHeight,
+                fit,
+                focusX,
+                focusY));
+    }
+
     public static MediaPreviewPlacement Calculate(
         double viewportWidth,
         double viewportHeight,
@@ -75,4 +103,16 @@ public readonly record struct MediaPreviewPlacement(
     public static MediaPreviewPlacement Empty { get; } = new(0, 0, 0, 0);
 
     public bool IsEmpty => Width <= 0 || Height <= 0;
+}
+
+public readonly record struct MediaPreviewPlan(
+    MediaKind MediaKind,
+    MediaPreviewPlacement Placement)
+{
+    public static MediaPreviewPlan Empty { get; } =
+        new(MediaKind.None, MediaPreviewPlacement.Empty);
+
+    public bool IsEmpty =>
+        MediaKind == MediaKind.None ||
+        Placement.IsEmpty;
 }

@@ -1,4 +1,5 @@
 using BackdropForCodex.App.Models;
+using BackdropForCodex.Core.Media;
 using BackdropForCodex.Core.Settings;
 using Xunit;
 
@@ -6,6 +7,45 @@ namespace BackdropForCodex.Core.Tests.AppSupport;
 
 public sealed class MediaPreviewLayoutTests
 {
+    [Theory]
+    [InlineData(MediaKind.Image)]
+    [InlineData(MediaKind.Video)]
+    public void ImageAndVideoUseTheSamePreviewLayoutPlan(MediaKind mediaKind)
+    {
+        var plan = MediaPreviewLayout.CalculateForMedia(
+            mediaKind,
+            viewportWidth: 100,
+            viewportHeight: 100,
+            mediaWidth: 200,
+            mediaHeight: 100,
+            WallpaperFit.Cover,
+            focusX: 0.75,
+            focusY: 0.5);
+
+        Assert.False(plan.IsEmpty);
+        Assert.Equal(mediaKind, plan.MediaKind);
+        Assert.Equal(200, plan.Placement.Width, precision: 6);
+        Assert.Equal(100, plan.Placement.Height, precision: 6);
+        Assert.Equal(-75, plan.Placement.OffsetX, precision: 6);
+        Assert.Equal(0, plan.Placement.OffsetY, precision: 6);
+    }
+
+    [Fact]
+    public void MissingMediaDoesNotProduceAPreviewLayoutPlan()
+    {
+        var plan = MediaPreviewLayout.CalculateForMedia(
+            MediaKind.None,
+            100,
+            100,
+            200,
+            100,
+            WallpaperFit.Cover,
+            0.5,
+            0.5);
+
+        Assert.True(plan.IsEmpty);
+    }
+
     [Fact]
     public void ContainCentersTheEntireMediaWithoutCropping()
     {
