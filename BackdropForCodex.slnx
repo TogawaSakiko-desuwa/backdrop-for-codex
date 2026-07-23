@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="src/BackdropForCodex.Core/BackdropForCodex.Core.csproj" />
+  <Project Path="src/BackdropForCodex.App/BackdropForCodex.App.csproj" />
+</Solution>

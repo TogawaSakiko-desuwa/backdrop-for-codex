@@ -1,0 +1,79 @@
+name: Feature request
+description: 提议符合项目安全与兼容边界的改进
+title: "[Feature]: "
+labels:
+  - enhancement
+  - needs-triage
+body:
+  - type: markdown
+    attributes:
+      value: |
+        本项目仅面向 Windows 11 x64 与 Store/MSIX Codex。涉及联网、遥测、CDP 权限扩大或额外客户端的平台提案需要明确的隐私与威胁分析。
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: 提交前确认
+      options:
+        - label: 我已搜索现有 Issue 和路线讨论，没有找到相同提案。
+          required: true
+        - label: 若提案触及聊天读取、包修改、管理员权限、非回环端口或其他边界变化，我已在“安全与隐私影响”中明确列出，并理解它需要专项设计评审。
+          required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: 要解决的问题
+      description: 说明用户场景和当前阻碍，不要只描述一个按钮。
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 建议方案
+      description: 说明交互、失败行为和兼容边界。
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 考虑过的替代方案
+      description: 包括无需新增功能即可完成的办法。
+    validations:
+      required: true
+
+  - type: dropdown
+    id: impact
+    attributes:
+      label: 影响领域
+      multiple: true
+      options:
+        - 托盘/设置
+        - 图片或视频
+        - Codex 发现/CDP
+        - 注入与租约清理
+        - 性能/资源占用
+        - 隐私/安全
+        - 构建/发布/文档
+    validations:
+      required: true
+
+  - type: textarea
+    id: security
+    attributes:
+      label: 安全与隐私影响
+      description: 描述新增数据、端口、权限、持久化、日志和失败模式；无影响也要说明原因。
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 可验证的完成条件
+      placeholder: |
+        - [ ] ...
+        - [ ] ...
+    validations:
+      required: true

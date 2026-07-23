@@ -1,0 +1,262 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  DOTNET_NOLOGO: "1"
+  NUGET_XMLDOC_MODE: skip
+
+jobs:
+  release:
+    name: Publish win-x64 release
+    runs-on: windows-2025
+    timeout-minutes: 35
+    permissions:
+      attestations: write
+      contents: write
+      id-token: write
+
+    defaults:
+      run:
+        shell: pwsh
+
+    steps:
+      - name: Validate release tag
+        run: |
+          if ($env:GITHUB_REF_TYPE -ne "tag") {
+            throw "Releases must run from a tag."
+          }
+
+          if ($env:GITHUB_REF_NAME -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$') {
+            throw "Tag must be a SemVer-like value such as v1.2.3 or v1.2.3-rc.1."
+          }
+
+          $version = $env:GITHUB_REF_NAME.Substring(1)
+          $stem = "BackdropForCodex-$($env:GITHUB_REF_NAME)-win-x64"
+          "RELEASE_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "ARTIFACT_STEM=$stem" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Check out tagged source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+
+      - name: Restore
+        run: |
+          dotnet restore .\BackdropForCodex.slnx --locked-mode
+          dotnet tool restore
+
+      - name: Build and verify release source
+        run: >-
+          dotnet build .\BackdropForCodex.slnx
+          --configuration Release
+          --no-restore
+          -p:ContinuousIntegrationBuild=true
+
+      - name: Publish self-contained single-file app
+        run: |
+          $publishDir = Join-Path $env:GITHUB_WORKSPACE "artifacts\publish"
+          New-Item -ItemType Directory -Path $publishDir -Force | Out-Null
+
+          $publishArguments = @(
+            "publish",
+            ".\src\BackdropForCodex.App\BackdropForCodex.App.csproj",
+            "--configuration", "Release",
+            "--runtime", "win-x64",
+            "--self-contained", "true",
+            "--no-restore",
+            "--output", $publishDir,
+            "-p:ContinuousIntegrationBuild=true",
+            "-p:Version=$($env:RELEASE_VERSION)",
+            "-p:PublishSingleFile=true",
+            "-p:PublishTrimmed=false",
+            "-p:IncludeNativeLibrariesForSelfExtract=true",
+            "-p:DebugSymbols=false",
+            "-p:DebugType=None"
+          )
+          & dotnet @publishArguments
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "dotnet publish failed."
+          }
+
+          $exe = Join-Path $publishDir "BackdropForCodex.exe"
+          if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) {
+            throw "Expected single-file executable was not produced: $exe"
+          }
+
+          Copy-Item -LiteralPath @(
+            "LICENSE",
+            "NOTICE",
+            "PRIVACY.md",
+            "SECURITY.md",
+            "THREAT_MODEL.md",
+            "THIRD_PARTY_NOTICES.md"
+          ) -Destination $publishDir
+
+          $licenseDir = Join-Path $publishDir "licenses"
+          New-Item -ItemType Directory -Path $licenseDir -Force | Out-Null
+          $nugetRoot = if ($env:NUGET_PACKAGES) {
+            $env:NUGET_PACKAGES
+          }
+          else {
+            Join-Path $env:USERPROFILE ".nuget\packages"
+          }
+
+          $noticeFiles = @(
+            @{ Package = "microsoft.netcore.app.runtime.win-x64"; Source = "LICENSE.TXT"; Destination = "dotnet-runtime-LICENSE.txt" },
+            @{ Package = "microsoft.netcore.app.runtime.win-x64"; Source = "THIRD-PARTY-NOTICES.TXT"; Destination = "dotnet-runtime-THIRD-PARTY-NOTICES.txt" },
+            @{ Package = "microsoft.windowsdesktop.app.runtime.win-x64"; Source = "LICENSE"; Destination = "windowsdesktop-LICENSE.txt" },
+            @{ Package = "microsoft.aspnetcore.app.runtime.win-x64"; Source = "LICENSE.txt"; Destination = "aspnetcore-LICENSE.txt" },
+            @{ Package = "microsoft.aspnetcore.app.runtime.win-x64"; Source = "THIRD-PARTY-NOTICES.TXT"; Destination = "aspnetcore-THIRD-PARTY-NOTICES.txt" }
+          )
+
+          foreach ($notice in $noticeFiles) {
+            $packageRoot = Join-Path $nugetRoot $notice.Package
+            $versionDirectory = @(
+              Get-ChildItem -LiteralPath $packageRoot -Directory -ErrorAction Stop |
+                Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName $notice.Source) } |
+                Sort-Object LastWriteTimeUtc -Descending
+            ) | Select-Object -First 1
+            if ($null -eq $versionDirectory) {
+              throw "Required upstream notice was not restored: $($notice.Package)/$($notice.Source)"
+            }
+
+            Copy-Item -LiteralPath (Join-Path $versionDirectory.FullName $notice.Source) -Destination (Join-Path $licenseDir $notice.Destination)
+          }
+
+      - name: Generate and validate SPDX 2.2 SBOM
+        run: |
+          $publishDir = (Resolve-Path -LiteralPath "artifacts\publish").Path
+          $sbomPath = Join-Path $env:GITHUB_WORKSPACE "artifacts\$($env:ARTIFACT_STEM).spdx.json"
+          $generateArguments = @(
+            "tool", "run", "sbom-tool", "generate",
+            "-b", $publishDir,
+            "-bc", (Join-Path $env:GITHUB_WORKSPACE "src"),
+            "-pn", "Backdrop for Codex",
+            "-pv", $env:RELEASE_VERSION,
+            "-ps", "Organization:TogawaSakiko-desuwa",
+            "-nsb", "https://github.com/$($env:GITHUB_REPOSITORY)",
+            "-mi", "SPDX:2.2",
+            "-V", "Information"
+          )
+          & dotnet @generateArguments
+          if ($LASTEXITCODE -ne 0) {
+            throw "Microsoft SBOM Tool generation failed."
+          }
+
+          $generatedSbom = Join-Path $publishDir "_manifest\spdx_2.2\manifest.spdx.json"
+          if (-not (Test-Path -LiteralPath $generatedSbom -PathType Leaf)) {
+            throw "Microsoft SBOM Tool did not produce the expected manifest."
+          }
+
+          $validationOutput = Join-Path $env:RUNNER_TEMP "backdrop-for-codex-sbom-validation.json"
+          $validateArguments = @(
+            "tool", "run", "sbom-tool", "validate",
+            "-b", $publishDir,
+            "-o", $validationOutput,
+            "-mi", "SPDX:2.2",
+            "-V", "Error"
+          )
+          & dotnet @validateArguments
+          if ($LASTEXITCODE -ne 0) {
+            throw "Microsoft SBOM Tool validation failed."
+          }
+
+          $sbom = Get-Content -LiteralPath $generatedSbom -Raw -Encoding utf8 | ConvertFrom-Json
+          $packageNames = @($sbom.packages | ForEach-Object name)
+          $requiredPackages = @(
+            "PuppeteerSharp",
+            "Microsoft.NETCore.App.Runtime.win-x64",
+            "Microsoft.WindowsDesktop.App.Runtime.win-x64",
+            "Microsoft.AspNetCore.App.Runtime.win-x64"
+          )
+          foreach ($requiredPackage in $requiredPackages) {
+            if ($packageNames -notcontains $requiredPackage) {
+              throw "SBOM is missing required component: $requiredPackage"
+            }
+          }
+
+          Copy-Item -LiteralPath $generatedSbom -Destination $sbomPath
+
+      - name: Archive and calculate SHA-256
+        run: |
+          $publishDir = Join-Path $env:GITHUB_WORKSPACE "artifacts\publish"
+          $zipPath = Join-Path $env:GITHUB_WORKSPACE "artifacts\$($env:ARTIFACT_STEM).zip"
+          $sbomPath = Join-Path $env:GITHUB_WORKSPACE "artifacts\$($env:ARTIFACT_STEM).spdx.json"
+          $checksumPath = Join-Path $env:GITHUB_WORKSPACE "artifacts\BackdropForCodex-$($env:GITHUB_REF_NAME)-SHA256SUMS.txt"
+
+          Compress-Archive -Path (Join-Path $publishDir "*") -DestinationPath $zipPath -CompressionLevel Optimal
+
+          $checksumLines = foreach ($path in @($zipPath, $sbomPath)) {
+            $hash = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash *$([IO.Path]::GetFileName($path))"
+          }
+          $checksumLines | Set-Content -LiteralPath $checksumPath -Encoding ascii
+
+      - name: Attest build provenance
+        uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6 # v4.2.0
+        with:
+          subject-path: ${{ github.workspace }}/artifacts/BackdropForCodex-${{ github.ref_name }}-win-x64.zip
+
+      - name: Attest SBOM
+        uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6 # v4.2.0
+        with:
+          subject-path: ${{ github.workspace }}/artifacts/BackdropForCodex-${{ github.ref_name }}-win-x64.zip
+          sbom-path: ${{ github.workspace }}/artifacts/BackdropForCodex-${{ github.ref_name }}-win-x64.spdx.json
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          $assets = @(
+            Get-ChildItem -LiteralPath "artifacts" -File |
+              Sort-Object Name |
+              ForEach-Object FullName
+          )
+          if ($assets.Count -lt 3) {
+            throw "Expected ZIP, SBOM, and checksum assets."
+          }
+
+          $ErrorActionPreference = "SilentlyContinue"
+          gh release view $tag --json tagName *> $null
+          $releaseExists = $LASTEXITCODE -eq 0
+          $ErrorActionPreference = "Stop"
+
+          if ($releaseExists) {
+            throw "Release $tag already exists. Published assets are immutable; create a new tag."
+          }
+
+          $releaseArguments = @(
+            "release", "create", $tag
+          ) + $assets + @(
+            "--verify-tag",
+            "--title", "Backdrop for Codex $tag",
+            "--generate-notes"
+          )
+          if ($tag -match '-') {
+            $releaseArguments += "--prerelease"
+          }
+          gh @releaseArguments
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "GitHub release command failed."
+          }

@@ -1,0 +1,29 @@
+# Build output
+bin/
+obj/
+artifacts/
+TestResults/
+coverage/
+
+# Local SDK and tools
+.tools/
+.dotnet/
+.store/
+
+# IDE and OS
+.vs/
+.vscode/
+*.user
+*.suo
+.DS_Store
+Thumbs.db
+
+# Local state and diagnostics
+*.log
+*.dmp
+settings.local.json
+
+# Local-only development overlays
+/tests/
+/.agents/
+/src/Directory.Build.targets

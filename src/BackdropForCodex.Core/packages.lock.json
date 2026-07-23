@@ -1,0 +1,27 @@
+{
+  "version": 2,
+  "dependencies": {
+    "net10.0-windows10.0.22000": {
+      "PuppeteerSharp": {
+        "type": "Direct",
+        "requested": "[25.3.4, )",
+        "resolved": "25.3.4",
+        "contentHash": "SlycvZU3UtV3qju7L2ZjiccWXrVOsSc/s4ClQ2IWf6VVJumk8PaZROy5b4NLOkDprDGkyoifcTwa6YJb1Bl6ig==",
+        "dependencies": {
+          "Microsoft.IO.RecyclableMemoryStream": "3.0.1",
+          "WebDriverBiDi": "0.0.54"
+        }
+      },
+      "Microsoft.IO.RecyclableMemoryStream": {
+        "type": "Transitive",
+        "resolved": "3.0.1",
+        "contentHash": "s/s20YTVY9r9TPfTrN5g8zPF1YhwxyqO6PxUkrYTGI2B+OGPe9AdajWZrLhFqXIvqIW23fnUE4+ztrUWNU1+9g=="
+      },
+      "WebDriverBiDi": {
+        "type": "Transitive",
+        "resolved": "0.0.54",
+        "contentHash": "yo9iqgBySD7tpwQMk1rgkTGwZaE9gSehirixwtPVFyllsT+qM3POB95SryE3n1g+bZ+/POoSokSbMiS0ETbBog=="
+      }
+    }
+  }
+}
