@@ -125,8 +125,30 @@ public sealed record WallpaperInjectionOptions
         WallpaperMediaKind mediaKind,
         WallpaperObjectFit objectFit = WallpaperObjectFit.Cover,
         double mediaOpacity = 1,
-        GlassEffectOptions? glass = null,
-        WallpaperCompositionOptions? composition = null)
+        GlassEffectOptions? glass = null)
+        : this(
+            generation,
+            source,
+            localMediaPath,
+            expectedContentLength,
+            mediaKind,
+            objectFit,
+            mediaOpacity,
+            glass,
+            composition: null)
+    {
+    }
+
+    public WallpaperInjectionOptions(
+        long generation,
+        Uri source,
+        string localMediaPath,
+        long expectedContentLength,
+        WallpaperMediaKind mediaKind,
+        WallpaperObjectFit objectFit,
+        double mediaOpacity,
+        GlassEffectOptions? glass,
+        WallpaperCompositionOptions? composition)
     {
         if (generation <= 0)
         {
