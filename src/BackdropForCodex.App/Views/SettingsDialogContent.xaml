@@ -19,6 +19,7 @@
                            Style="{StaticResource CaptionTextStyle}"
                            Text="{localization:Loc Settings_ThemeDescription, Fallback='Follow Windows by default, including high contrast.'}" />
                 <ComboBox x:Name="ThemeComboBox"
+                          AutomationProperties.Name="{localization:Loc Label_Theme, Fallback='App theme'}"
                           SelectedValuePath="Tag"
                           SelectionChanged="ThemeComboBox_SelectionChanged">
                   <ComboBoxItem Content="{localization:Loc Theme_System, Fallback='Use system setting'}"
@@ -50,7 +51,7 @@
                            TextWrapping="Wrap" />
                 <ui:Button x:Name="RevokeRiskButton"
                            HorizontalAlignment="Left"
-                           Content="{localization:Loc Action_Reset, Fallback='Revoke acknowledgement'}"
+                           Content="{localization:Loc Action_RevokeRisk, Fallback='Revoke acknowledgement'}"
                            Click="RevokeRiskButton_Click" />
               </StackPanel>
             </ui:Card>
@@ -105,7 +106,7 @@
             </ui:Card>
             <ui:Card>
               <StackPanel Margin="16">
-                <TextBlock Foreground="#C42B1C"
+                <TextBlock Foreground="{DynamicResource SystemFillColorCriticalBrush}"
                            FontWeight="SemiBold"
                            Text="{localization:Loc Section_DangerZone, Fallback='Danger zone'}" />
                 <TextBlock Margin="0,5,0,12"

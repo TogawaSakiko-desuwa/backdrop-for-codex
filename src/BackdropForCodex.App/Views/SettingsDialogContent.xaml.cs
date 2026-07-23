@@ -32,7 +32,7 @@ public partial class SettingsDialogContent : UserControl
         InitializeComponent();
         ThemeComboBox.SelectedValue = _viewModel.ThemeMode;
         VersionText.Text =
-            $"Version {Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.0.0"}";
+            $"v{Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.0.0"}";
         RefreshRiskState();
         _initialized = true;
     }
@@ -48,7 +48,9 @@ public partial class SettingsDialogContent : UserControl
         RiskStateText.Text = _viewModel.AcceptedCdpRisk
             ? Text("Risk_Acknowledgement", "Acknowledgement saved")
             : Text("Risk_Revoked", "Acknowledgement is not currently saved.");
-        RevokeRiskButton.IsEnabled = _viewModel.AcceptedCdpRisk;
+        RevokeRiskButton.IsEnabled =
+            _viewModel.AcceptedCdpRisk &&
+            _viewModel.CanEdit;
     }
 
     private void ThemeComboBox_SelectionChanged(
@@ -64,8 +66,11 @@ public partial class SettingsDialogContent : UserControl
         ThemeChangeRequested?.Invoke(this, new ThemeModeChangedEventArgs(mode));
     }
 
-    private void RevokeRiskButton_Click(object sender, RoutedEventArgs e) =>
+    private void RevokeRiskButton_Click(object sender, RoutedEventArgs e)
+    {
+        RevokeRiskButton.IsEnabled = false;
         RiskRevokeRequested?.Invoke(this, EventArgs.Empty);
+    }
 
     private void ResetButton_Click(object sender, RoutedEventArgs e) =>
         ResetRequested?.Invoke(this, EventArgs.Empty);

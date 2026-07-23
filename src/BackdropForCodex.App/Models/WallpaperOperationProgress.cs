@@ -3,10 +3,14 @@ namespace BackdropForCodex.App.Models;
 public enum WallpaperOperationStage
 {
     Idle = 0,
+    Saving,
+    Updating,
     Validating,
     Launching,
     Discovering,
     Applying,
+    Restoring,
+    Resetting,
 }
 
 /// <summary>
@@ -41,12 +45,22 @@ public sealed class WallpaperOperationProgress
             canCancel: false,
             isCancellationRequested: false);
 
-    public static WallpaperOperationProgress Begin() =>
-        new(
-            WallpaperOperationStage.Validating,
+    public static WallpaperOperationProgress Begin(
+        WallpaperOperationStage stage = WallpaperOperationStage.Validating)
+    {
+        if (!Enum.IsDefined(stage) || stage is WallpaperOperationStage.Idle)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(stage),
+                "An operation must begin at a defined, non-idle stage.");
+        }
+
+        return new WallpaperOperationProgress(
+            stage,
             isBusy: true,
             canCancel: true,
             isCancellationRequested: false);
+    }
 
     public WallpaperOperationProgress AdvanceTo(WallpaperOperationStage stage)
     {

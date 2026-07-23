@@ -33,13 +33,13 @@ public sealed class WallpaperConfigurationState
         Draft.MediaPath is not null &&
         (!IsRuntimeActive ||
          ActiveSnapshot is null ||
-         !AreEquivalent(Draft, ActiveSnapshot));
+         !AreRuntimeEquivalent(Draft, ActiveSnapshot));
 
     public bool IsSavedButNotActive =>
         SavedDesired.MediaPath is not null &&
         (!IsRuntimeActive ||
          ActiveSnapshot is null ||
-         !AreEquivalent(SavedDesired, ActiveSnapshot));
+         !AreRuntimeEquivalent(SavedDesired, ActiveSnapshot));
 
     public static WallpaperConfigurationState FromPersisted(SettingsV1 persisted)
     {
@@ -87,6 +87,13 @@ public sealed class WallpaperConfigurationState
             isRuntimeActive: true);
     }
 
+    public WallpaperConfigurationState WithRuntimeActive(bool isRuntimeActive) =>
+        new(
+            Draft,
+            SavedDesired,
+            isRuntimeActive ? ActiveSnapshot : null,
+            isRuntimeActive);
+
     public WallpaperConfigurationState WithoutActive() =>
         new(Draft, SavedDesired, activeSnapshot: null, isRuntimeActive: false);
 
@@ -118,6 +125,27 @@ public sealed class WallpaperConfigurationState
                left.RecentMediaPaths.SequenceEqual(
                    right.RecentMediaPaths,
                    StringComparer.OrdinalIgnoreCase);
+    }
+
+    public static bool AreRuntimeEquivalent(SettingsV1 left, SettingsV1 right)
+    {
+        ArgumentNullException.ThrowIfNull(left);
+        ArgumentNullException.ThrowIfNull(right);
+        left.Validate();
+        right.Validate();
+
+        return string.Equals(
+                   left.MediaPath,
+                   right.MediaPath,
+                   StringComparison.OrdinalIgnoreCase) &&
+               left.MediaKind == right.MediaKind &&
+               left.Fit == right.Fit &&
+               left.FocusX.Equals(right.FocusX) &&
+               left.FocusY.Equals(right.FocusY) &&
+               left.PanelOpacity.Equals(right.PanelOpacity) &&
+               left.BlurPx.Equals(right.BlurPx) &&
+               left.DarkOverlay.Equals(right.DarkOverlay) &&
+               left.LightOverlay.Equals(right.LightOverlay);
     }
 
     private static SettingsV1 Copy(SettingsV1 settings)

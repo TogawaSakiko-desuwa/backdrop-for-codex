@@ -34,6 +34,7 @@ public partial class MainWindow : FluentWindow
     private bool _previewPlaybackRequested;
     private bool _reducedMotion;
     private string? _previewPath;
+    private MediaKind _previewKind;
     private Task? _initializationTask;
 
     public MainWindow(
@@ -96,7 +97,9 @@ public partial class MainWindow : FluentWindow
         _themeController.Apply(_viewModel.ThemeMode);
         ClampInitialSizeToWorkArea();
         UpdateResponsiveLayout(ActualWidth);
-        UpdatePreview(_viewModel.SelectedMediaPath);
+        UpdatePreview(
+            _viewModel.SelectedMediaPath,
+            _viewModel.SelectedMediaKind);
     }
 
     private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
@@ -114,15 +117,19 @@ public partial class MainWindow : FluentWindow
     private void MainWindow_Closed(object? sender, EventArgs e)
     {
         _viewModel.PropertyChanged -= ViewModel_PropertyChanged;
+        _viewModel.Dispose();
         _themeController.Dispose();
         StopAndClearPreview();
     }
 
     private void ViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(MainWindowViewModel.SelectedMediaPath))
+        if (e.PropertyName is nameof(MainWindowViewModel.SelectedMediaPath) or
+            nameof(MainWindowViewModel.SelectedMediaKind))
         {
-            UpdatePreview(_viewModel.SelectedMediaPath);
+            UpdatePreview(
+                _viewModel.SelectedMediaPath,
+                _viewModel.SelectedMediaKind);
         }
         else if (e.PropertyName == nameof(MainWindowViewModel.IsPaused))
         {
@@ -212,7 +219,10 @@ public partial class MainWindow : FluentWindow
                     "The endpoint is limited to this device and remains available until Codex exits. Backdrop verifies the official package and a reviewed version before connecting."),
                 Margin = new Thickness(0, 10, 0, 0),
                 TextWrapping = TextWrapping.Wrap,
-                Foreground = System.Windows.Media.Brushes.Gray,
+                Foreground =
+                    TryFindResource("TextFillColorSecondaryBrush") as
+                        System.Windows.Media.Brush ??
+                    SystemColors.GrayTextBrush,
             });
 
         var dialog = new ContentDialog(DialogHost)
@@ -226,7 +236,7 @@ public partial class MainWindow : FluentWindow
                 ? string.Empty
                 : Text("Action_Cancel", "Cancel"),
             SecondaryButtonText = allowRevoke
-                ? Text("Action_Reset", "Revoke acknowledgement")
+                ? Text("Action_RevokeRisk", "Revoke acknowledgement")
                 : string.Empty,
             PrimaryButtonAppearance = ControlAppearance.Primary,
             DialogMaxWidth = 600,
@@ -338,7 +348,9 @@ public partial class MainWindow : FluentWindow
         {
             await _viewModel.ResetEverythingAsync();
             _themeController.Apply(_viewModel.ThemeMode);
-            UpdatePreview(_viewModel.SelectedMediaPath);
+            UpdatePreview(
+                _viewModel.SelectedMediaPath,
+                _viewModel.SelectedMediaKind);
         }
     }
 
@@ -444,14 +456,16 @@ public partial class MainWindow : FluentWindow
                extension.Equals(".webm", StringComparison.OrdinalIgnoreCase);
     }
 
-    private void UpdatePreview(string? path)
+    private void UpdatePreview(string? path, MediaKind kind)
     {
-        if (string.Equals(_previewPath, path, StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(_previewPath, path, StringComparison.OrdinalIgnoreCase) &&
+            _previewKind == kind)
         {
             return;
         }
 
         _previewPath = path;
+        _previewKind = kind;
         StopAndClearPreview();
         if (path is null || !File.Exists(path))
         {
@@ -461,7 +475,7 @@ public partial class MainWindow : FluentWindow
 
         try
         {
-            if (_viewModel.SelectedMediaKind == MediaKind.Video)
+            if (kind == MediaKind.Video)
             {
                 VideoPreview.Source = new Uri(path, UriKind.Absolute);
                 VideoPreview.Position = TimeSpan.Zero;
@@ -574,6 +588,8 @@ public partial class MainWindow : FluentWindow
     private void ShowPreviewFailure()
     {
         StopAndClearPreview();
+        _previewPath = null;
+        _previewKind = MediaKind.None;
         EmptyPreview.Visibility = Visibility.Visible;
     }
 
@@ -611,7 +627,14 @@ public partial class MainWindow : FluentWindow
                     DialogMaxWidth = 520,
                 };
                 _ = await dialog.ShowAsync(CancellationToken.None);
-                await _viewModel.MarkTrayTipShownAsync();
+                try
+                {
+                    await _viewModel.MarkTrayTipShownAsync();
+                }
+                catch (Exception exception)
+                {
+                    ReportUnexpectedError(exception);
+                }
             }
 
             Hide();
@@ -646,6 +669,8 @@ public partial class MainWindow : FluentWindow
             Grid.SetRow(InspectorScroller, 0);
             Grid.SetColumn(InspectorScroller, 2);
             PreviewPane.MaxHeight = double.PositiveInfinity;
+            PreviewSurface.MinHeight = 220;
+            RecentMediaCard.Visibility = Visibility.Visible;
             return;
         }
 
@@ -653,14 +678,16 @@ public partial class MainWindow : FluentWindow
         ColumnGap.Width = new GridLength(0);
         InspectorColumn.Width = new GridLength(0);
         InspectorColumn.MinWidth = 0;
-        MainTopRow.Height = new GridLength(290);
-        MainGapRow.Height = new GridLength(14);
-        MainBottomRow.Height = new GridLength(1, GridUnitType.Star);
+        MainTopRow.Height = new GridLength(1, GridUnitType.Star);
+        MainGapRow.Height = new GridLength(12);
+        MainBottomRow.Height = new GridLength(1.15, GridUnitType.Star);
         Grid.SetRow(PreviewPane, 0);
         Grid.SetColumn(PreviewPane, 0);
         Grid.SetRow(InspectorScroller, 2);
         Grid.SetColumn(InspectorScroller, 0);
-        PreviewPane.MaxHeight = 290;
+        PreviewPane.MaxHeight = double.PositiveInfinity;
+        PreviewSurface.MinHeight = 120;
+        RecentMediaCard.Visibility = Visibility.Collapsed;
     }
 
     private void ClampInitialSizeToWorkArea()

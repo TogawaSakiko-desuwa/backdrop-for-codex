@@ -28,6 +28,7 @@
   <data name="Action_Close" xml:space="preserve"><value>Close</value></data>
   <data name="Action_Confirm" xml:space="preserve"><value>Confirm</value></data>
   <data name="Action_Reset" xml:space="preserve"><value>Reset</value></data>
+  <data name="Action_RevokeRisk" xml:space="preserve"><value>Revoke acknowledgement</value></data>
   <data name="Action_LearnMore" xml:space="preserve"><value>Learn more</value></data>
   <data name="Section_Preview" xml:space="preserve"><value>Preview</value></data>
   <data name="Section_Wallpaper" xml:space="preserve"><value>Wallpaper</value></data>
@@ -67,6 +68,12 @@
   <data name="OperationStage_Launching" xml:space="preserve"><value>Launching Codex…</value></data>
   <data name="OperationStage_Discovering" xml:space="preserve"><value>Discovering the local Codex window…</value></data>
   <data name="OperationStage_Applying" xml:space="preserve"><value>Applying wallpaper…</value></data>
+  <data name="OperationStage_Saving" xml:space="preserve"><value>Saving settings…</value></data>
+  <data name="OperationStage_Updating" xml:space="preserve"><value>Updating playback…</value></data>
+  <data name="OperationStage_Restoring" xml:space="preserve"><value>Restoring the official Codex background…</value></data>
+  <data name="OperationStage_Resetting" xml:space="preserve"><value>Resetting Backdrop for Codex…</value></data>
+  <data name="Stage_Saving" xml:space="preserve"><value>Saving settings…</value></data>
+  <data name="Stage_Updating" xml:space="preserve"><value>Updating playback…</value></data>
   <data name="Stage_Validating" xml:space="preserve"><value>Validating media and Codex…</value></data>
   <data name="Stage_Launching" xml:space="preserve"><value>Launching Codex securely…</value></data>
   <data name="Stage_Discovering" xml:space="preserve"><value>Discovering the local Codex endpoint…</value></data>

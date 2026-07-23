@@ -73,6 +73,32 @@ public sealed class WallpaperUiStateTests
     }
 
     [Fact]
+    public void RuntimeComparisonIgnoresMetadataThatDoesNotChangeInjectedContent()
+    {
+        var mediaPath = Path.GetFullPath("wallpaper.png");
+        var active = SettingsV1.CreateDefault() with
+        {
+            MediaPath = mediaPath,
+            MediaKind = MediaKind.Image,
+            AcceptedCdpRisk = true,
+        };
+        var saved = active with
+        {
+            AcceptedCdpRisk = false,
+            LastCompatibilityProfileId = "updated-profile",
+            RecentMediaPaths = [mediaPath],
+        };
+
+        Assert.False(WallpaperConfigurationState.AreEquivalent(active, saved));
+        Assert.True(WallpaperConfigurationState.AreRuntimeEquivalent(active, saved));
+        Assert.False(
+            WallpaperConfigurationState
+                .FromPersisted(saved)
+                .WithActive(active)
+                .IsSavedButNotActive);
+    }
+
+    [Fact]
     public void OperationProgressAdvancesMonotonicallyAndMakesCancellationIdempotent()
     {
         var progress = WallpaperOperationProgress.Begin();

@@ -28,6 +28,7 @@
   <data name="Action_Close" xml:space="preserve"><value>关闭</value></data>
   <data name="Action_Confirm" xml:space="preserve"><value>确认</value></data>
   <data name="Action_Reset" xml:space="preserve"><value>重置</value></data>
+  <data name="Action_RevokeRisk" xml:space="preserve"><value>撤销风险确认</value></data>
   <data name="Action_LearnMore" xml:space="preserve"><value>了解详情</value></data>
   <data name="Section_Preview" xml:space="preserve"><value>预览</value></data>
   <data name="Section_Wallpaper" xml:space="preserve"><value>壁纸</value></data>
@@ -67,6 +68,12 @@
   <data name="OperationStage_Launching" xml:space="preserve"><value>正在启动 Codex…</value></data>
   <data name="OperationStage_Discovering" xml:space="preserve"><value>正在查找本机 Codex 窗口…</value></data>
   <data name="OperationStage_Applying" xml:space="preserve"><value>正在应用壁纸…</value></data>
+  <data name="OperationStage_Saving" xml:space="preserve"><value>正在保存设置…</value></data>
+  <data name="OperationStage_Updating" xml:space="preserve"><value>正在更新播放状态…</value></data>
+  <data name="OperationStage_Restoring" xml:space="preserve"><value>正在恢复 Codex 官方背景…</value></data>
+  <data name="OperationStage_Resetting" xml:space="preserve"><value>正在重置 Backdrop for Codex…</value></data>
+  <data name="Stage_Saving" xml:space="preserve"><value>正在保存设置…</value></data>
+  <data name="Stage_Updating" xml:space="preserve"><value>正在更新播放状态…</value></data>
   <data name="Stage_Validating" xml:space="preserve"><value>正在验证媒体与 Codex…</value></data>
   <data name="Stage_Launching" xml:space="preserve"><value>正在安全启动 Codex…</value></data>
   <data name="Stage_Discovering" xml:space="preserve"><value>正在查找本机 Codex 端点…</value></data>

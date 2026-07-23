@@ -25,6 +25,7 @@
   <ui:FluentWindow.Resources>
     <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
     <converters:WallpaperFitToStretchConverter x:Key="FitToStretchConverter" />
+    <converters:MediaThumbnailConverter x:Key="MediaThumbnailConverter" />
     <converters:UiStatusToneToInfoBarSeverityConverter x:Key="StatusToneConverter" />
   </ui:FluentWindow.Resources>
 
@@ -36,8 +37,10 @@
     </Grid.RowDefinitions>
 
     <ui:TitleBar Grid.Row="0"
-                 Title="{localization:Loc App_Title, Fallback='Backdrop for Codex'}"
-                 Icon="{StaticResource AppIconImage}">
+                 Title="{localization:Loc App_Title, Fallback='Backdrop for Codex'}">
+      <ui:TitleBar.Icon>
+        <ui:ImageIcon Source="{StaticResource AppIconImage}" />
+      </ui:TitleBar.Icon>
       <ui:TitleBar.TrailingContent>
         <ui:Button Margin="0,0,138,0"
                    Width="38"
@@ -45,6 +48,7 @@
                    Appearance="Transparent"
                    ToolTip="{localization:Loc Action_Settings, Fallback=Settings}"
                    AutomationProperties.Name="{localization:Loc Action_Settings, Fallback=Settings}"
+                   IsEnabled="{Binding CanEdit}"
                    Click="Settings_Click">
           <ui:SymbolIcon Symbol="Settings24" />
         </ui:Button>
@@ -77,7 +81,12 @@
                 ClipToBounds="True">
             <Image x:Name="ImagePreview"
                    Stretch="{Binding Fit, Converter={StaticResource FitToStretchConverter}}"
-                   Visibility="Collapsed" />
+                   Visibility="Collapsed">
+              <Image.Effect>
+                <BlurEffect Radius="{Binding BlurPx}"
+                            RenderingBias="Performance" />
+              </Image.Effect>
+            </Image>
             <MediaElement x:Name="VideoPreview"
                           Stretch="{Binding Fit, Converter={StaticResource FitToStretchConverter}}"
                           LoadedBehavior="Manual"
@@ -87,7 +96,12 @@
                           Visibility="Collapsed"
                           MediaOpened="VideoPreview_MediaOpened"
                           MediaEnded="VideoPreview_MediaEnded"
-                          MediaFailed="VideoPreview_MediaFailed" />
+                          MediaFailed="VideoPreview_MediaFailed">
+              <MediaElement.Effect>
+                <BlurEffect Radius="{Binding BlurPx}"
+                            RenderingBias="Performance" />
+              </MediaElement.Effect>
+            </MediaElement>
 
             <Border x:Name="EmptyPreview"
                     Margin="32"
@@ -119,46 +133,167 @@
               </StackPanel>
             </Border>
 
-            <!-- A compact Codex-like shell makes opacity and fit changes legible without
-                 pretending to be a pixel-perfect copy of the injected page. -->
-            <Border Height="42"
-                    VerticalAlignment="Top"
-                    Background="#8013171D"
-                    BorderBrush="#40FFFFFF"
-                    BorderThickness="0,0,0,1">
-              <Grid Margin="14,0">
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                  <Ellipse Width="8" Height="8" Fill="#8AB4F8" />
-                  <Rectangle Width="74" Height="7" Margin="9,0,0,0"
-                             RadiusX="3.5" RadiusY="3.5" Fill="#C8FFFFFF" />
+            <!-- Keep the preview compact, but preserve Codex's left navigation,
+                 central task surface, and right context panel. -->
+            <Grid Margin="12">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="1.2*" MinWidth="88" />
+                <ColumnDefinition Width="8" />
+                <ColumnDefinition Width="3.5*" MinWidth="150" />
+                <ColumnDefinition Width="8" />
+                <ColumnDefinition Width="1.35*" MinWidth="96" />
+              </Grid.ColumnDefinitions>
+
+              <Grid Grid.Column="0">
+                <Border CornerRadius="12"
+                        Background="{DynamicResource ApplicationBackgroundBrush}"
+                        Opacity="{Binding PanelOpacity}" />
+                <Grid Margin="12">
+                  <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="12" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                  </Grid.RowDefinitions>
+                  <StackPanel Orientation="Horizontal">
+                    <Border Width="18" Height="18" CornerRadius="5"
+                            Background="{DynamicResource AccentFillColorDefaultBrush}">
+                      <TextBlock Text="C"
+                                 HorizontalAlignment="Center"
+                                 VerticalAlignment="Center"
+                                 Foreground="White"
+                                 FontSize="10"
+                                 FontWeight="Bold" />
+                    </Border>
+                    <TextBlock Margin="7,0,0,0"
+                               VerticalAlignment="Center"
+                               Text="Codex"
+                               FontWeight="SemiBold" />
+                  </StackPanel>
+                  <StackPanel Grid.Row="2">
+                    <Border Height="26" CornerRadius="7"
+                            Background="{DynamicResource ControlFillColorDefaultBrush}">
+                      <StackPanel Margin="8,0" Orientation="Horizontal"
+                                  VerticalAlignment="Center">
+                        <ui:SymbolIcon Symbol="Add16" FontSize="11" />
+                        <Rectangle Width="44" Height="5" Margin="6,0,0,0"
+                                   RadiusX="2.5" RadiusY="2.5"
+                                   Fill="{DynamicResource TextFillColorSecondaryBrush}" />
+                      </StackPanel>
+                    </Border>
+                    <Rectangle Height="5" Margin="8,12,18,0"
+                               RadiusX="2.5" RadiusY="2.5"
+                               Fill="{DynamicResource TextFillColorSecondaryBrush}"
+                               Opacity="0.72" />
+                    <Rectangle Height="5" Margin="8,10,10,0"
+                               RadiusX="2.5" RadiusY="2.5"
+                               Fill="{DynamicResource TextFillColorSecondaryBrush}"
+                               Opacity="0.58" />
+                    <Rectangle Height="5" Margin="8,10,24,0"
+                               RadiusX="2.5" RadiusY="2.5"
+                               Fill="{DynamicResource TextFillColorSecondaryBrush}"
+                               Opacity="0.45" />
+                  </StackPanel>
+                  <Ellipse Grid.Row="3" Width="18" Height="18"
+                           HorizontalAlignment="Left"
+                           Fill="{DynamicResource AccentFillColorSecondaryBrush}" />
+                </Grid>
+              </Grid>
+
+              <Grid Grid.Column="2">
+                <Grid.RowDefinitions>
+                  <RowDefinition Height="34" />
+                  <RowDefinition Height="*" />
+                  <RowDefinition Height="36" />
+                </Grid.RowDefinitions>
+                <Border Grid.Row="0"
+                        CornerRadius="10"
+                        Background="{DynamicResource ApplicationBackgroundBrush}"
+                        Opacity="{Binding PanelOpacity}" />
+                <Grid Grid.Row="0" Margin="11,0">
+                  <Rectangle Width="82" Height="6"
+                             HorizontalAlignment="Left"
+                             VerticalAlignment="Center"
+                             RadiusX="3" RadiusY="3"
+                             Fill="{DynamicResource TextFillColorPrimaryBrush}"
+                             Opacity="0.8" />
+                  <StackPanel HorizontalAlignment="Right"
+                              VerticalAlignment="Center"
+                              Orientation="Horizontal">
+                    <Ellipse Width="6" Height="6"
+                             Fill="{DynamicResource AccentFillColorDefaultBrush}" />
+                    <Rectangle Width="28" Height="5" Margin="6,0,0,0"
+                               RadiusX="2.5" RadiusY="2.5"
+                               Fill="{DynamicResource TextFillColorSecondaryBrush}" />
+                  </StackPanel>
+                </Grid>
+
+                <StackPanel Grid.Row="1"
+                            Margin="14,12"
+                            VerticalAlignment="Center">
+                  <Border Width="72"
+                          Height="24"
+                          HorizontalAlignment="Right"
+                          CornerRadius="8"
+                          Background="{DynamicResource ControlFillColorDefaultBrush}" />
+                  <Border Height="42"
+                          Margin="0,9,26,0"
+                          CornerRadius="9"
+                          Background="{DynamicResource ApplicationBackgroundBrush}"
+                          Opacity="{Binding PanelOpacity}" />
+                  <Border Width="96"
+                          Height="24"
+                          Margin="0,9,0,0"
+                          HorizontalAlignment="Left"
+                          CornerRadius="8"
+                          Background="{DynamicResource ControlFillColorDefaultBrush}" />
+                </StackPanel>
+
+                <Border Grid.Row="2"
+                        CornerRadius="10"
+                        Background="{DynamicResource ApplicationBackgroundBrush}"
+                        Opacity="{Binding PanelOpacity}" />
+                <Grid Grid.Row="2" Margin="11,0">
+                  <Rectangle Height="5"
+                             Margin="0,0,42,0"
+                             VerticalAlignment="Center"
+                             RadiusX="2.5" RadiusY="2.5"
+                             Fill="{DynamicResource TextFillColorSecondaryBrush}"
+                             Opacity="0.55" />
+                  <Border Width="22" Height="22"
+                          HorizontalAlignment="Right"
+                          CornerRadius="7"
+                          Background="{DynamicResource AccentFillColorDefaultBrush}">
+                    <ui:SymbolIcon Symbol="Send24"
+                                   FontSize="11"
+                                   Foreground="White" />
+                  </Border>
+                </Grid>
+              </Grid>
+
+              <Grid Grid.Column="4">
+                <Border CornerRadius="12"
+                        Background="{DynamicResource ApplicationBackgroundBrush}"
+                        Opacity="{Binding PanelOpacity}" />
+                <StackPanel Margin="12">
+                  <TextBlock Text="{localization:Loc Section_Preview, Fallback=Preview}"
+                             FontWeight="SemiBold" />
+                  <Rectangle Height="5" Margin="0,12,10,0"
+                             RadiusX="2.5" RadiusY="2.5"
+                             Fill="{DynamicResource TextFillColorSecondaryBrush}"
+                             Opacity="0.72" />
+                  <Rectangle Height="5" Margin="0,10,22,0"
+                             RadiusX="2.5" RadiusY="2.5"
+                             Fill="{DynamicResource TextFillColorSecondaryBrush}"
+                             Opacity="0.55" />
+                  <Border Height="38" Margin="0,14,0,0"
+                          CornerRadius="8"
+                          Background="{DynamicResource ControlFillColorDefaultBrush}" />
+                  <Border Height="24" Margin="0,8,0,0"
+                          CornerRadius="8"
+                          Background="{DynamicResource ControlFillColorDefaultBrush}" />
                 </StackPanel>
               </Grid>
-            </Border>
-
-            <Grid Width="42%"
-                  MinWidth="180"
-                  MaxWidth="340"
-                  HorizontalAlignment="Right"
-                  Margin="0,58,18,18">
-              <Border CornerRadius="16"
-                      Background="{DynamicResource ApplicationBackgroundBrush}"
-                      Opacity="{Binding PanelOpacity}" />
-              <StackPanel Margin="18">
-                <TextBlock Text="Codex"
-                           FontSize="18"
-                           FontWeight="SemiBold"
-                           Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
-                <TextBlock Margin="0,5,0,16"
-                           Text="{localization:Loc Section_Preview, Fallback=Preview}"
-                           Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
-                <Border Height="54" CornerRadius="9"
-                        Background="{DynamicResource ControlFillColorDefaultBrush}" />
-                <Border Height="34" Margin="0,10,0,0" CornerRadius="9"
-                        Background="{DynamicResource ControlFillColorDefaultBrush}" />
-                <Border Height="34" Margin="0,10,0,0" CornerRadius="9"
-                        Background="{DynamicResource AccentFillColorDefaultBrush}"
-                        Opacity="0.85" />
-              </StackPanel>
             </Grid>
 
             <Border HorizontalAlignment="Left"
@@ -202,7 +337,7 @@
           </Grid>
         </ui:Card>
 
-        <ui:Card Grid.Row="2">
+        <ui:Card x:Name="RecentMediaCard" Grid.Row="2">
           <Grid Margin="14,12">
             <Grid.RowDefinitions>
               <RowDefinition Height="Auto" />
@@ -233,6 +368,8 @@
               </TextBlock>
               <ListBox x:Name="RecentMediaList"
                        ItemsSource="{Binding Recents}"
+                       IsEnabled="{Binding CanEdit}"
+                       AutomationProperties.Name="{localization:Loc Section_RecentMedia, Fallback='Recent media'}"
                        Background="Transparent"
                        BorderThickness="0"
                        ScrollViewer.HorizontalScrollBarVisibility="Auto"
@@ -256,10 +393,28 @@
                             <ColumnDefinition Width="*" />
                           </Grid.ColumnDefinitions>
                           <Border Width="28" Height="28" CornerRadius="7"
-                                  Background="{DynamicResource AccentFillColorSecondaryBrush}">
-                            <ui:SymbolIcon Symbol="Image24"
-                                           HorizontalAlignment="Center"
-                                           VerticalAlignment="Center" />
+                                  Background="{DynamicResource AccentFillColorSecondaryBrush}"
+                                  ClipToBounds="True">
+                            <Grid>
+                              <Image x:Name="RecentThumbnail"
+                                     Source="{Binding Path, Converter={StaticResource MediaThumbnailConverter}}"
+                                     Stretch="UniformToFill" />
+                              <ui:SymbolIcon Symbol="Image24"
+                                             HorizontalAlignment="Center"
+                                             VerticalAlignment="Center">
+                                <ui:SymbolIcon.Style>
+                                  <Style TargetType="ui:SymbolIcon">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                    <Style.Triggers>
+                                      <DataTrigger Binding="{Binding ElementName=RecentThumbnail, Path=Source}"
+                                                   Value="{x:Null}">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                      </DataTrigger>
+                                    </Style.Triggers>
+                                  </Style>
+                                </ui:SymbolIcon.Style>
+                              </ui:SymbolIcon>
+                            </Grid>
                           </Border>
                           <StackPanel Grid.Column="1" Margin="8,0,0,0"
                                       VerticalAlignment="Center">
@@ -293,6 +448,7 @@
                                  VerticalAlignment="Top"
                                  Appearance="Secondary"
                                  ToolTip="{localization:Loc Action_Remove, Fallback=Remove}"
+                                 AutomationProperties.Name="{localization:Loc Action_Remove, Fallback=Remove}"
                                  Tag="{Binding Path}"
                                  Click="RemoveRecent_Click">
                         <ui:SymbolIcon Symbol="Dismiss16" FontSize="12" />
@@ -313,7 +469,7 @@
                     HorizontalScrollBarVisibility="Disabled">
         <StackPanel>
           <TextBlock Style="{StaticResource PageHeadingStyle}"
-                     Text="{localization:Loc Section_Wallpaper, Fallback=Wallpaper}" />
+                     Text="{localization:Loc App_Title, Fallback='Backdrop for Codex'}" />
           <TextBlock Margin="0,5,0,18"
                      Style="{StaticResource CaptionTextStyle}"
                      Text="{localization:Loc App_Description, Fallback='A private, local wallpaper layer for Codex.'}" />
@@ -369,6 +525,7 @@
               <ComboBox Margin="0,0,0,16"
                         SelectedValue="{Binding Fit, Mode=TwoWay}"
                         SelectedValuePath="Tag"
+                        AutomationProperties.Name="{localization:Loc Label_Fit, Fallback='Image fit'}"
                         IsEnabled="{Binding CanEdit}">
                 <ComboBoxItem Content="{localization:Loc Fit_Cover, Fallback='Fill frame'}"
                               Tag="{x:Static settings:WallpaperFit.Cover}" />
@@ -431,6 +588,7 @@
               <ui:Button Grid.Column="2"
                          VerticalAlignment="Center"
                          Content="{localization:Loc Action_LearnMore, Fallback='Review'}"
+                         IsEnabled="{Binding CanEdit}"
                          Click="ReviewRisk_Click" />
             </Grid>
           </ui:Card>
@@ -451,6 +609,7 @@
 
         <ui:InfoBar Grid.Row="0"
                     Margin="0,0,0,10"
+                    AutomationProperties.LiveSetting="Polite"
                     IsOpen="{Binding IsStatusOpen, Mode=TwoWay}"
                     IsClosable="True"
                     Title="{Binding StatusTitle}"

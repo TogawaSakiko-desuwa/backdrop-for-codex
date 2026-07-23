@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using BackdropForCodex.App.Models;
 using BackdropForCodex.App.Services.Errors;
 using BackdropForCodex.App.Services.Localization;
 using BackdropForCodex.App.Services.Preferences;
@@ -39,7 +40,7 @@ public sealed record RecentMediaItem(
 /// Owns editable, persisted, and active wallpaper state independently so a failed launch can still
 /// be represented as "saved, but not active".
 /// </summary>
-public sealed class MainWindowViewModel : ObservableObject
+public sealed class MainWindowViewModel : ObservableObject, IDisposable
 {
     private static readonly string[] ImageExtensions = [".png", ".jpg", ".jpeg", ".webp"];
     private static readonly string[] VideoExtensions = [".mp4", ".webm"];
@@ -50,10 +51,13 @@ public sealed class MainWindowViewModel : ObservableObject
     private readonly IAppTextProvider _text;
     private readonly SynchronizationContext? _uiContext;
     private readonly object _initializationLock = new();
+    private readonly SemaphoreSlim _preferencesMutationGate = new(1, 1);
     private Task? _initializationTask;
     private CancellationTokenSource? _operationCancellation;
-    private SettingsV1 _savedDesired = SettingsV1.CreateDefault();
-    private SettingsV1? _activeSnapshot;
+    private WallpaperConfigurationState _configurationState =
+        WallpaperConfigurationState.FromPersisted(SettingsV1.CreateDefault());
+    private WallpaperOperationProgress _operationProgress =
+        WallpaperOperationProgress.Idle;
     private AppPreferencesV1 _preferences = AppPreferencesV1.CreateDefault();
     private string? _selectedMediaPath;
     private MediaKind _selectedMediaKind;
@@ -62,17 +66,15 @@ public sealed class MainWindowViewModel : ObservableObject
     private double _blurPx = 14;
     private bool _acceptedCdpRisk;
     private bool _isMediaMissing;
-    private bool _isBusy;
-    private bool _isActive;
     private bool _isPaused;
-    private bool _isSavedButInactive;
     private bool _shortcutNeedsRetry;
     private string _operationStage = string.Empty;
     private string _statusTitle = string.Empty;
     private string _statusMessage = string.Empty;
     private UiStatusTone _statusTone;
     private bool _isStatusOpen;
-    private bool _hasForegroundFailure;
+    private bool _isSynchronizingEditor;
+    private bool _isDisposed;
 
     public MainWindowViewModel(
         IWallpaperApplicationService wallpaper,
@@ -90,7 +92,10 @@ public sealed class MainWindowViewModel : ObservableObject
 
         TogglePauseCommand = new AsyncRelayCommand(TogglePauseAsync, CanTogglePause);
         DisableCommand = new AsyncRelayCommand(DisableAsync, CanDisable);
-        CancelCommand = new RelayCommand(CancelCurrentOperation, () => IsBusy);
+        CancelCommand =
+            new RelayCommand(
+                CancelCurrentOperation,
+                () => OperationProgress.CanCancel);
         RetryShortcutCommand = new AsyncRelayCommand(RetryShortcutAsync, CanRetryShortcut);
         ClearRecentsCommand = new AsyncRelayCommand(ClearRecentsAsync, () => !IsBusy && Recents.Count > 0);
     }
@@ -107,16 +112,40 @@ public sealed class MainWindowViewModel : ObservableObject
 
     public IAsyncRelayCommand ClearRecentsCommand { get; }
 
-    public SettingsV1 SavedDesired
+    public WallpaperConfigurationState ConfigurationState
     {
-        get => _savedDesired;
-        private set => SetProperty(ref _savedDesired, value);
+        get => _configurationState;
+        private set
+        {
+            if (SetProperty(ref _configurationState, value))
+            {
+                OnPropertyChanged(nameof(SavedDesired));
+                OnPropertyChanged(nameof(ActiveSnapshot));
+                OnPropertyChanged(nameof(IsActive));
+                OnPropertyChanged(nameof(IsSavedButInactive));
+                OnPropertyChanged(nameof(IsDraftDirty));
+                OnPropertyChanged(nameof(ApplyButtonText));
+                NotifyCommandStateChanged();
+            }
+        }
     }
 
-    public SettingsV1? ActiveSnapshot
+    public SettingsV1 SavedDesired => ConfigurationState.SavedDesired;
+
+    public SettingsV1? ActiveSnapshot => ConfigurationState.ActiveSnapshot;
+
+    public WallpaperOperationProgress OperationProgress
     {
-        get => _activeSnapshot;
-        private set => SetProperty(ref _activeSnapshot, value);
+        get => _operationProgress;
+        private set
+        {
+            if (SetProperty(ref _operationProgress, value))
+            {
+                OnPropertyChanged(nameof(IsBusy));
+                OnPropertyChanged(nameof(CanEdit));
+                NotifyCommandStateChanged();
+            }
+        }
     }
 
     public AppPreferencesV1 Preferences
@@ -146,7 +175,7 @@ public sealed class MainWindowViewModel : ObservableObject
                 OnPropertyChanged(nameof(SelectedMediaName));
                 OnPropertyChanged(nameof(HasSelectedMedia));
                 OnPropertyChanged(nameof(IsVideoSelected));
-                OnPropertyChanged(nameof(IsDraftDirty));
+                SynchronizeDraftState();
             }
         }
     }
@@ -165,7 +194,7 @@ public sealed class MainWindowViewModel : ObservableObject
             if (SetProperty(ref _selectedMediaKind, value))
             {
                 OnPropertyChanged(nameof(IsVideoSelected));
-                OnPropertyChanged(nameof(IsDraftDirty));
+                SynchronizeDraftState();
             }
         }
     }
@@ -185,7 +214,7 @@ public sealed class MainWindowViewModel : ObservableObject
         {
             if (SetProperty(ref _fit, value))
             {
-                OnPropertyChanged(nameof(IsDraftDirty));
+                SynchronizeDraftState();
             }
         }
     }
@@ -198,7 +227,7 @@ public sealed class MainWindowViewModel : ObservableObject
             if (SetProperty(ref _panelOpacity, value))
             {
                 OnPropertyChanged(nameof(PanelOpacityPercent));
-                OnPropertyChanged(nameof(IsDraftDirty));
+                SynchronizeDraftState();
             }
         }
     }
@@ -213,7 +242,7 @@ public sealed class MainWindowViewModel : ObservableObject
             if (SetProperty(ref _blurPx, value))
             {
                 OnPropertyChanged(nameof(BlurLabel));
-                OnPropertyChanged(nameof(IsDraftDirty));
+                SynchronizeDraftState();
             }
         }
     }
@@ -227,38 +256,16 @@ public sealed class MainWindowViewModel : ObservableObject
         {
             if (SetProperty(ref _acceptedCdpRisk, value))
             {
-                OnPropertyChanged(nameof(IsDraftDirty));
+                SynchronizeDraftState();
             }
         }
     }
 
-    public bool IsBusy
-    {
-        get => _isBusy;
-        private set
-        {
-            if (SetProperty(ref _isBusy, value))
-            {
-                OnPropertyChanged(nameof(CanEdit));
-                NotifyCommandStateChanged();
-            }
-        }
-    }
+    public bool IsBusy => OperationProgress.IsBusy;
 
     public bool CanEdit => !IsBusy;
 
-    public bool IsActive
-    {
-        get => _isActive;
-        private set
-        {
-            if (SetProperty(ref _isActive, value))
-            {
-                OnPropertyChanged(nameof(ApplyButtonText));
-                NotifyCommandStateChanged();
-            }
-        }
-    }
+    public bool IsActive => ConfigurationState.IsRuntimeActive;
 
     public bool IsPaused
     {
@@ -273,11 +280,7 @@ public sealed class MainWindowViewModel : ObservableObject
         }
     }
 
-    public bool IsSavedButInactive
-    {
-        get => _isSavedButInactive;
-        private set => SetProperty(ref _isSavedButInactive, value);
-    }
+    public bool IsSavedButInactive => ConfigurationState.IsSavedButNotActive;
 
     public bool ShortcutNeedsRetry
     {
@@ -321,15 +324,7 @@ public sealed class MainWindowViewModel : ObservableObject
         set => SetProperty(ref _isStatusOpen, value);
     }
 
-    public bool IsDraftDirty =>
-        !string.Equals(
-            SelectedMediaPath,
-            SavedDesired.MediaPath,
-            StringComparison.OrdinalIgnoreCase) ||
-        Fit != SavedDesired.Fit ||
-        Math.Abs(PanelOpacity - SavedDesired.PanelOpacity) > 0.0001 ||
-        Math.Abs(BlurPx - SavedDesired.BlurPx) > 0.0001 ||
-        AcceptedCdpRisk != SavedDesired.AcceptedCdpRisk;
+    public bool IsDraftDirty => ConfigurationState.HasUnsavedChanges;
 
     public string ApplyButtonText => IsActive
         ? Text("Action_ApplyChanges", "Apply changes")
@@ -357,9 +352,19 @@ public sealed class MainWindowViewModel : ObservableObject
             throw new MediaValidationException("The selected extension is not supported.");
         }
 
-        SelectedMediaPath = normalizedPath;
-        SelectedMediaKind = kind;
-        IsMediaMissing = !File.Exists(normalizedPath);
+        _isSynchronizingEditor = true;
+        try
+        {
+            SelectedMediaKind = kind;
+            SelectedMediaPath = normalizedPath;
+            IsMediaMissing = !File.Exists(normalizedPath);
+        }
+        finally
+        {
+            _isSynchronizingEditor = false;
+        }
+
+        SynchronizeDraftState();
         if (IsMediaMissing)
         {
             ShowStatus(
@@ -374,44 +379,69 @@ public sealed class MainWindowViewModel : ObservableObject
     public async Task AcceptRiskAsync(CancellationToken cancellationToken = default)
     {
         await InitializeAsync().ConfigureAwait(true);
-        if (AcceptedCdpRisk)
+        if (AcceptedCdpRisk || IsBusy)
         {
             return;
         }
 
-        var saved = await _wallpaper
-            .SaveSettingsAsync(
-                SavedDesired with { AcceptedCdpRisk = true },
-                cancellationToken)
-            .ConfigureAwait(true);
-        SavedDesired = saved;
-        AcceptedCdpRisk = true;
-        OnPropertyChanged(nameof(IsDraftDirty));
-        ShowStatus(
-            Text("Status_RiskAcceptedTitle", "Enhanced launch enabled"),
-            Text(
-                "Status_RiskAcceptedMessage",
-                "The local debugging-port acknowledgement was saved."),
-            UiStatusTone.Success);
+        BeginOperation(
+            Text("Stage_Saving", "Saving settings…"),
+            cancellationToken,
+            WallpaperOperationStage.Saving);
+        try
+        {
+            var saved = await _wallpaper
+                .SaveSettingsAsync(
+                    SavedDesired with { AcceptedCdpRisk = true },
+                    _operationCancellation!.Token)
+                .ConfigureAwait(true);
+            SetPersistedSettings(saved, synchronizeEditor: false);
+            AcceptedCdpRisk = true;
+            ShowStatus(
+                Text("Status_RiskAcceptedTitle", "Enhanced launch enabled"),
+                Text(
+                    "Status_RiskAcceptedMessage",
+                    "The local debugging-port acknowledgement was saved."),
+                UiStatusTone.Success);
+        }
+        finally
+        {
+            EndOperation();
+        }
     }
 
     public async Task RevokeRiskAsync(CancellationToken cancellationToken = default)
     {
         await InitializeAsync().ConfigureAwait(true);
-        var saved = await _wallpaper
-            .SaveSettingsAsync(
-                SavedDesired with { AcceptedCdpRisk = false },
-                cancellationToken)
-            .ConfigureAwait(true);
-        SavedDesired = saved;
-        AcceptedCdpRisk = false;
-        OnPropertyChanged(nameof(IsDraftDirty));
-        ShowStatus(
-            Text("Status_RiskRevokedTitle", "Enhanced launch disabled"),
-            Text(
-                "Status_RiskRevokedMessage",
-                "Future launches will require acknowledgement again."),
-            UiStatusTone.Informational);
+        if (IsBusy)
+        {
+            return;
+        }
+
+        BeginOperation(
+            Text("Stage_Saving", "Saving settings…"),
+            cancellationToken,
+            WallpaperOperationStage.Saving);
+        try
+        {
+            var saved = await _wallpaper
+                .SaveSettingsAsync(
+                    SavedDesired with { AcceptedCdpRisk = false },
+                    _operationCancellation!.Token)
+                .ConfigureAwait(true);
+            SetPersistedSettings(saved, synchronizeEditor: false);
+            AcceptedCdpRisk = false;
+            ShowStatus(
+                Text("Status_RiskRevokedTitle", "Enhanced launch disabled"),
+                Text(
+                    "Status_RiskRevokedMessage",
+                    "Future launches will require acknowledgement again."),
+                UiStatusTone.Informational);
+        }
+        finally
+        {
+            EndOperation();
+        }
     }
 
     public async Task<bool> ApplyAsync(CancellationToken cancellationToken = default)
@@ -442,15 +472,7 @@ public sealed class MainWindowViewModel : ObservableObject
             return false;
         }
 
-        var request = SavedDesired with
-        {
-            MediaPath = SelectedMediaPath,
-            MediaKind = SelectedMediaKind,
-            Fit = Fit,
-            PanelOpacity = PanelOpacity,
-            BlurPx = BlurPx,
-            AcceptedCdpRisk = true,
-        };
+        var request = ConfigurationState.Draft with { AcceptedCdpRisk = true };
 
         return await RunApplyAsync(request, cancellationToken).ConfigureAwait(true);
     }
@@ -491,13 +513,29 @@ public sealed class MainWindowViewModel : ObservableObject
         CancellationToken cancellationToken = default)
     {
         await InitializeAsync().ConfigureAwait(true);
-        var saved = await _wallpaper
-            .SaveSettingsAsync(
-                SavedDesired.RemoveRecentMediaPath(mediaPath),
-                cancellationToken)
-            .ConfigureAwait(true);
-        SavedDesired = saved;
-        RefreshRecents(saved);
+        if (IsBusy)
+        {
+            return;
+        }
+
+        BeginOperation(
+            Text("Stage_Saving", "Saving settings…"),
+            cancellationToken,
+            WallpaperOperationStage.Saving);
+        try
+        {
+            var saved = await _wallpaper
+                .SaveSettingsAsync(
+                    SavedDesired.RemoveRecentMediaPath(mediaPath),
+                    _operationCancellation!.Token)
+                .ConfigureAwait(true);
+            SetPersistedSettings(saved, synchronizeEditor: false);
+            RefreshRecents(saved);
+        }
+        finally
+        {
+            EndOperation();
+        }
     }
 
     public async Task ClearRecentsAsync()
@@ -507,13 +545,26 @@ public sealed class MainWindowViewModel : ObservableObject
             return;
         }
 
+        var operationStarted = false;
         try
         {
             await InitializeAsync().ConfigureAwait(true);
+            if (IsBusy)
+            {
+                return;
+            }
+
+            BeginOperation(
+                Text("Stage_Saving", "Saving settings…"),
+                CancellationToken.None,
+                WallpaperOperationStage.Saving);
+            operationStarted = true;
             var saved = await _wallpaper
-                .SaveSettingsAsync(SavedDesired.ClearRecentMediaPaths())
+                .SaveSettingsAsync(
+                    SavedDesired.ClearRecentMediaPaths(),
+                    _operationCancellation!.Token)
                 .ConfigureAwait(true);
-            SavedDesired = saved;
+            SetPersistedSettings(saved, synchronizeEditor: false);
             RefreshRecents(saved);
             ShowStatus(
                 Text("Status_RecentsClearedTitle", "Recent media cleared"),
@@ -526,27 +577,38 @@ public sealed class MainWindowViewModel : ObservableObject
         {
             ShowError(_errorMapper.Map(exception, UserFacingOperation.SaveWallpaperSettings));
         }
+        finally
+        {
+            if (operationStarted)
+            {
+                EndOperation();
+            }
+        }
     }
 
     public async Task SetThemeModeAsync(
         ThemeMode themeMode,
         CancellationToken cancellationToken = default)
     {
-        var next = Preferences with { ThemeMode = themeMode };
-        await _preferencesStore.SaveAsync(next, cancellationToken).ConfigureAwait(true);
-        Preferences = next;
+        await InitializeAsync().ConfigureAwait(true);
+        await UpdatePreferencesAsync(
+                current => current with { ThemeMode = themeMode },
+                cancellationToken)
+            .ConfigureAwait(true);
     }
 
     public async Task MarkTrayTipShownAsync(CancellationToken cancellationToken = default)
     {
+        await InitializeAsync().ConfigureAwait(true);
         if (Preferences.HasShownTrayTip)
         {
             return;
         }
 
-        var next = Preferences with { HasShownTrayTip = true };
-        await _preferencesStore.SaveAsync(next, cancellationToken).ConfigureAwait(true);
-        Preferences = next;
+        await UpdatePreferencesAsync(
+                current => current with { HasShownTrayTip = true },
+                cancellationToken)
+            .ConfigureAwait(true);
     }
 
     public async Task ResetEverythingAsync(CancellationToken cancellationToken = default)
@@ -556,8 +618,12 @@ public sealed class MainWindowViewModel : ObservableObject
             return;
         }
 
-        BeginOperation(Text("Stage_Resetting", "Resetting Backdrop for Codex…"), cancellationToken);
+        BeginOperation(
+            Text("Stage_Resetting", "Resetting Backdrop for Codex…"),
+            cancellationToken,
+            WallpaperOperationStage.Resetting);
         var failures = new List<Exception>();
+        OperationCanceledException? cancellationException = null;
         try
         {
             await TryStepAsync(
@@ -566,17 +632,19 @@ public sealed class MainWindowViewModel : ObservableObject
             await TryStepAsync(
                 async () =>
                 {
-                    SavedDesired = await _wallpaper
+                    var saved = await _wallpaper
                         .SaveSettingsAsync(
                             SettingsV1.CreateDefault(),
                             _operationCancellation!.Token)
                         .ConfigureAwait(true);
+                    _ = saved;
                 },
                 failures).ConfigureAwait(true);
             await TryStepAsync(
-                () => _preferencesStore.ResetAsync(_operationCancellation!.Token),
+                () => ResetPreferencesAsync(_operationCancellation!.Token),
                 failures).ConfigureAwait(true);
 
+            _operationCancellation!.Token.ThrowIfCancellationRequested();
             try
             {
                 _ = _wallpaper.DeleteOwnedShortcut();
@@ -586,16 +654,22 @@ public sealed class MainWindowViewModel : ObservableObject
                 failures.Add(exception);
             }
 
-            Preferences = AppPreferencesV1.CreateDefault();
-            ApplySavedSettingsToDraft(SavedDesired);
-            ActiveSnapshot = null;
-            IsActive = false;
-            IsPaused = false;
-            IsSavedButInactive = false;
-            ShortcutNeedsRetry = false;
-            RefreshRecents(SavedDesired);
-
-            if (failures.Count == 0)
+        }
+        catch (OperationCanceledException exception)
+        {
+            cancellationException = exception;
+        }
+        finally
+        {
+            await ReconcileAfterResetAsync(failures).ConfigureAwait(true);
+            if (cancellationException is not null && failures.Count == 0)
+            {
+                ShowError(
+                    _errorMapper.Map(
+                        cancellationException,
+                        UserFacingOperation.General));
+            }
+            else if (failures.Count == 0)
             {
                 ShowStatus(
                     Text("Status_ResetCompleteTitle", "Reset complete"),
@@ -611,9 +685,7 @@ public sealed class MainWindowViewModel : ObservableObject
                         new AggregateException(failures),
                         UserFacingOperation.General));
             }
-        }
-        finally
-        {
+
             EndOperation();
         }
     }
@@ -626,7 +698,8 @@ public sealed class MainWindowViewModel : ObservableObject
         var preferenceWarning = false;
         try
         {
-            Preferences = await _preferencesStore.LoadAsync().ConfigureAwait(true);
+            Preferences = await LoadPreferencesAsync(CancellationToken.None)
+                .ConfigureAwait(true);
         }
         catch (Exception exception)
         {
@@ -637,18 +710,23 @@ public sealed class MainWindowViewModel : ObservableObject
 
         try
         {
-            SavedDesired = await _wallpaper.LoadSettingsAsync().ConfigureAwait(true);
+            var saved = await _wallpaper.LoadSettingsAsync().ConfigureAwait(true);
+            SetPersistedSettings(saved, synchronizeEditor: false);
         }
         catch (Exception exception)
         {
-            SavedDesired = SettingsV1.CreateDefault();
+            SetPersistedSettings(
+                SettingsV1.CreateDefault(),
+                synchronizeEditor: false);
             ShowError(
                 _errorMapper.Map(exception, UserFacingOperation.LoadWallpaperSettings));
         }
 
         ApplySavedSettingsToDraft(SavedDesired);
         RefreshRecents(SavedDesired);
-        IsActive = _wallpaper.IsActive;
+        ConfigurationState = _wallpaper.IsActive
+            ? ConfigurationState.WithRuntimeActive(isRuntimeActive: true)
+            : ConfigurationState.WithoutActive();
         IsPaused = _wallpaper.IsPaused;
         if (!preferenceWarning && !IsStatusOpen)
         {
@@ -666,18 +744,14 @@ public sealed class MainWindowViewModel : ObservableObject
         CancellationToken cancellationToken)
     {
         BeginOperation(Text("Stage_Validating", "Validating media and Codex…"), cancellationToken);
-        var applied = false;
-        _hasForegroundFailure = false;
+        var foregroundFailure = false;
         ShortcutNeedsRetry = false;
-        IsSavedButInactive = false;
         try
         {
             var result = await _wallpaper
                 .ApplyAsync(request, _operationCancellation!.Token)
                 .ConfigureAwait(true);
-            applied = true;
-            ActiveSnapshot = result.Settings;
-            IsActive = true;
+            ConfigurationState = ConfigurationState.WithActive(result.Settings);
             IsPaused = false;
             ShortcutNeedsRetry = !result.ShortcutReady;
 
@@ -704,13 +778,11 @@ public sealed class MainWindowViewModel : ObservableObject
         }
         catch (Exception exception)
         {
-            _hasForegroundFailure = true;
-            IsActive = _wallpaper.IsActive;
+            foregroundFailure = true;
+            ConfigurationState = _wallpaper.IsActive
+                ? ConfigurationState.WithRuntimeActive(isRuntimeActive: true)
+                : ConfigurationState.WithoutActive();
             IsPaused = _wallpaper.IsPaused;
-            if (!IsActive)
-            {
-                ActiveSnapshot = null;
-            }
 
             ShowError(_errorMapper.Map(exception, UserFacingOperation.ApplyWallpaper));
             return false;
@@ -720,25 +792,12 @@ public sealed class MainWindowViewModel : ObservableObject
             try
             {
                 var reloaded = await ReloadPersistedSettingsAsync().ConfigureAwait(true);
-                SavedDesired = reloaded;
+                SetPersistedSettings(reloaded, synchronizeEditor: false);
                 RefreshRecents(reloaded);
-                IsSavedButInactive =
-                    !applied &&
-                    !_wallpaper.IsActive &&
-                    MatchesAppliedFields(reloaded, request);
-                if (IsSavedButInactive)
-                {
-                    ShowStatus(
-                        Text("Status_SavedInactiveTitle", "Saved, not active"),
-                        Text(
-                            "Status_SavedInactiveMessage",
-                            "Your wallpaper settings were saved, but Codex did not activate them. Resolve the message above and retry."),
-                        UiStatusTone.Warning);
-                }
             }
             catch (Exception reloadException)
             {
-                if (!_hasForegroundFailure)
+                if (!foregroundFailure)
                 {
                     ShowError(
                         _errorMapper.Map(
@@ -747,10 +806,11 @@ public sealed class MainWindowViewModel : ObservableObject
                 }
             }
 
-            IsActive = _wallpaper.IsActive;
+            ConfigurationState = _wallpaper.IsActive
+                ? ConfigurationState.WithRuntimeActive(isRuntimeActive: true)
+                : ConfigurationState.WithoutActive();
             IsPaused = _wallpaper.IsPaused;
             EndOperation();
-            OnPropertyChanged(nameof(IsDraftDirty));
         }
     }
 
@@ -761,16 +821,25 @@ public sealed class MainWindowViewModel : ObservableObject
             return;
         }
 
+        BeginOperation(
+            Text("Stage_Updating", "Updating playback…"),
+            CancellationToken.None,
+            WallpaperOperationStage.Updating);
         try
         {
             var pause = !IsPaused;
-            await _wallpaper.SetPausedAsync(pause).ConfigureAwait(true);
-            IsPaused = pause;
+            await _wallpaper
+                .SetPausedAsync(pause, _operationCancellation!.Token)
+                .ConfigureAwait(true);
+            ConfigurationState = _wallpaper.IsActive
+                ? ConfigurationState.WithRuntimeActive(isRuntimeActive: true)
+                : ConfigurationState.WithoutActive();
+            IsPaused = _wallpaper.IsActive && _wallpaper.IsPaused;
             ShowStatus(
-                pause
+                IsPaused
                     ? Text("Status_PausedTitle", "Video paused")
                     : Text("Status_ResumedTitle", "Video resumed"),
-                pause
+                IsPaused
                     ? Text(
                         "Status_PausedMessage",
                         "Codex and the local preview are paused.")
@@ -781,8 +850,15 @@ public sealed class MainWindowViewModel : ObservableObject
         }
         catch (Exception exception)
         {
-            _hasForegroundFailure = true;
+            ConfigurationState = _wallpaper.IsActive
+                ? ConfigurationState.WithRuntimeActive(isRuntimeActive: true)
+                : ConfigurationState.WithoutActive();
+            IsPaused = _wallpaper.IsActive && _wallpaper.IsPaused;
             ShowError(_errorMapper.Map(exception, UserFacingOperation.ApplyWallpaper));
+        }
+        finally
+        {
+            EndOperation();
         }
     }
 
@@ -795,15 +871,13 @@ public sealed class MainWindowViewModel : ObservableObject
 
         BeginOperation(
             Text("Stage_Restoring", "Restoring the official Codex background…"),
-            CancellationToken.None);
-        _hasForegroundFailure = false;
+            CancellationToken.None,
+            WallpaperOperationStage.Restoring);
         try
         {
             await _wallpaper.DisableAsync(_operationCancellation!.Token).ConfigureAwait(true);
-            ActiveSnapshot = null;
-            IsActive = false;
+            ConfigurationState = ConfigurationState.WithoutActive();
             IsPaused = false;
-            IsSavedButInactive = SavedDesired.MediaPath is not null;
             ShowStatus(
                 Text("Status_RestoredTitle", "Official background restored"),
                 Text(
@@ -813,7 +887,10 @@ public sealed class MainWindowViewModel : ObservableObject
         }
         catch (Exception exception)
         {
-            _hasForegroundFailure = true;
+            ConfigurationState = _wallpaper.IsActive
+                ? ConfigurationState.WithRuntimeActive(isRuntimeActive: true)
+                : ConfigurationState.WithoutActive();
+            IsPaused = _wallpaper.IsPaused;
             ShowError(_errorMapper.Map(exception, UserFacingOperation.RestoreWallpaper));
         }
         finally
@@ -855,12 +932,6 @@ public sealed class MainWindowViewModel : ObservableObject
     {
         void Update()
         {
-            if (eventArgs.Phase == WallpaperRuntimePhase.Faulted &&
-                _hasForegroundFailure)
-            {
-                return;
-            }
-
             var stage = eventArgs.Phase switch
             {
                 WallpaperRuntimePhase.Validating =>
@@ -880,30 +951,40 @@ public sealed class MainWindowViewModel : ObservableObject
                 OperationStage = stage;
             }
 
+            AdvanceOperation(eventArgs.Phase);
+
             switch (eventArgs.Phase)
             {
                 case WallpaperRuntimePhase.Active:
-                    IsActive = true;
+                    ConfigurationState =
+                        ConfigurationState.WithRuntimeActive(isRuntimeActive: true);
                     IsPaused = false;
                     break;
                 case WallpaperRuntimePhase.Paused:
-                    IsActive = true;
+                    ConfigurationState =
+                        ConfigurationState.WithRuntimeActive(isRuntimeActive: true);
                     IsPaused = true;
                     break;
                 case WallpaperRuntimePhase.Idle:
-                    IsActive = false;
+                    ConfigurationState = ConfigurationState.WithoutActive();
                     IsPaused = false;
                     break;
                 case WallpaperRuntimePhase.Faulted:
-                    ActiveSnapshot = null;
-                    IsActive = false;
-                    IsPaused = false;
-                    ShowStatus(
-                        Text("Status_RuntimeStoppedTitle", "Wallpaper connection stopped"),
-                        Text(
-                            "Status_RuntimeStoppedMessage",
-                            "The runtime connection ended and the app attempted to restore the official background."),
-                        UiStatusTone.Error);
+                    ConfigurationState = _wallpaper.IsActive
+                        ? ConfigurationState.WithRuntimeActive(isRuntimeActive: true)
+                        : ConfigurationState.WithoutActive();
+                    IsPaused = _wallpaper.IsActive && _wallpaper.IsPaused;
+                    if (!IsBusy ||
+                        OperationProgress.Stage == WallpaperOperationStage.Saving)
+                    {
+                        ShowStatus(
+                            Text("Status_RuntimeStoppedTitle", "Wallpaper connection stopped"),
+                            Text(
+                                "Status_RuntimeStoppedMessage",
+                                "The runtime connection ended and the app attempted to restore the official background."),
+                            UiStatusTone.Error);
+                    }
+
                     break;
             }
         }
@@ -920,14 +1001,65 @@ public sealed class MainWindowViewModel : ObservableObject
 
     private void ApplySavedSettingsToDraft(SettingsV1 settings)
     {
-        SelectedMediaPath = settings.MediaPath;
-        SelectedMediaKind = settings.MediaKind;
-        Fit = settings.Fit;
-        PanelOpacity = settings.PanelOpacity;
-        BlurPx = settings.BlurPx;
-        AcceptedCdpRisk = settings.AcceptedCdpRisk;
-        IsMediaMissing = settings.MediaPath is not null && !File.Exists(settings.MediaPath);
-        OnPropertyChanged(nameof(IsDraftDirty));
+        _isSynchronizingEditor = true;
+        try
+        {
+            SelectedMediaKind = settings.MediaKind;
+            SelectedMediaPath = settings.MediaPath;
+            Fit = settings.Fit;
+            PanelOpacity = settings.PanelOpacity;
+            BlurPx = settings.BlurPx;
+            AcceptedCdpRisk = settings.AcceptedCdpRisk;
+            IsMediaMissing =
+                settings.MediaPath is not null &&
+                !File.Exists(settings.MediaPath);
+        }
+        finally
+        {
+            _isSynchronizingEditor = false;
+        }
+
+        SynchronizeDraftState();
+    }
+
+    private SettingsV1 BuildDraftSettings(SettingsV1 baseline) =>
+        baseline with
+        {
+            MediaPath = SelectedMediaPath,
+            MediaKind = SelectedMediaPath is null ? MediaKind.None : SelectedMediaKind,
+            Fit = Fit,
+            PanelOpacity = PanelOpacity,
+            BlurPx = BlurPx,
+            AcceptedCdpRisk = AcceptedCdpRisk,
+        };
+
+    private void SynchronizeDraftState()
+    {
+        if (_isSynchronizingEditor)
+        {
+            return;
+        }
+
+        ConfigurationState =
+            ConfigurationState.WithDraft(BuildDraftSettings(SavedDesired));
+    }
+
+    private void SetPersistedSettings(
+        SettingsV1 settings,
+        bool synchronizeEditor)
+    {
+        ConfigurationState =
+            ConfigurationState.WithPersisted(
+                settings,
+                synchronizeDraft: synchronizeEditor);
+        if (synchronizeEditor)
+        {
+            ApplySavedSettingsToDraft(settings);
+            return;
+        }
+
+        ConfigurationState =
+            ConfigurationState.WithDraft(BuildDraftSettings(settings));
     }
 
     private void RefreshRecents(SettingsV1 settings)
@@ -946,18 +1078,41 @@ public sealed class MainWindowViewModel : ObservableObject
         ClearRecentsCommand.NotifyCanExecuteChanged();
     }
 
-    private void BeginOperation(string stage, CancellationToken cancellationToken)
+    private void BeginOperation(
+        string stage,
+        CancellationToken cancellationToken,
+        WallpaperOperationStage operationStage = WallpaperOperationStage.Validating)
     {
         _operationCancellation?.Dispose();
         _operationCancellation =
             CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         OperationStage = stage;
-        IsBusy = true;
+        OperationProgress = WallpaperOperationProgress.Begin(operationStage);
+    }
+
+    private void AdvanceOperation(WallpaperRuntimePhase phase)
+    {
+        var nextStage = phase switch
+        {
+            WallpaperRuntimePhase.LaunchingCodex => WallpaperOperationStage.Launching,
+            WallpaperRuntimePhase.DiscoveringEndpoint => WallpaperOperationStage.Discovering,
+            WallpaperRuntimePhase.Applying => WallpaperOperationStage.Applying,
+            WallpaperRuntimePhase.Stopping => WallpaperOperationStage.Restoring,
+            _ => WallpaperOperationStage.Idle,
+        };
+        if (!OperationProgress.IsBusy ||
+            nextStage is WallpaperOperationStage.Idle ||
+            nextStage <= OperationProgress.Stage)
+        {
+            return;
+        }
+
+        OperationProgress = OperationProgress.AdvanceTo(nextStage);
     }
 
     private void EndOperation()
     {
-        IsBusy = false;
+        OperationProgress = OperationProgress.Complete();
         OperationStage = string.Empty;
         _operationCancellation?.Dispose();
         _operationCancellation = null;
@@ -967,6 +1122,7 @@ public sealed class MainWindowViewModel : ObservableObject
     {
         try
         {
+            OperationProgress = OperationProgress.RequestCancellation();
             _operationCancellation?.Cancel();
         }
         catch (ObjectDisposedException)
@@ -978,7 +1134,7 @@ public sealed class MainWindowViewModel : ObservableObject
     private bool CanTogglePause() =>
         !IsBusy &&
         IsActive &&
-        (ActiveSnapshot?.MediaKind == MediaKind.Video || IsVideoSelected);
+        ActiveSnapshot?.MediaKind == MediaKind.Video;
 
     private bool CanDisable() => !IsBusy && IsActive;
 
@@ -1019,13 +1175,6 @@ public sealed class MainWindowViewModel : ObservableObject
             : localized;
     }
 
-    private static bool MatchesAppliedFields(SettingsV1 left, SettingsV1 right) =>
-        string.Equals(left.MediaPath, right.MediaPath, StringComparison.OrdinalIgnoreCase) &&
-        left.Fit == right.Fit &&
-        Math.Abs(left.PanelOpacity - right.PanelOpacity) < 0.0001 &&
-        Math.Abs(left.BlurPx - right.BlurPx) < 0.0001 &&
-        left.AcceptedCdpRisk == right.AcceptedCdpRisk;
-
     private static MediaKind InferMediaKind(string path)
     {
         var extension = Path.GetExtension(path);
@@ -1047,12 +1196,120 @@ public sealed class MainWindowViewModel : ObservableObject
         {
             await operation().ConfigureAwait(true);
         }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
         catch (Exception exception)
         {
             failures.Add(exception);
         }
     }
 
+    private async Task ReconcileAfterResetAsync(List<Exception> failures)
+    {
+        try
+        {
+            var saved = await _wallpaper
+                .LoadSettingsAsync(CancellationToken.None)
+                .ConfigureAwait(true);
+            SetPersistedSettings(saved, synchronizeEditor: false);
+            ApplySavedSettingsToDraft(saved);
+            RefreshRecents(saved);
+        }
+        catch (Exception exception)
+        {
+            failures.Add(exception);
+        }
+
+        try
+        {
+            Preferences = await LoadPreferencesAsync(CancellationToken.None)
+                .ConfigureAwait(true);
+        }
+        catch (Exception exception)
+        {
+            failures.Add(exception);
+        }
+
+        ConfigurationState = _wallpaper.IsActive
+            ? ConfigurationState.WithRuntimeActive(isRuntimeActive: true)
+            : ConfigurationState.WithoutActive();
+        IsPaused = _wallpaper.IsActive && _wallpaper.IsPaused;
+        ShortcutNeedsRetry = false;
+    }
+
     private Task<SettingsV1> ReloadPersistedSettingsAsync() =>
         _wallpaper.LoadSettingsAsync(CancellationToken.None);
+
+    public void Dispose()
+    {
+        if (_isDisposed)
+        {
+            return;
+        }
+
+        _isDisposed = true;
+        _wallpaper.StatusChanged -= Wallpaper_StatusChanged;
+        _operationCancellation?.Cancel();
+        _operationCancellation?.Dispose();
+        _operationCancellation = null;
+        GC.SuppressFinalize(this);
+    }
+
+    private async Task UpdatePreferencesAsync(
+        Func<AppPreferencesV1, AppPreferencesV1> update,
+        CancellationToken cancellationToken)
+    {
+        await _preferencesMutationGate
+            .WaitAsync(cancellationToken)
+            .ConfigureAwait(true);
+        try
+        {
+            var next = update(Preferences);
+            await _preferencesStore
+                .SaveAsync(next, cancellationToken)
+                .ConfigureAwait(true);
+            Preferences = next;
+        }
+        finally
+        {
+            _ = _preferencesMutationGate.Release();
+        }
+    }
+
+    private async Task ResetPreferencesAsync(CancellationToken cancellationToken)
+    {
+        await _preferencesMutationGate
+            .WaitAsync(cancellationToken)
+            .ConfigureAwait(true);
+        try
+        {
+            await _preferencesStore
+                .ResetAsync(cancellationToken)
+                .ConfigureAwait(true);
+        }
+        finally
+        {
+            _ = _preferencesMutationGate.Release();
+        }
+    }
+
+    private async Task<AppPreferencesV1> LoadPreferencesAsync(
+        CancellationToken cancellationToken)
+    {
+        await _preferencesMutationGate
+            .WaitAsync(cancellationToken)
+            .ConfigureAwait(true);
+        try
+        {
+            return await _preferencesStore
+                .LoadAsync(cancellationToken)
+                .ConfigureAwait(true);
+        }
+        finally
+        {
+            _ = _preferencesMutationGate.Release();
+        }
+    }
 }
