@@ -162,7 +162,7 @@
       "BackdropForCodex": {
         "type": "Project",
         "dependencies": {
-          "BackdropForCodex.Core": "[1.0.0, )",
+          "BackdropForCodex.Core": "[1.1.0, )",
           "CommunityToolkit.Mvvm": "[8.4.2, )",
           "WPF-UI": "[4.3.0, )",
           "WPF-UI.Tray": "[4.3.0, )"
