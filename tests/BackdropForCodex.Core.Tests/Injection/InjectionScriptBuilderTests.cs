@@ -13,7 +13,8 @@ public sealed class InjectionScriptBuilderTests
             mediaKind: WallpaperMediaKind.Image,
             objectFit: WallpaperObjectFit.Contain,
             mediaOpacity: 0.8,
-            glass: new GlassEffectOptions(10, 20, 30, 0.42, 18, 1.2));
+            glass: new GlassEffectOptions(10, 20, 30, 0.42, 18, 1.2),
+            composition: new WallpaperCompositionOptions(0.25, 0.75, 0.5, 0.1));
 
         var script = InjectionScriptBuilder.BuildInstall(options);
 
@@ -22,6 +23,10 @@ public sealed class InjectionScriptBuilderTests
         Assert.Contains($"\"fileInputId\":\"{InjectionScriptBuilder.FileInputElementId}\"", script, StringComparison.Ordinal);
         Assert.Contains("\"mediaKind\":\"image\"", script, StringComparison.Ordinal);
         Assert.Contains("\"objectFit\":\"contain\"", script, StringComparison.Ordinal);
+        Assert.Contains("\"focusX\":0.25", script, StringComparison.Ordinal);
+        Assert.Contains("\"focusY\":0.75", script, StringComparison.Ordinal);
+        Assert.Contains("\"darkOverlay\":0.5", script, StringComparison.Ordinal);
+        Assert.Contains("\"lightOverlay\":0.1", script, StringComparison.Ordinal);
         Assert.Contains("\"expectedContentLength\":1234", script, StringComparison.Ordinal);
         Assert.Contains("\"heartbeatIntervalMs\":2000", script, StringComparison.Ordinal);
         Assert.Contains("\"leaseTimeoutMs\":10000", script, StringComparison.Ordinal);
@@ -32,6 +37,19 @@ public sealed class InjectionScriptBuilderTests
         Assert.DoesNotContain("document.querySelectorAll(", script, StringComparison.Ordinal);
         Assert.Contains("return { prepared: true", script, StringComparison.Ordinal);
         Assert.DoesNotContain("return { applied: true", script, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(WallpaperObjectFit.Cover, "cover")]
+    [InlineData(WallpaperObjectFit.Contain, "contain")]
+    [InlineData(WallpaperObjectFit.Fill, "fill")]
+    public void BuildInstall_MapsEveryObjectFitToCss(
+        WallpaperObjectFit objectFit,
+        string expectedCss)
+    {
+        var script = InjectionScriptBuilder.BuildInstall(CreateOptions(objectFit: objectFit));
+
+        Assert.Contains($"\"objectFit\":\"{expectedCss}\"", script, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -145,6 +163,67 @@ public sealed class InjectionScriptBuilderTests
     }
 
     [Fact]
+    public void BuildInstall_AppliesCropFocusAndAddsAnOwnedThemeAwareOverlay()
+    {
+        var script = InjectionScriptBuilder.BuildInstall(CreateOptions(
+            composition: new WallpaperCompositionOptions(0.2, 0.8, 0.55, 0.12)));
+
+        Assert.Contains(
+            "cfg.objectFit === \"cover\" ? cfg.focusX * 100 : 50",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "cfg.objectFit === \"cover\" ? cfg.focusY * 100 : 50",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains("object-position:", script, StringComparison.Ordinal);
+        Assert.Contains("light-dark(", script, StringComparison.Ordinal);
+        Assert.Contains(
+            ":root:is(.dark, .electron-dark, [data-theme=\"dark\"])",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            ":root:is(.light, .electron-light, [data-theme=\"light\"])",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains("overlay.dataset.codexWallpaperOverlay = \"\"", script, StringComparison.Ordinal);
+        Assert.Contains("root.append(media, overlay, fileInput)", script, StringComparison.Ordinal);
+        Assert.Contains(
+            "#${cfg.rootId} > [data-codex-wallpaper-overlay]",
+            script,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("prefers-color-scheme", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("MutationObserver", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildInstall_GlassesOnlyTheReviewedRightPanelAndItsDirectLayoutShell()
+    {
+        var script = InjectionScriptBuilder.BuildInstall(CreateOptions());
+        const string RightPanel =
+            "body [role=\"tabpanel\"][data-app-shell-tab-panel-controller=\"right\"]";
+        var forcedColorsNone = script.IndexOf(
+            "@media (forced-colors: none)",
+            StringComparison.Ordinal);
+        var forcedColorsActive = script.IndexOf(
+            "@media (forced-colors: active)",
+            StringComparison.Ordinal);
+        var rightPanel = script.IndexOf(RightPanel, StringComparison.Ordinal);
+
+        Assert.True(forcedColorsNone >= 0);
+        Assert.True(rightPanel > forcedColorsNone);
+        Assert.True(forcedColorsActive > rightPanel);
+        Assert.Contains($"{RightPanel} > :is(div, section)", script, StringComparison.Ordinal);
+        Assert.DoesNotContain($"{RightPanel} *", script, StringComparison.Ordinal);
+        Assert.DoesNotContain($"{RightPanel} :is(", script, StringComparison.Ordinal);
+        Assert.DoesNotContain(".monaco-editor", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("[data-diff", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("[data-popcorn", script, StringComparison.Ordinal);
+        Assert.Contains("@media (forced-colors: active)", script, StringComparison.Ordinal);
+        Assert.Contains("display: none !important", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BuildInstall_GlassesOnlyPortalHomeSuggestionCardsWithThemeAwareOpacity()
     {
         var script = InjectionScriptBuilder.BuildInstall(CreateOptions(
@@ -234,6 +313,7 @@ public sealed class InjectionScriptBuilderTests
         Assert.Contains("!state.root?.isConnected", script, StringComparison.Ordinal);
         Assert.Contains("!state.style?.isConnected", script, StringComparison.Ordinal);
         Assert.Contains("!state.media?.isConnected", script, StringComparison.Ordinal);
+        Assert.Contains("!state.overlay?.isConnected", script, StringComparison.Ordinal);
         Assert.Contains(
             $"state.root.id !== \"{InjectionScriptBuilder.RootElementId}\"",
             script,
@@ -257,7 +337,13 @@ public sealed class InjectionScriptBuilderTests
             script,
             StringComparison.Ordinal);
         Assert.Contains("state.media.dataset.codexWallpaperGeneration !== \"42\"", script, StringComparison.Ordinal);
+        Assert.Contains(
+            $"state.overlay.dataset.codexWallpaperOwner !== \"{InjectionScriptBuilder.Owner}\"",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains("state.overlay.dataset.codexWallpaperGeneration !== \"42\"", script, StringComparison.Ordinal);
         Assert.Contains("state.media.parentElement !== state.root", script, StringComparison.Ordinal);
+        Assert.Contains("state.overlay.parentElement !== state.root", script, StringComparison.Ordinal);
         Assert.Contains("!state.blobUrl", script, StringComparison.Ordinal);
         Assert.Contains("state.media.currentSrc !== state.blobUrl", script, StringComparison.Ordinal);
         Assert.Contains("state.media.error", script, StringComparison.Ordinal);
@@ -341,7 +427,8 @@ public sealed class InjectionScriptBuilderTests
         WallpaperMediaKind mediaKind = WallpaperMediaKind.Image,
         WallpaperObjectFit objectFit = WallpaperObjectFit.Cover,
         double mediaOpacity = 1,
-        GlassEffectOptions? glass = null) =>
+        GlassEffectOptions? glass = null,
+        WallpaperCompositionOptions? composition = null) =>
         new(
             generation,
             new Uri("https://127.0.0.1:49152/media/wallpaper"),
@@ -350,5 +437,6 @@ public sealed class InjectionScriptBuilderTests
             mediaKind,
             objectFit,
             mediaOpacity,
-            glass);
+            glass,
+            composition);
 }

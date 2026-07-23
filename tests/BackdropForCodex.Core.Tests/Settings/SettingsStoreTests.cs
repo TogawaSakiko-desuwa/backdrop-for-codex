@@ -39,7 +39,7 @@ public sealed class SettingsStoreTests
             {
                 MediaPath = mediaPath,
                 MediaKind = MediaKind.Video,
-                Fit = WallpaperFit.Contain,
+                Fit = WallpaperFit.Stretch,
                 FocusX = 0.25,
                 FocusY = 0.75,
                 PanelOpacity = 0.9,
@@ -71,11 +71,80 @@ public sealed class SettingsStoreTests
             var json = await File.ReadAllTextAsync(settingsPath);
             Assert.Contains("\"schemaVersion\": 1", json, StringComparison.Ordinal);
             Assert.Contains("\"mediaKind\": \"Video\"", json, StringComparison.Ordinal);
-            Assert.Contains("\"fit\": \"Contain\"", json, StringComparison.Ordinal);
+            Assert.Contains("\"fit\": \"Stretch\"", json, StringComparison.Ordinal);
             Assert.DoesNotContain("volume", json, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("playbackRate", json, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("muted", json, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("loop", json, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            DeleteTemporaryDirectory(directoryPath);
+        }
+    }
+
+    [Fact]
+    public async Task SaveAsyncClampsLegacyOverlayValuesWithoutChangingSchema()
+    {
+        var directoryPath = CreateTemporaryDirectory();
+        try
+        {
+            var settingsPath = Path.Combine(directoryPath, "settings.json");
+            using var store = new SettingsStore(settingsPath);
+            var legacySettings = SettingsV1.CreateDefault() with
+            {
+                DarkOverlay = 0.85,
+                LightOverlay = 1,
+            };
+
+            await store.SaveAsync(legacySettings);
+            var loaded = await store.LoadAsync();
+
+            Assert.Equal(1, loaded.SchemaVersion);
+            Assert.Equal(SettingsV1.MaximumEffectiveOverlay, loaded.DarkOverlay);
+            Assert.Equal(SettingsV1.MaximumEffectiveOverlay, loaded.LightOverlay);
+        }
+        finally
+        {
+            DeleteTemporaryDirectory(directoryPath);
+        }
+    }
+
+    [Theory]
+    [InlineData("Cover", WallpaperFit.Cover)]
+    [InlineData("Contain", WallpaperFit.Contain)]
+    public async Task LoadAsyncReadsLegacyFitNamesWithoutSchemaMigration(
+        string fitName,
+        WallpaperFit expectedFit)
+    {
+        var directoryPath = CreateTemporaryDirectory();
+        try
+        {
+            var settingsPath = Path.Combine(directoryPath, "settings.json");
+            await File.WriteAllTextAsync(
+                settingsPath,
+                $$"""
+                {
+                  "schemaVersion": 1,
+                  "mediaPath": null,
+                  "mediaKind": "None",
+                  "fit": "{{fitName}}",
+                  "focusX": 0.5,
+                  "focusY": 0.5,
+                  "panelOpacity": 0.78,
+                  "blurPx": 14,
+                  "darkOverlay": 0.3,
+                  "lightOverlay": 0.18,
+                  "recentMediaPaths": [],
+                  "acceptedCdpRisk": false
+                }
+                """);
+            using var store = new SettingsStore(settingsPath);
+
+            var loaded = await store.LoadAsync();
+
+            Assert.Equal(1, loaded.SchemaVersion);
+            Assert.Equal(expectedFit, loaded.Fit);
         }
         finally
         {

@@ -110,7 +110,7 @@ public sealed class SettingsStore : ISettingsStore, IDisposable
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(settings);
-        var snapshot = settings.Snapshot();
+        var snapshot = settings.SnapshotForSave();
 
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try

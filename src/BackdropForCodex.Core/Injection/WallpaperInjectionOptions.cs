@@ -65,6 +65,56 @@ public sealed record GlassEffectOptions
     public double Saturation { get; }
 }
 
+public sealed record WallpaperCompositionOptions
+{
+    public const double MaximumOverlayOpacity = 0.60;
+
+    public WallpaperCompositionOptions(
+        double focusX = 0.5,
+        double focusY = 0.5,
+        double darkOverlay = 0.30,
+        double lightOverlay = 0.18)
+    {
+        ValidateUnitInterval(focusX, nameof(focusX));
+        ValidateUnitInterval(focusY, nameof(focusY));
+        ValidateOverlay(darkOverlay, nameof(darkOverlay));
+        ValidateOverlay(lightOverlay, nameof(lightOverlay));
+
+        FocusX = focusX;
+        FocusY = focusY;
+        DarkOverlay = darkOverlay;
+        LightOverlay = lightOverlay;
+    }
+
+    public double FocusX { get; }
+
+    public double FocusY { get; }
+
+    public double DarkOverlay { get; }
+
+    public double LightOverlay { get; }
+
+    private static void ValidateUnitInterval(double value, string parameterName)
+    {
+        if (!double.IsFinite(value) || value is < 0 or > 1)
+        {
+            throw new ArgumentOutOfRangeException(
+                parameterName,
+                "The composition value must be between 0 and 1.");
+        }
+    }
+
+    private static void ValidateOverlay(double value, string parameterName)
+    {
+        if (!double.IsFinite(value) || value is < 0 or > MaximumOverlayOpacity)
+        {
+            throw new ArgumentOutOfRangeException(
+                parameterName,
+                $"Overlay opacity must be between 0 and {MaximumOverlayOpacity}.");
+        }
+    }
+}
+
 public sealed record WallpaperInjectionOptions
 {
     public WallpaperInjectionOptions(
@@ -75,7 +125,8 @@ public sealed record WallpaperInjectionOptions
         WallpaperMediaKind mediaKind,
         WallpaperObjectFit objectFit = WallpaperObjectFit.Cover,
         double mediaOpacity = 1,
-        GlassEffectOptions? glass = null)
+        GlassEffectOptions? glass = null,
+        WallpaperCompositionOptions? composition = null)
     {
         if (generation <= 0)
         {
@@ -130,6 +181,7 @@ public sealed record WallpaperInjectionOptions
         ObjectFit = objectFit;
         MediaOpacity = mediaOpacity;
         Glass = glass ?? new GlassEffectOptions();
+        Composition = composition ?? new WallpaperCompositionOptions();
     }
 
     public long Generation { get; }
@@ -148,6 +200,8 @@ public sealed record WallpaperInjectionOptions
 
     public GlassEffectOptions Glass { get; }
 
+    public WallpaperCompositionOptions Composition { get; }
+
     private bool PrintMembers(StringBuilder builder)
     {
         builder.Append("Generation = ");
@@ -164,6 +218,8 @@ public sealed record WallpaperInjectionOptions
         builder.Append(MediaOpacity);
         builder.Append(", Glass = ");
         builder.Append(Glass);
+        builder.Append(", Composition = ");
+        builder.Append(Composition);
         return true;
     }
 

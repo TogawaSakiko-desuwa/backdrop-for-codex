@@ -34,6 +34,38 @@ public sealed class WallpaperCoordinatorTests
         Assert.Equal(WallpaperRuntimePhase.Active, coordinator.Status.Phase);
     }
 
+    [Theory]
+    [InlineData(WallpaperFit.Cover, WallpaperObjectFit.Cover)]
+    [InlineData(WallpaperFit.Contain, WallpaperObjectFit.Contain)]
+    [InlineData(WallpaperFit.Stretch, WallpaperObjectFit.Fill)]
+    public async Task StartOrUpdateAsync_MapsCompositionAndKeepsNormalizedStateConsistent(
+        WallpaperFit fit,
+        WallpaperObjectFit expectedObjectFit)
+    {
+        var fixture = new CoordinatorFixture();
+        await using var coordinator = fixture.CreateCoordinator();
+        var requested = fixture.ValidSettings with
+        {
+            Fit = fit,
+            FocusX = 0.2,
+            FocusY = 0.8,
+            DarkOverlay = 0.9,
+            LightOverlay = 0.75,
+        };
+
+        var saved = await coordinator.StartOrUpdateAsync(requested);
+
+        var options = Assert.IsType<WallpaperInjectionOptions>(fixture.Injection.LastOptions);
+        Assert.Equal(expectedObjectFit, options.ObjectFit);
+        Assert.Equal(0.2, options.Composition.FocusX);
+        Assert.Equal(0.8, options.Composition.FocusY);
+        Assert.Equal(SettingsV1.MaximumEffectiveOverlay, options.Composition.DarkOverlay);
+        Assert.Equal(SettingsV1.MaximumEffectiveOverlay, options.Composition.LightOverlay);
+        Assert.Equal(SettingsV1.MaximumEffectiveOverlay, saved.DarkOverlay);
+        Assert.Equal(SettingsV1.MaximumEffectiveOverlay, saved.LightOverlay);
+        Assert.Equal(saved, fixture.SettingsStore.Settings);
+    }
+
     [Fact]
     public async Task StartOrUpdateAsync_RefusesCodexThatWasAlreadyRunning()
     {
@@ -206,6 +238,24 @@ public sealed class WallpaperCoordinatorTests
         Assert.False(saved.AcceptedCdpRisk);
         Assert.False(fixture.SettingsStore.Settings.AcceptedCdpRisk);
         Assert.Equal(0, fixture.Activation.CallCount);
+    }
+
+    [Fact]
+    public async Task SaveSettingsAsync_ReturnsTheSameOverlayValuesThatWerePersisted()
+    {
+        var fixture = new CoordinatorFixture();
+        await using var coordinator = fixture.CreateCoordinator();
+        var requested = fixture.ValidSettings with
+        {
+            DarkOverlay = 0.95,
+            LightOverlay = 0.8,
+        };
+
+        var saved = await coordinator.SaveSettingsAsync(requested);
+
+        Assert.Equal(SettingsV1.MaximumEffectiveOverlay, saved.DarkOverlay);
+        Assert.Equal(SettingsV1.MaximumEffectiveOverlay, saved.LightOverlay);
+        Assert.Equal(saved, fixture.SettingsStore.Settings);
     }
 
     [Fact]

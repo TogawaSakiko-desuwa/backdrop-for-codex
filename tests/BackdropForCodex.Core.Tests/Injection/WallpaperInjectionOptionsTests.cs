@@ -34,5 +34,43 @@ public sealed class WallpaperInjectionOptionsTests
         Assert.Contains("ObjectFit = Contain", summary, StringComparison.Ordinal);
         Assert.Contains("MediaOpacity = 0.75", summary, StringComparison.Ordinal);
         Assert.Contains("Glass = GlassEffectOptions", summary, StringComparison.Ordinal);
+        Assert.Contains("Composition = WallpaperCompositionOptions", summary, StringComparison.Ordinal);
+        Assert.Equal(new WallpaperCompositionOptions(), options.Composition);
+    }
+
+    [Theory]
+    [InlineData("FocusX", -0.01)]
+    [InlineData("FocusY", 1.01)]
+    [InlineData("DarkOverlay", -0.01)]
+    [InlineData("DarkOverlay", 0.61)]
+    [InlineData("LightOverlay", double.PositiveInfinity)]
+    [InlineData("FocusX", double.NaN)]
+    public void CompositionRejectsNonFiniteAndOutOfRangeValues(
+        string propertyName,
+        double value)
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => propertyName switch
+        {
+            "FocusX" => new WallpaperCompositionOptions(focusX: value),
+            "FocusY" => new WallpaperCompositionOptions(focusY: value),
+            "DarkOverlay" => new WallpaperCompositionOptions(darkOverlay: value),
+            "LightOverlay" => new WallpaperCompositionOptions(lightOverlay: value),
+            _ => throw new ArgumentOutOfRangeException(nameof(propertyName)),
+        });
+    }
+
+    [Fact]
+    public void CompositionAcceptsInclusiveBoundaries()
+    {
+        var composition = new WallpaperCompositionOptions(
+            focusX: 0,
+            focusY: 1,
+            darkOverlay: 0,
+            lightOverlay: WallpaperCompositionOptions.MaximumOverlayOpacity);
+
+        Assert.Equal(0, composition.FocusX);
+        Assert.Equal(1, composition.FocusY);
+        Assert.Equal(0, composition.DarkOverlay);
+        Assert.Equal(WallpaperCompositionOptions.MaximumOverlayOpacity, composition.LightOverlay);
     }
 }
