@@ -151,11 +151,15 @@ public sealed class InjectionScriptBuilderTests
         Assert.Contains("body > #root {", script, StringComparison.Ordinal);
         Assert.DoesNotContain("body > :not(#${cfg.rootId})", script, StringComparison.Ordinal);
         Assert.Contains(
-            "body :is(aside, .app-header-tint, [role=\"dialog\"], [data-codex-wallpaper-glass]) {",
+            "aside:not([data-app-shell-focus-area=\"right-panel\"])",
             script,
             StringComparison.Ordinal);
         Assert.Contains(
-            "body :is(aside, .app-header-tint, [role=\"dialog\"], [data-codex-wallpaper-glass]) :is(nav, header) {",
+            "[data-codex-wallpaper-glass]) :is(nav, header) {",
+            script,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "body :is(aside, .app-header-tint",
             script,
             StringComparison.Ordinal);
         Assert.DoesNotContain("body :is(main, aside, nav, header", script, StringComparison.Ordinal);
@@ -239,6 +243,10 @@ public sealed class InjectionScriptBuilderTests
         Assert.DoesNotContain($"{RightPanelTab} > :is(div, section)", script, StringComparison.Ordinal);
         Assert.DoesNotContain($"{RightPanelTab} *", script, StringComparison.Ordinal);
         Assert.DoesNotContain("[class*=\"bg-token\"]", script, StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "body :is(aside, .app-header-tint",
+            script,
+            StringComparison.Ordinal);
         Assert.DoesNotContain(".monaco-editor", script, StringComparison.Ordinal);
         Assert.DoesNotContain("[data-diff", script, StringComparison.Ordinal);
         Assert.DoesNotContain("[data-popcorn", script, StringComparison.Ordinal);
@@ -263,7 +271,7 @@ public sealed class InjectionScriptBuilderTests
             StringComparison.Ordinal);
         Assert.True(forcedColorsBlockStart >= 0);
         var nextRuleStart = normalizedScript.IndexOf(
-            "\nbody :is(aside,",
+            "\nbody :is(\naside:not(",
             forcedColorsBlockStart,
             StringComparison.Ordinal);
         Assert.True(nextRuleStart > forcedColorsBlockStart);

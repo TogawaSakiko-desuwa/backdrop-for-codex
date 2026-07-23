@@ -210,13 +210,21 @@ public static class InjectionScriptBuilder
                     [class~="relative"][class~="rounded-lg"][class~="bg-token-main-surface-primary"]:has(.markdown) {
                     background-color: transparent !important;
                   }
-                  body :is(aside, .app-header-tint, [role="dialog"], [data-codex-wallpaper-glass]) {
+                  body :is(
+                    aside:not([data-app-shell-focus-area="right-panel"]),
+                    .app-header-tint,
+                    [role="dialog"],
+                    [data-codex-wallpaper-glass]) {
                     background-color: var(--codex-wallpaper-glass) !important;
                     -webkit-backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
                     backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
                     border-color: var(--codex-wallpaper-border);
                   }
-                  body :is(aside, .app-header-tint, [role="dialog"], [data-codex-wallpaper-glass]) :is(nav, header) {
+                  body :is(
+                    aside:not([data-app-shell-focus-area="right-panel"]),
+                    .app-header-tint,
+                    [role="dialog"],
+                    [data-codex-wallpaper-glass]) :is(nav, header) {
                     background: transparent !important;
                     -webkit-backdrop-filter: none !important;
                     backdrop-filter: none !important;
