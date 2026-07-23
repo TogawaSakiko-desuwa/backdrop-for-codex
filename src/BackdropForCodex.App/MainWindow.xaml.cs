@@ -1,34 +1,105 @@
+using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Security;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Media.Imaging;
-using BackdropForCodex.Core.Codex;
-using BackdropForCodex.Core.Injection;
+using BackdropForCodex.App.Services.Appearance;
+using BackdropForCodex.App.Services.Localization;
+using BackdropForCodex.App.ViewModels;
+using BackdropForCodex.App.Views;
 using BackdropForCodex.Core.Media;
-using BackdropForCodex.Core.Runtime;
-using BackdropForCodex.Core.Settings;
-using BackdropForCodex.Core.Shortcuts;
+using Microsoft.Win32;
+using Wpf.Ui.Controls;
+using TextBlock = System.Windows.Controls.TextBlock;
 
 namespace BackdropForCodex.App;
 
-public partial class MainWindow : Window
+[SuppressMessage(
+    "Design",
+    "CA1001:Types that own disposable fields should be disposable",
+    Justification = "The WPF Closed lifecycle releases the theme watcher deterministically.")]
+public partial class MainWindow : FluentWindow
 {
-    private readonly WallpaperCoordinator _coordinator;
-    private SettingsV1 _settings = SettingsV1.CreateDefault();
-    private string? _selectedMediaPath;
-    private bool _initialized;
-    private bool _suppressRiskPersistence;
+    private const double ResponsiveBreakpoint = 960;
+
+    private readonly MainWindowViewModel _viewModel;
+    private readonly IAppTextProvider _text;
+    private readonly ThemeController _themeController;
+    private bool _allowClose;
+    private bool _closeTipInProgress;
     private bool _videoPreviewSelected;
     private bool _previewPlaybackRequested;
+    private bool _reducedMotion;
+    private string? _previewPath;
+    private MediaKind _previewKind;
     private Task? _initializationTask;
 
-    public MainWindow(WallpaperCoordinator coordinator)
+    public MainWindow(
+        MainWindowViewModel viewModel,
+        IAppTextProvider text)
     {
-        _coordinator = coordinator ?? throw new ArgumentNullException(nameof(coordinator));
+        _viewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
+        _text = text ?? throw new ArgumentNullException(nameof(text));
         InitializeComponent();
-        _coordinator.StatusChanged += Coordinator_StatusChanged;
+        DataContext = _viewModel;
+        _themeController = new ThemeController(this);
         Loaded += MainWindow_Loaded;
+        Closed += MainWindow_Closed;
+        _viewModel.PropertyChanged += ViewModel_PropertyChanged;
+    }
+
+    public Task InitializeAsync() =>
+        _initializationTask ??= InitializeCoreAsync();
+
+    public async Task BeginAutoLaunchAsync()
+    {
+        try
+        {
+            await InitializeAsync();
+            if (!_viewModel.AcceptedCdpRisk &&
+                !await ShowRiskDialogAsync(allowRevoke: false))
+            {
+                return;
+            }
+
+            var outcome = await _viewModel.AutoLaunchAsync();
+            if (outcome == AutoLaunchOutcome.Applied)
+            {
+                Hide();
+            }
+        }
+        catch (Exception exception)
+        {
+            ReportUnexpectedError(exception);
+        }
+    }
+
+    public Task DisableWallpaperAsync() => _viewModel.DisableAsync();
+
+    internal void ReportUnexpectedError(Exception exception)
+    {
+        ArgumentNullException.ThrowIfNull(exception);
+        _viewModel.ShowUnexpectedError(exception);
+    }
+
+    internal void CloseForShutdown()
+    {
+        _allowClose = true;
+        Close();
+    }
+
+    private async Task InitializeCoreAsync()
+    {
+        await _viewModel.InitializeAsync();
+        _themeController.Apply(_viewModel.ThemeMode);
+        ClampInitialSizeToWorkArea();
+        UpdateResponsiveLayout(ActualWidth);
+        UpdatePreview(
+            _viewModel.SelectedMediaPath,
+            _viewModel.SelectedMediaKind);
     }
 
     private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
@@ -43,65 +114,31 @@ public partial class MainWindow : Window
         }
     }
 
-    private Task InitializeAsync() => _initializationTask ??= InitializeCoreAsync();
-
-    private async Task InitializeCoreAsync()
+    private void MainWindow_Closed(object? sender, EventArgs e)
     {
-        if (_initialized)
-        {
-            return;
-        }
-
-        try
-        {
-            _settings = await _coordinator.LoadSettingsAsync();
-        }
-        catch (SettingsStoreException)
-        {
-            _settings = SettingsV1.CreateDefault();
-            SetStatus("设置文件无法读取，已使用安全默认值；保存后会重建。", isError: true);
-        }
-
-        PanelOpacitySlider.Value = _settings.PanelOpacity;
-        BlurSlider.Value = _settings.BlurPx;
-        FitComboBox.SelectedIndex = _settings.Fit == WallpaperFit.Cover ? 0 : 1;
-        _suppressRiskPersistence = true;
-        try
-        {
-            RiskAcknowledgement.IsChecked = _settings.AcceptedCdpRisk;
-        }
-        finally
-        {
-            _suppressRiskPersistence = false;
-        }
-
-        if (_settings.MediaPath is { } mediaPath && File.Exists(mediaPath))
-        {
-            _selectedMediaPath = mediaPath;
-            MediaPathText.Text = Path.GetFileName(mediaPath);
-            MediaPathText.ToolTip = mediaPath;
-            ShowPreview(mediaPath);
-        }
-
-        _initialized = true;
+        _viewModel.PropertyChanged -= ViewModel_PropertyChanged;
+        _viewModel.Dispose();
+        _themeController.Dispose();
+        StopAndClearPreview();
     }
 
-    public async Task BeginAutoLaunchAsync()
+    private void ViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        try
+        if (e.PropertyName is nameof(MainWindowViewModel.SelectedMediaPath) or
+            nameof(MainWindowViewModel.SelectedMediaKind))
         {
-            await InitializeAsync();
-            if (_selectedMediaPath is null || !_settings.AcceptedCdpRisk)
-            {
-                SetStatus("请先选择壁纸并确认本机调试端口风险，然后再使用增强启动快捷方式。", isError: true);
-                return;
-            }
-
-            await StartOrUpdateAsync();
+            UpdatePreview(
+                _viewModel.SelectedMediaPath,
+                _viewModel.SelectedMediaKind);
         }
-        catch (Exception exception)
+        else if (e.PropertyName == nameof(MainWindowViewModel.IsPaused))
         {
-            ReportUnexpectedError(exception);
+            _previewPlaybackRequested = !_viewModel.IsPaused;
+            SynchronizePreviewPlayback();
+        }
+        else if (e.PropertyName == nameof(MainWindowViewModel.ThemeMode))
+        {
+            _themeController.Apply(_viewModel.ThemeMode);
         }
     }
 
@@ -109,23 +146,19 @@ public partial class MainWindow : Window
     {
         try
         {
-            var dialog = new Microsoft.Win32.OpenFileDialog
+            var dialog = new OpenFileDialog
             {
-                Title = "选择 Codex 壁纸",
-                Filter = "支持的媒体|*.png;*.jpg;*.jpeg;*.webp;*.mp4;*.webm|图片|*.png;*.jpg;*.jpeg;*.webp|视频|*.mp4;*.webm",
+                Title = Text("Action_SelectMedia", "Choose wallpaper media"),
+                Filter =
+                    "Supported media|*.png;*.jpg;*.jpeg;*.webp;*.mp4;*.webm|" +
+                    "Images|*.png;*.jpg;*.jpeg;*.webp|Videos|*.mp4;*.webm",
                 CheckFileExists = true,
                 Multiselect = false,
             };
-
-            if (dialog.ShowDialog(this) != true)
+            if (dialog.ShowDialog(this) == true)
             {
-                return;
+                _viewModel.SelectMedia(dialog.FileName);
             }
-
-            _selectedMediaPath = dialog.FileName;
-            MediaPathText.Text = Path.GetFileName(dialog.FileName);
-            MediaPathText.ToolTip = dialog.FileName;
-            ShowPreview(dialog.FileName);
         }
         catch (Exception exception)
         {
@@ -133,28 +166,324 @@ public partial class MainWindow : Window
         }
     }
 
-    private void ShowPreview(string path)
+    private async void Apply_Click(object sender, RoutedEventArgs e)
     {
         try
         {
-            VideoPreview.Stop();
-            VideoPreview.Source = null;
-            ImagePreview.Source = null;
-            ImagePreview.Visibility = Visibility.Collapsed;
-            VideoPreview.Visibility = Visibility.Collapsed;
-            EmptyPreview.Visibility = Visibility.Collapsed;
-            _videoPreviewSelected = false;
-            _previewPlaybackRequested = false;
+            if (!_viewModel.AcceptedCdpRisk &&
+                !await ShowRiskDialogAsync(allowRevoke: false))
+            {
+                return;
+            }
 
-            var extension = Path.GetExtension(path).ToLowerInvariant();
-            if (extension is ".mp4" or ".webm")
+            _ = await _viewModel.ApplyAsync();
+        }
+        catch (Exception exception)
+        {
+            ReportUnexpectedError(exception);
+        }
+    }
+
+    private async void ReviewRisk_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            _ = await ShowRiskDialogAsync(allowRevoke: _viewModel.AcceptedCdpRisk);
+        }
+        catch (Exception exception)
+        {
+            ReportUnexpectedError(exception);
+        }
+    }
+
+    private async Task<bool> ShowRiskDialogAsync(bool allowRevoke)
+    {
+        var content = new StackPanel
+        {
+            MaxWidth = 520,
+        };
+        _ = content.Children.Add(
+            new TextBlock
+            {
+                Text = Text(
+                    "Risk_Summary",
+                    "Enhanced launch starts Codex with a local Chromium debugging endpoint."),
+                FontWeight = FontWeights.SemiBold,
+                TextWrapping = TextWrapping.Wrap,
+            });
+        _ = content.Children.Add(
+            new TextBlock
+            {
+                Text = Text(
+                    "Risk_Detail",
+                    "The endpoint is limited to this device and remains available until Codex exits. Backdrop verifies the official package and a reviewed version before connecting."),
+                Margin = new Thickness(0, 10, 0, 0),
+                TextWrapping = TextWrapping.Wrap,
+                Foreground =
+                    TryFindResource("TextFillColorSecondaryBrush") as
+                        System.Windows.Media.Brush ??
+                    SystemColors.GrayTextBrush,
+            });
+
+        var dialog = new ContentDialog(DialogHost)
+        {
+            Title = Text("Risk_Title", "Allow local Codex debugging?"),
+            Content = content,
+            PrimaryButtonText = _viewModel.AcceptedCdpRisk
+                ? Text("Action_Close", "Close")
+                : Text("Risk_Acknowledgement", "I understand and want to continue"),
+            CloseButtonText = _viewModel.AcceptedCdpRisk
+                ? string.Empty
+                : Text("Action_Cancel", "Cancel"),
+            SecondaryButtonText = allowRevoke
+                ? Text("Action_RevokeRisk", "Revoke acknowledgement")
+                : string.Empty,
+            PrimaryButtonAppearance = ControlAppearance.Primary,
+            DialogMaxWidth = 600,
+        };
+
+        var result = await dialog.ShowAsync(CancellationToken.None);
+        if (result == ContentDialogResult.Secondary && allowRevoke)
+        {
+            await _viewModel.RevokeRiskAsync();
+            return false;
+        }
+
+        if (result != ContentDialogResult.Primary)
+        {
+            return false;
+        }
+
+        if (!_viewModel.AcceptedCdpRisk)
+        {
+            await _viewModel.AcceptRiskAsync();
+        }
+
+        return true;
+    }
+
+    private async void Settings_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            await ShowSettingsDialogAsync();
+        }
+        catch (Exception exception)
+        {
+            ReportUnexpectedError(exception);
+        }
+    }
+
+    private async Task ShowSettingsDialogAsync()
+    {
+        var content = new SettingsDialogContent(_viewModel, _text);
+        var resetRequested = false;
+        ContentDialog? dialog = null;
+
+        content.ThemeChangeRequested += async (_, eventArgs) =>
+        {
+            try
+            {
+                await _viewModel.SetThemeModeAsync(eventArgs.Mode);
+            }
+            catch (Exception exception)
+            {
+                ReportUnexpectedError(exception);
+            }
+        };
+        content.RiskRevokeRequested += async (_, _) =>
+        {
+            try
+            {
+                await _viewModel.RevokeRiskAsync();
+                content.RefreshRiskState();
+            }
+            catch (Exception exception)
+            {
+                ReportUnexpectedError(exception);
+            }
+        };
+        content.ResetRequested += (_, _) =>
+        {
+            resetRequested = true;
+            dialog?.Hide(ContentDialogResult.Secondary);
+        };
+
+        dialog = new ContentDialog(DialogHost)
+        {
+            Title = Text("Action_Settings", "Settings"),
+            Content = content,
+            CloseButtonText = Text("Action_Close", "Close"),
+            DialogWidth = 640,
+            DialogMaxWidth = 680,
+            DialogMaxHeight = Math.Max(420, ActualHeight - 80),
+        };
+        _ = await dialog.ShowAsync(CancellationToken.None);
+
+        if (resetRequested)
+        {
+            await ShowResetConfirmationAsync();
+        }
+    }
+
+    private async Task ShowResetConfirmationAsync()
+    {
+        var dialog = new ContentDialog(DialogHost)
+        {
+            Title = Text("Settings_ResetTitle", "Reset Backdrop for Codex?"),
+            Content = new TextBlock
+            {
+                Text = Text(
+                    "Settings_ResetDescription",
+                    "This restores the official background, clears settings and recent media, revokes acknowledgement, resets UI preferences, and removes only a shortcut verified as owned by this app."),
+                MaxWidth = 520,
+                TextWrapping = TextWrapping.Wrap,
+            },
+            PrimaryButtonText = Text("Action_Reset", "Reset"),
+            CloseButtonText = Text("Action_Cancel", "Cancel"),
+            PrimaryButtonAppearance = ControlAppearance.Danger,
+            DialogMaxWidth = 600,
+        };
+        if (await dialog.ShowAsync(CancellationToken.None) == ContentDialogResult.Primary)
+        {
+            await _viewModel.ResetEverythingAsync();
+            _themeController.Apply(_viewModel.ThemeMode);
+            UpdatePreview(
+                _viewModel.SelectedMediaPath,
+                _viewModel.SelectedMediaKind);
+        }
+    }
+
+    private async void RemoveRecent_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { Tag: string path })
+        {
+            return;
+        }
+
+        try
+        {
+            await _viewModel.RemoveRecentAsync(path);
+        }
+        catch (Exception exception)
+        {
+            ReportUnexpectedError(exception);
+        }
+    }
+
+    private void RecentMediaList_SelectionChanged(
+        object sender,
+        SelectionChangedEventArgs e)
+    {
+        if (RecentMediaList.SelectedItem is not RecentMediaItem item)
+        {
+            return;
+        }
+
+        RecentMediaList.SelectedItem = null;
+        try
+        {
+            _viewModel.SelectMedia(item.Path);
+        }
+        catch (Exception exception)
+        {
+            ReportUnexpectedError(exception);
+        }
+    }
+
+    private void Window_DragEnter(object sender, DragEventArgs e) =>
+        UpdateDragState(e);
+
+    private void Window_DragOver(object sender, DragEventArgs e) =>
+        UpdateDragState(e);
+
+    private void Window_DragLeave(object sender, DragEventArgs e)
+    {
+        DropOverlay.Visibility = Visibility.Collapsed;
+        e.Handled = true;
+    }
+
+    private void Window_Drop(object sender, DragEventArgs e)
+    {
+        DropOverlay.Visibility = Visibility.Collapsed;
+        try
+        {
+            if (!TryGetSingleDroppedFile(e.Data, out var path))
+            {
+                e.Effects = DragDropEffects.None;
+                return;
+            }
+
+            _viewModel.SelectMedia(path);
+            e.Effects = DragDropEffects.Copy;
+        }
+        catch (Exception exception)
+        {
+            e.Effects = DragDropEffects.None;
+            ReportUnexpectedError(exception);
+        }
+        finally
+        {
+            e.Handled = true;
+        }
+    }
+
+    private void UpdateDragState(DragEventArgs e)
+    {
+        var valid = TryGetSingleDroppedFile(e.Data, out _);
+        e.Effects = valid ? DragDropEffects.Copy : DragDropEffects.None;
+        DropOverlay.Visibility = valid ? Visibility.Visible : Visibility.Collapsed;
+        e.Handled = true;
+    }
+
+    private static bool TryGetSingleDroppedFile(IDataObject data, out string path)
+    {
+        path = string.Empty;
+        if (!data.GetDataPresent(DataFormats.FileDrop) ||
+            data.GetData(DataFormats.FileDrop) is not string[] { Length: 1 } paths ||
+            !File.Exists(paths[0]))
+        {
+            return false;
+        }
+
+        path = paths[0];
+        var extension = Path.GetExtension(path);
+        return extension.Equals(".png", StringComparison.OrdinalIgnoreCase) ||
+               extension.Equals(".jpg", StringComparison.OrdinalIgnoreCase) ||
+               extension.Equals(".jpeg", StringComparison.OrdinalIgnoreCase) ||
+               extension.Equals(".webp", StringComparison.OrdinalIgnoreCase) ||
+               extension.Equals(".mp4", StringComparison.OrdinalIgnoreCase) ||
+               extension.Equals(".webm", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void UpdatePreview(string? path, MediaKind kind)
+    {
+        if (string.Equals(_previewPath, path, StringComparison.OrdinalIgnoreCase) &&
+            _previewKind == kind)
+        {
+            return;
+        }
+
+        _previewPath = path;
+        _previewKind = kind;
+        StopAndClearPreview();
+        if (path is null || !File.Exists(path))
+        {
+            EmptyPreview.Visibility = Visibility.Visible;
+            return;
+        }
+
+        try
+        {
+            if (kind == MediaKind.Video)
             {
                 VideoPreview.Source = new Uri(path, UriKind.Absolute);
                 VideoPreview.Position = TimeSpan.Zero;
                 VideoPreview.Visibility = Visibility.Visible;
+                EmptyPreview.Visibility = Visibility.Collapsed;
                 _videoPreviewSelected = true;
-                _previewPlaybackRequested = true;
-                ResumePreviewIfRequested();
+                _previewPlaybackRequested = !_viewModel.IsPaused;
+                SynchronizePreviewPlayback();
                 return;
             }
 
@@ -167,10 +496,26 @@ public partial class MainWindow : Window
             bitmap.Freeze();
             ImagePreview.Source = bitmap;
             ImagePreview.Visibility = Visibility.Visible;
+            EmptyPreview.Visibility = Visibility.Collapsed;
         }
         catch (Exception exception) when (IsControlledPreviewException(exception))
         {
-            ShowPreviewFailure("此文件无法在设置窗口中预览；启动前仍会进行格式与签名校验。");
+            ShowPreviewFailure();
+        }
+    }
+
+    private void VideoPreview_MediaOpened(object sender, RoutedEventArgs e)
+    {
+        if (_reducedMotion)
+        {
+            try
+            {
+                VideoPreview.Pause();
+            }
+            catch (InvalidOperationException)
+            {
+                // The media graph closed between MediaOpened and the reduced-motion pause.
+            }
         }
     }
 
@@ -179,125 +524,120 @@ public partial class MainWindow : Window
         try
         {
             VideoPreview.Position = TimeSpan.Zero;
-            ResumePreviewIfRequested();
+            SynchronizePreviewPlayback();
         }
         catch (Exception exception) when (IsControlledPreviewException(exception))
         {
-            ShowPreviewFailure("系统预览组件无法继续播放此视频；Codex 使用 Chromium 播放，启动前仍会校验格式。");
+            ShowPreviewFailure();
         }
     }
 
-    private void VideoPreview_MediaFailed(object sender, ExceptionRoutedEventArgs e)
-    {
-        ShowPreviewFailure("系统预览组件无法播放此视频；Codex 使用 Chromium 播放，启动前仍会校验格式。");
-    }
+    private void VideoPreview_MediaFailed(object sender, ExceptionRoutedEventArgs e) =>
+        ShowPreviewFailure();
 
-    private void Window_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
-    {
-        try
-        {
-            if (IsVisible)
-            {
-                ResumePreviewSafely();
-            }
-            else
-            {
-                SuspendPreviewSafely();
-            }
-        }
-        catch (Exception exception) when (IsControlledPreviewException(exception))
-        {
-            ShowPreviewFailure("系统预览组件暂时不可用；这不会改变已选择的壁纸文件。");
-        }
-    }
+    private void Window_IsVisibleChanged(
+        object sender,
+        DependencyPropertyChangedEventArgs e) =>
+        SynchronizePreviewPlayback();
 
-    private async void RiskAcknowledgement_Unchecked(object sender, RoutedEventArgs e)
+    private void SynchronizePreviewPlayback()
     {
-        if (_suppressRiskPersistence)
+        if (!_videoPreviewSelected || VideoPreview.Source is null)
         {
             return;
         }
 
+        _reducedMotion = !SystemParameters.ClientAreaAnimation;
         try
         {
-            await InitializeAsync();
-            _settings = await _coordinator.SaveSettingsAsync(
-                _settings with { AcceptedCdpRisk = false });
-            SetStatus("已撤销增强启动确认；桌面快捷方式下次不会自动开启调试端口。", isError: false);
+            if (IsVisible && _previewPlaybackRequested && !_reducedMotion)
+            {
+                VideoPreview.Play();
+            }
+            else
+            {
+                VideoPreview.Pause();
+            }
         }
-        catch (ObjectDisposedException)
+        catch (Exception exception) when (IsControlledPreviewException(exception))
         {
-            // The app is already completing an explicit shutdown.
-        }
-        catch (Exception exception)
-        {
-            ReportUnexpectedError(exception);
+            ShowPreviewFailure();
         }
     }
 
-    private async void Launch_Click(object sender, RoutedEventArgs e)
+    private void StopAndClearPreview()
     {
         try
         {
-            await StartOrUpdateAsync();
+            VideoPreview.Stop();
+            VideoPreview.Source = null;
         }
-        catch (Exception exception)
+        catch (Exception) when (!IsLoaded)
         {
-            ReportUnexpectedError(exception);
+            // The media graph may already be torn down while the final window closes.
         }
+
+        ImagePreview.Source = null;
+        ImagePreview.Visibility = Visibility.Collapsed;
+        VideoPreview.Visibility = Visibility.Collapsed;
+        EmptyPreview.Visibility = Visibility.Visible;
+        _videoPreviewSelected = false;
+        _previewPlaybackRequested = false;
     }
 
-    private async Task StartOrUpdateAsync()
+    private void ShowPreviewFailure()
     {
-        var controlsDisabled = false;
+        StopAndClearPreview();
+        _previewPath = null;
+        _previewKind = MediaKind.None;
+        EmptyPreview.Visibility = Visibility.Visible;
+    }
+
+    private async void Window_Closing(object? sender, CancelEventArgs e)
+    {
+        if (_allowClose)
+        {
+            return;
+        }
+
+        e.Cancel = true;
+        if (_closeTipInProgress)
+        {
+            return;
+        }
+
+        _closeTipInProgress = true;
         try
         {
-            await InitializeAsync();
-            if (_selectedMediaPath is null)
+            if (!_viewModel.HasShownTrayTip)
             {
-                SetStatus("请先选择壁纸。", isError: true);
-                return;
-            }
-
-            if (RiskAcknowledgement.IsChecked != true)
-            {
-                SetStatus("增强启动前需要确认本机 Chromium 调试端口风险。", isError: true);
-                return;
-            }
-
-            SetControlsEnabled(false);
-            controlsDisabled = true;
-            var request = _settings with
-            {
-                MediaPath = _selectedMediaPath,
-                Fit = FitComboBox.SelectedIndex == 1 ? WallpaperFit.Contain : WallpaperFit.Cover,
-                PanelOpacity = PanelOpacitySlider.Value,
-                BlurPx = BlurSlider.Value,
-                AcceptedCdpRisk = true,
-            };
-            _settings = await _coordinator.StartOrUpdateAsync(request);
-            LaunchButton.Content = "应用壁纸更改";
-            PauseButton.IsEnabled = _settings.MediaKind == MediaKind.Video;
-            PauseButton.Content = _coordinator.IsPaused ? "继续视频" : "暂停视频";
-            if (_settings.MediaKind == MediaKind.Video)
-            {
-                _previewPlaybackRequested = !_coordinator.IsPaused;
-                if (_previewPlaybackRequested)
+                var dialog = new ContentDialog(DialogHost)
                 {
-                    ResumePreviewSafely();
+                    Title = Text("Tray_FirstCloseTitle", "Still running"),
+                    Content = new TextBlock
+                    {
+                        Text = Text(
+                            "Tray_FirstCloseMessage",
+                            "Backdrop for Codex moved to the notification area so the wallpaper can stay active."),
+                        MaxWidth = 440,
+                        TextWrapping = TextWrapping.Wrap,
+                    },
+                    PrimaryButtonText = Text("Action_Confirm", "Got it"),
+                    PrimaryButtonAppearance = ControlAppearance.Primary,
+                    DialogMaxWidth = 520,
+                };
+                _ = await dialog.ShowAsync(CancellationToken.None);
+                try
+                {
+                    await _viewModel.MarkTrayTipShownAsync();
                 }
-                else
+                catch (Exception exception)
                 {
-                    SuspendPreviewSafely();
+                    ReportUnexpectedError(exception);
                 }
             }
 
-            var shortcutCreated = TryCreateEnhancedLaunchShortcut();
-            SetStatus(
-                shortcutCreated
-                    ? "壁纸已生效，并已创建或更新桌面增强启动快捷方式。"
-                    : "壁纸已生效；桌面快捷方式创建失败，但不影响本次运行。",
-                isError: !shortcutCreated);
+            Hide();
         }
         catch (Exception exception)
         {
@@ -305,211 +645,66 @@ public partial class MainWindow : Window
         }
         finally
         {
-            if (controlsDisabled)
-            {
-                SetControlsEnabled(true);
-            }
+            _closeTipInProgress = false;
         }
     }
 
-    private async void Pause_Click(object sender, RoutedEventArgs e)
+    private void Window_SizeChanged(object sender, SizeChangedEventArgs e) =>
+        UpdateResponsiveLayout(e.NewSize.Width);
+
+    private void UpdateResponsiveLayout(double width)
     {
-        try
+        var isNarrow = width < ResponsiveBreakpoint;
+        if (!isNarrow)
         {
-            var pause = !_coordinator.IsPaused;
-            await _coordinator.SetPausedAsync(pause);
-            PauseButton.Content = pause ? "继续视频" : "暂停视频";
-            _previewPlaybackRequested = !pause;
-            if (pause)
-            {
-                SuspendPreviewSafely();
-            }
-            else
-            {
-                ResumePreviewSafely();
-            }
-
-            SetStatus(pause ? "视频壁纸已暂停。" : "视频壁纸已继续播放。", isError: false);
-        }
-        catch (Exception exception)
-        {
-            ReportUnexpectedError(exception);
-        }
-    }
-
-    private async void Disable_Click(object sender, RoutedEventArgs e)
-    {
-        try
-        {
-            await DisableWallpaperAsync();
-        }
-        catch (Exception exception)
-        {
-            ReportUnexpectedError(exception);
-        }
-    }
-
-    public async Task DisableWallpaperAsync()
-    {
-        try
-        {
-            _previewPlaybackRequested = false;
-            SuspendPreviewSafely();
-            await _coordinator.DisableAsync();
-            LaunchButton.Content = "保存并增强启动 Codex";
-            PauseButton.Content = "暂停视频";
-            PauseButton.IsEnabled = false;
-            SetStatus("壁纸已关闭，官方背景已恢复；Codex 本身保持运行。", isError: false);
-        }
-        catch (ObjectDisposedException)
-        {
-            // Shutdown can race a final tray action; the in-page lease still restores the UI.
-        }
-        catch (Exception exception)
-        {
-            ReportUnexpectedError(exception);
-        }
-    }
-
-    private void Coordinator_StatusChanged(
-        object? sender,
-        WallpaperRuntimeStatusChangedEventArgs eventArgs)
-    {
-        _ = Dispatcher.InvokeAsync(() =>
-        {
-            var message = eventArgs.Phase switch
-            {
-                WallpaperRuntimePhase.Validating => "正在校验官方 Codex 与媒体文件…",
-                WallpaperRuntimePhase.LaunchingCodex => "正在增强启动官方 Codex…",
-                WallpaperRuntimePhase.DiscoveringEndpoint => "正在等待仅限本机的调试端口…",
-                WallpaperRuntimePhase.Applying => "正在应用壁纸与玻璃效果…",
-                WallpaperRuntimePhase.Active => "壁纸已启用。",
-                WallpaperRuntimePhase.Paused => "视频壁纸已暂停。",
-                WallpaperRuntimePhase.Stopping => "正在移除壁纸并恢复官方背景…",
-                WallpaperRuntimePhase.Faulted =>
-                    "壁纸心跳或运行连接已中止；已尝试停止本地媒体服务，页面会恢复官方背景。",
-                _ => null,
-            };
-            if (message is not null)
-            {
-                SetStatus(
-                    message,
-                    isError: eventArgs.Phase == WallpaperRuntimePhase.Faulted);
-            }
-        });
-    }
-
-    private void SetControlsEnabled(bool enabled)
-    {
-        ChooseMediaButton.IsEnabled = enabled;
-        LaunchButton.IsEnabled = enabled;
-        FitComboBox.IsEnabled = enabled;
-        PanelOpacitySlider.IsEnabled = enabled;
-        BlurSlider.IsEnabled = enabled;
-        RiskAcknowledgement.IsEnabled = enabled;
-    }
-
-    private static string ToUserMessage(Exception exception) => exception switch
-    {
-        CodexAlreadyRunningException =>
-            "检测到 Codex 已在运行。请手动完全退出 Codex 后重试；本工具不会强制结束它。",
-        UnsupportedCodexVersionException unsupported =>
-            $"当前官方 Codex 版本尚未通过兼容性验证。{unsupported.Result.Reason}",
-        CdpRiskNotAcceptedException => "请先确认本机 Chromium 调试端口风险。",
-        WallpaperNotActiveException => "壁纸尚未启用，无法更改视频播放状态。",
-        CdpEndpointTimeoutException =>
-            "Codex 已启动，但未在限定时间内发布可验证的本机调试端口。请完全退出 Codex 后重试。",
-        AmbiguousCdpEndpointException =>
-            "发现多个可验证的 Codex 调试端口，已按安全策略停止注入。请完全退出 Codex 后重试。",
-        CodexPackageDiscoveryException => "未找到受支持的官方 Microsoft Store/MSIX Codex。",
-        MediaValidationException => "壁纸文件未通过扩展名与文件签名校验，或文件无法读取。",
-        SettingsValidationException => "壁纸设置无效，请恢复滑块默认值后重试。",
-        SettingsStoreException => "设置无法安全保存，请检查本地应用数据目录权限。",
-        WallpaperMediaLoadException =>
-            "壁纸文件已交给 Codex，但 Chromium 无法加载或解码该媒体；未保留无效背景。",
-        WallpaperInjectionException => "已连接 Codex，但当前页面结构未通过注入前检查。",
-        OperationCanceledException => "操作已取消。",
-        _ => "操作失败；未对 Codex 做破坏性修改。请完全退出 Codex 后重试。",
-    };
-
-    private static bool TryCreateEnhancedLaunchShortcut()
-    {
-        if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000))
-        {
-            return false;
-        }
-
-        try
-        {
-            _ = WindowsDesktopShortcutService.CreateOrUpdate();
-            return true;
-        }
-        catch (Exception)
-        {
-            // Shortcut creation is optional and must never turn an active wallpaper into a failed run.
-            return false;
-        }
-    }
-
-    private void ResumePreviewIfRequested()
-    {
-        if (!_videoPreviewSelected ||
-            !_previewPlaybackRequested ||
-            !IsVisible ||
-            VideoPreview.Source is null)
-        {
+            PreviewColumn.Width = new GridLength(3, GridUnitType.Star);
+            ColumnGap.Width = new GridLength(20);
+            InspectorColumn.Width = new GridLength(2, GridUnitType.Star);
+            InspectorColumn.MinWidth = 330;
+            MainTopRow.Height = new GridLength(1, GridUnitType.Star);
+            MainGapRow.Height = new GridLength(0);
+            MainBottomRow.Height = new GridLength(0);
+            Grid.SetRow(PreviewPane, 0);
+            Grid.SetColumn(PreviewPane, 0);
+            Grid.SetRow(InspectorScroller, 0);
+            Grid.SetColumn(InspectorScroller, 2);
+            PreviewPane.MaxHeight = double.PositiveInfinity;
+            PreviewSurface.MinHeight = 220;
+            RecentMediaCard.Visibility = Visibility.Visible;
             return;
         }
 
-        VideoPreview.Play();
+        PreviewColumn.Width = new GridLength(1, GridUnitType.Star);
+        ColumnGap.Width = new GridLength(0);
+        InspectorColumn.Width = new GridLength(0);
+        InspectorColumn.MinWidth = 0;
+        MainTopRow.Height = new GridLength(1, GridUnitType.Star);
+        MainGapRow.Height = new GridLength(12);
+        MainBottomRow.Height = new GridLength(1.15, GridUnitType.Star);
+        Grid.SetRow(PreviewPane, 0);
+        Grid.SetColumn(PreviewPane, 0);
+        Grid.SetRow(InspectorScroller, 2);
+        Grid.SetColumn(InspectorScroller, 0);
+        PreviewPane.MaxHeight = double.PositiveInfinity;
+        PreviewSurface.MinHeight = 120;
+        RecentMediaCard.Visibility = Visibility.Collapsed;
     }
 
-    private void SuspendPreview()
+    private void ClampInitialSizeToWorkArea()
     {
-        if (_videoPreviewSelected && VideoPreview.Source is not null)
-        {
-            VideoPreview.Pause();
-        }
+        var workArea = SystemParameters.WorkArea;
+        MaxWidth = Math.Max(MinWidth, workArea.Width);
+        MaxHeight = Math.Max(MinHeight, workArea.Height);
+        Width = Math.Clamp(1040, MinWidth, MaxWidth);
+        Height = Math.Clamp(700, MinHeight, MaxHeight);
     }
 
-    private void ResumePreviewSafely()
+    private string Text(string key, string fallback)
     {
-        try
-        {
-            ResumePreviewIfRequested();
-        }
-        catch (Exception exception) when (IsControlledPreviewException(exception))
-        {
-            ShowPreviewFailure("系统预览组件暂时不可用；这不会改变 Codex 中的壁纸状态。");
-        }
-    }
-
-    private void SuspendPreviewSafely()
-    {
-        try
-        {
-            SuspendPreview();
-        }
-        catch (Exception exception) when (IsControlledPreviewException(exception))
-        {
-            ShowPreviewFailure("系统预览组件暂时不可用；这不会阻止恢复 Codex 官方背景。");
-        }
-    }
-
-    private void ShowPreviewFailure(string message)
-    {
-        try
-        {
-            _previewPlaybackRequested = false;
-            VideoPreview.Pause();
-            VideoPreview.Visibility = Visibility.Collapsed;
-            EmptyPreview.Text = message;
-            EmptyPreview.Visibility = Visibility.Visible;
-        }
-        catch (Exception)
-        {
-            // The visual tree or media graph is already unavailable; no preview failure is fatal.
-        }
+        var value = _text.GetString(key);
+        return string.Equals(value, key, StringComparison.Ordinal)
+            ? fallback
+            : value;
     }
 
     private static bool IsControlledPreviewException(Exception exception) => exception is
@@ -521,25 +716,4 @@ public partial class MainWindow : Window
         InvalidOperationException or
         ExternalException or
         SecurityException;
-
-    internal void ReportUnexpectedError(Exception exception)
-    {
-        ArgumentNullException.ThrowIfNull(exception);
-        try
-        {
-            SetStatus(ToUserMessage(exception), isError: true);
-        }
-        catch (Exception)
-        {
-            // The WPF visual tree may already be unavailable during explicit shutdown.
-        }
-    }
-
-    private void SetStatus(string message, bool isError)
-    {
-        StatusText.Text = $"状态：{message}";
-        StatusText.Foreground = isError
-            ? System.Windows.Media.Brushes.IndianRed
-            : System.Windows.Media.Brushes.LightGray;
-    }
 }

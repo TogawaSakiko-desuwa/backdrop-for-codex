@@ -1,0 +1,6 @@
+<Project>
+  <!-- Keep test-only friend access narrow and active only when the tracked test project is present. -->
+  <ItemGroup Condition="Exists('$(MSBuildThisFileDirectory)..\tests\BackdropForCodex.Core.Tests\BackdropForCodex.Core.Tests.csproj')">
+    <InternalsVisibleTo Include="BackdropForCodex.Core.Tests" />
+  </ItemGroup>
+</Project>

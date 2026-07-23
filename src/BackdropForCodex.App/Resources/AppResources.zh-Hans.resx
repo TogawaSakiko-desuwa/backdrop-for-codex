@@ -1,0 +1,180 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="App_Title" xml:space="preserve"><value>Backdrop for Codex</value></data>
+  <data name="App_Description" xml:space="preserve"><value>为 Codex 添加仅在本机运行的私密背景层。</value></data>
+  <data name="Action_SelectMedia" xml:space="preserve"><value>选择媒体</value></data>
+  <data name="Action_ApplyChanges" xml:space="preserve"><value>应用更改</value></data>
+  <data name="Action_ApplyAndLaunch" xml:space="preserve"><value>应用并启动 Codex</value></data>
+  <data name="Action_Cancel" xml:space="preserve"><value>取消</value></data>
+  <data name="Action_PauseVideo" xml:space="preserve"><value>暂停视频</value></data>
+  <data name="Action_ResumeVideo" xml:space="preserve"><value>继续视频</value></data>
+  <data name="Action_RestoreOfficial" xml:space="preserve"><value>恢复官方背景</value></data>
+  <data name="Action_Retry" xml:space="preserve"><value>重试</value></data>
+  <data name="Action_Settings" xml:space="preserve"><value>设置</value></data>
+  <data name="Action_Remove" xml:space="preserve"><value>移除</value></data>
+  <data name="Action_ClearRecent" xml:space="preserve"><value>清空最近使用</value></data>
+  <data name="Action_Close" xml:space="preserve"><value>关闭</value></data>
+  <data name="Action_Confirm" xml:space="preserve"><value>确认</value></data>
+  <data name="Action_Reset" xml:space="preserve"><value>重置</value></data>
+  <data name="Action_RevokeRisk" xml:space="preserve"><value>撤销风险确认</value></data>
+  <data name="Action_LearnMore" xml:space="preserve"><value>了解详情</value></data>
+  <data name="Section_Preview" xml:space="preserve"><value>预览</value></data>
+  <data name="Section_Wallpaper" xml:space="preserve"><value>壁纸</value></data>
+  <data name="Section_RecentMedia" xml:space="preserve"><value>最近使用</value></data>
+  <data name="Section_Appearance" xml:space="preserve"><value>外观</value></data>
+  <data name="Section_SafetyPrivacy" xml:space="preserve"><value>安全与隐私</value></data>
+  <data name="Section_About" xml:space="preserve"><value>关于</value></data>
+  <data name="Section_DangerZone" xml:space="preserve"><value>危险区域</value></data>
+  <data name="Label_Fit" xml:space="preserve"><value>图片填充</value></data>
+  <data name="Label_PanelOpacity" xml:space="preserve"><value>面板不透明度</value></data>
+  <data name="Label_Blur" xml:space="preserve"><value>背景模糊</value></data>
+  <data name="Label_Theme" xml:space="preserve"><value>应用主题</value></data>
+  <data name="Theme_System" xml:space="preserve"><value>使用系统设置</value></data>
+  <data name="Theme_Light" xml:space="preserve"><value>浅色</value></data>
+  <data name="Theme_Dark" xml:space="preserve"><value>深色</value></data>
+  <data name="Fit_Cover" xml:space="preserve"><value>填满画面</value></data>
+  <data name="Fit_Contain" xml:space="preserve"><value>完整显示</value></data>
+  <data name="Media_Image" xml:space="preserve"><value>图片</value></data>
+  <data name="Media_Video" xml:space="preserve"><value>视频</value></data>
+  <data name="Media_None" xml:space="preserve"><value>未选择媒体</value></data>
+  <data name="Hint_DropMedia" xml:space="preserve"><value>将一张图片或一个视频拖到这里</value></data>
+  <data name="Hint_SupportedFormats" xml:space="preserve"><value>支持 PNG、JPEG、WebP、MP4 或 WebM</value></data>
+  <data name="Hint_NoMedia" xml:space="preserve"><value>选择媒体后即可开始设计壁纸。</value></data>
+  <data name="Hint_NoRecentMedia" xml:space="preserve"><value>最近使用过的媒体会显示在这里。</value></data>
+  <data name="Hint_MissingMedia" xml:space="preserve"><value>此文件已不在当前设备上。</value></data>
+  <data name="Status_Ready" xml:space="preserve"><value>就绪</value></data>
+  <data name="Status_ChangesPending" xml:space="preserve"><value>预览已更新，准备好后即可应用。</value></data>
+  <data name="Status_SavedNotActive" xml:space="preserve"><value>设置已保存，但壁纸尚未生效。</value></data>
+  <data name="Status_Active" xml:space="preserve"><value>壁纸已启用。</value></data>
+  <data name="Status_Paused" xml:space="preserve"><value>视频壁纸已暂停。</value></data>
+  <data name="Status_Restored" xml:space="preserve"><value>已恢复 Codex 官方背景。</value></data>
+  <data name="Status_Canceled" xml:space="preserve"><value>操作已取消。</value></data>
+  <data name="Status_ShortcutCreated" xml:space="preserve"><value>增强启动快捷方式已放到桌面。</value></data>
+  <data name="Status_ShortcutFailed" xml:space="preserve"><value>壁纸已生效，但未能更新桌面快捷方式。</value></data>
+  <data name="Status_ClosingToTray" xml:space="preserve"><value>Backdrop for Codex 仍在通知区域中运行。</value></data>
+  <data name="OperationStage_Validating" xml:space="preserve"><value>正在验证媒体与兼容性…</value></data>
+  <data name="OperationStage_Launching" xml:space="preserve"><value>正在启动 Codex…</value></data>
+  <data name="OperationStage_Discovering" xml:space="preserve"><value>正在查找本机 Codex 窗口…</value></data>
+  <data name="OperationStage_Applying" xml:space="preserve"><value>正在应用壁纸…</value></data>
+  <data name="OperationStage_Saving" xml:space="preserve"><value>正在保存设置…</value></data>
+  <data name="OperationStage_Updating" xml:space="preserve"><value>正在更新播放状态…</value></data>
+  <data name="OperationStage_Restoring" xml:space="preserve"><value>正在恢复 Codex 官方背景…</value></data>
+  <data name="OperationStage_Resetting" xml:space="preserve"><value>正在重置 Backdrop for Codex…</value></data>
+  <data name="Stage_Saving" xml:space="preserve"><value>正在保存设置…</value></data>
+  <data name="Stage_Updating" xml:space="preserve"><value>正在更新播放状态…</value></data>
+  <data name="Stage_Validating" xml:space="preserve"><value>正在验证媒体与 Codex…</value></data>
+  <data name="Stage_Launching" xml:space="preserve"><value>正在安全启动 Codex…</value></data>
+  <data name="Stage_Discovering" xml:space="preserve"><value>正在查找本机 Codex 端点…</value></data>
+  <data name="Stage_Applying" xml:space="preserve"><value>正在应用壁纸与玻璃效果…</value></data>
+  <data name="Stage_Restoring" xml:space="preserve"><value>正在恢复 Codex 官方背景…</value></data>
+  <data name="Stage_Resetting" xml:space="preserve"><value>正在重置 Backdrop for Codex…</value></data>
+  <data name="Status_AppliedTitle" xml:space="preserve"><value>壁纸已启用</value></data>
+  <data name="Status_AppliedMessage" xml:space="preserve"><value>Codex 正在使用已保存的壁纸，增强启动桌面快捷方式也已就绪。</value></data>
+  <data name="Status_AppliedShortcutFailedTitle" xml:space="preserve"><value>壁纸已启用</value></data>
+  <data name="Status_AppliedShortcutFailedMessage" xml:space="preserve"><value>壁纸已生效，但无法更新桌面快捷方式。你可以单独重试。</value></data>
+  <data name="Status_AutoLaunchNeedsMediaTitle" xml:space="preserve"><value>壁纸需要处理</value></data>
+  <data name="Status_AutoLaunchNeedsMediaMessage" xml:space="preserve"><value>使用增强快捷方式前，请选择可用的壁纸。</value></data>
+  <data name="Status_MissingTitle" xml:space="preserve"><value>媒体不可用</value></data>
+  <data name="Status_MissingMessage" xml:space="preserve"><value>已保存的文件不再存在。请选择其他文件，或从最近使用中移除它。</value></data>
+  <data name="Status_PausedTitle" xml:space="preserve"><value>视频已暂停</value></data>
+  <data name="Status_PausedMessage" xml:space="preserve"><value>Codex 与本地预览均已暂停。</value></data>
+  <data name="Status_ReadyTitle" xml:space="preserve"><value>就绪</value></data>
+  <data name="Status_ReadyMessage" xml:space="preserve"><value>选择本地媒体，调整玻璃面板，准备好后即可应用。</value></data>
+  <data name="Status_RecentsClearedTitle" xml:space="preserve"><value>最近使用已清空</value></data>
+  <data name="Status_RecentsClearedMessage" xml:space="preserve"><value>没有从磁盘删除任何壁纸文件。</value></data>
+  <data name="Status_ResetCompleteTitle" xml:space="preserve"><value>重置完成</value></data>
+  <data name="Status_ResetCompleteMessage" xml:space="preserve"><value>设置、最近媒体、风险确认、界面偏好和自有快捷方式均已重置。</value></data>
+  <data name="Status_RestoredTitle" xml:space="preserve"><value>官方背景已恢复</value></data>
+  <data name="Status_RestoredMessage" xml:space="preserve"><value>已保存的壁纸设置仍可用于下次启动。</value></data>
+  <data name="Status_ResumedTitle" xml:space="preserve"><value>视频已继续</value></data>
+  <data name="Status_ResumedMessage" xml:space="preserve"><value>Codex 与本地预览均在播放。</value></data>
+  <data name="Status_RiskAcceptedTitle" xml:space="preserve"><value>增强启动已启用</value></data>
+  <data name="Status_RiskAcceptedMessage" xml:space="preserve"><value>本机调试端口风险确认已保存。</value></data>
+  <data name="Status_RiskRequiredTitle" xml:space="preserve"><value>请查看增强启动说明</value></data>
+  <data name="Status_RiskRequiredMessage" xml:space="preserve"><value>应用前请阅读本机 Chromium 调试端口说明。</value></data>
+  <data name="Status_RiskRevokedTitle" xml:space="preserve"><value>增强启动已停用</value></data>
+  <data name="Status_RiskRevokedMessage" xml:space="preserve"><value>之后启动时将再次要求确认。</value></data>
+  <data name="Status_RuntimeStoppedTitle" xml:space="preserve"><value>壁纸连接已停止</value></data>
+  <data name="Status_RuntimeStoppedMessage" xml:space="preserve"><value>运行时连接已经结束，应用已尝试恢复官方背景。</value></data>
+  <data name="Status_SavedInactiveTitle" xml:space="preserve"><value>已保存，未生效</value></data>
+  <data name="Status_SavedInactiveMessage" xml:space="preserve"><value>壁纸设置已保存，但 Codex 未能启用。请根据上方提示排除问题后重试。</value></data>
+  <data name="Status_SelectMediaTitle" xml:space="preserve"><value>选择壁纸</value></data>
+  <data name="Status_SelectMediaMessage" xml:space="preserve"><value>请先选择可用的图片或静音视频。</value></data>
+  <data name="Status_ShortcutReadyTitle" xml:space="preserve"><value>快捷方式已就绪</value></data>
+  <data name="Status_ShortcutReadyMessage" xml:space="preserve"><value>增强启动桌面快捷方式已创建或更新。</value></data>
+  <data name="Risk_Title" xml:space="preserve"><value>允许 Codex 本机调试？</value></data>
+  <data name="Risk_Summary" xml:space="preserve"><value>此功能会使用本机 Chromium 调试端点启动 Codex。</value></data>
+  <data name="Risk_Detail" xml:space="preserve"><value>端点仅限当前设备访问，并会持续到 Codex 退出。Backdrop 连接前会核验官方软件包和经过审核的版本。</value></data>
+  <data name="Risk_Acknowledgement" xml:space="preserve"><value>我已了解并希望继续</value></data>
+  <data name="Risk_Revoked" xml:space="preserve"><value>确认已撤销。下次增强启动前会再次询问。</value></data>
+  <data name="Settings_ThemeDescription" xml:space="preserve"><value>默认跟随 Windows，也会跟随高对比度模式。</value></data>
+  <data name="Settings_RiskDescription" xml:space="preserve"><value>查看或撤销本机调试风险确认。</value></data>
+  <data name="Settings_PrivacyDescription" xml:space="preserve"><value>媒体始终留在本机，仅通过经过身份验证的环回地址提供。</value></data>
+  <data name="Settings_Licenses" xml:space="preserve"><value>开源许可证</value></data>
+  <data name="Settings_ResetTitle" xml:space="preserve"><value>重置 Backdrop for Codex？</value></data>
+  <data name="Settings_ResetDescription" xml:space="preserve"><value>这会恢复官方背景，清除设置和最近媒体，撤销风险确认，重置界面偏好，并且只移除经核验确由本应用创建的快捷方式。</value></data>
+  <data name="About_NonAffiliation" xml:space="preserve"><value>独立项目，与 OpenAI 无隶属或背书关系。</value></data>
+  <data name="Tray_Open" xml:space="preserve"><value>打开 Backdrop for Codex</value></data>
+  <data name="Tray_Apply" xml:space="preserve"><value>应用壁纸</value></data>
+  <data name="Tray_Restore" xml:space="preserve"><value>恢复官方背景</value></data>
+  <data name="Tray_Exit" xml:space="preserve"><value>退出</value></data>
+  <data name="Tray_FirstCloseTitle" xml:space="preserve"><value>仍在运行</value></data>
+  <data name="Tray_FirstCloseMessage" xml:space="preserve"><value>Backdrop for Codex 已移至通知区域，以便壁纸继续生效。</value></data>
+  <data name="Error_Title" xml:space="preserve"><value>有一项操作需要处理</value></data>
+  <data name="Error_Unexpected_Message" xml:space="preserve"><value>无法完成此操作。</value></data>
+  <data name="Error_Unexpected_Recovery" xml:space="preserve"><value>请重试；若问题仍然存在，请重启 Backdrop for Codex。</value></data>
+  <data name="Error_OperationCanceled_Message" xml:space="preserve"><value>当前操作已停止。</value></data>
+  <data name="Error_OperationCanceled_Recovery" xml:space="preserve"><value>准备好后可以再次尝试。</value></data>
+  <data name="Error_PreferencesReadFailed_Message" xml:space="preserve"><value>无法读取外观偏好，已使用安全默认值。</value></data>
+  <data name="Error_PreferencesReadFailed_Recovery" xml:space="preserve"><value>重新选择偏好即可替换无法读取的文件。</value></data>
+  <data name="Error_PreferencesWriteFailed_Message" xml:space="preserve"><value>无法保存外观偏好。</value></data>
+  <data name="Error_PreferencesWriteFailed_Recovery" xml:space="preserve"><value>请检查本地应用数据文件夹的访问权限后重试。</value></data>
+  <data name="Error_PreferencesResetFailed_Message" xml:space="preserve"><value>无法重置外观偏好。</value></data>
+  <data name="Error_PreferencesResetFailed_Recovery" xml:space="preserve"><value>请关闭其他实例后重试。</value></data>
+  <data name="Error_WallpaperSettingsReadFailed_Message" xml:space="preserve"><value>无法读取壁纸设置，已使用安全默认值。</value></data>
+  <data name="Error_WallpaperSettingsReadFailed_Recovery" xml:space="preserve"><value>重新选择媒体并应用即可重建设置文件。</value></data>
+  <data name="Error_WallpaperSettingsWriteFailed_Message" xml:space="preserve"><value>无法保存壁纸设置。</value></data>
+  <data name="Error_WallpaperSettingsWriteFailed_Recovery" xml:space="preserve"><value>请检查本地应用数据文件夹的访问权限后重试。</value></data>
+  <data name="Error_WallpaperConfigurationInvalid_Message" xml:space="preserve"><value>一个或多个壁纸设置超出了支持范围。</value></data>
+  <data name="Error_WallpaperConfigurationInvalid_Recovery" xml:space="preserve"><value>请检查壁纸控件后重试。</value></data>
+  <data name="Error_MediaInvalid_Message" xml:space="preserve"><value>所选文件不存在、无法读取，或不是受支持的图片或视频。</value></data>
+  <data name="Error_MediaInvalid_Recovery" xml:space="preserve"><value>请选择有效的 PNG、JPEG、WebP、MP4 或 WebM 文件。</value></data>
+  <data name="Error_RiskAcknowledgementRequired_Message" xml:space="preserve"><value>启用本机调试前，增强启动需要得到你的确认。</value></data>
+  <data name="Error_RiskAcknowledgementRequired_Recovery" xml:space="preserve"><value>请阅读安全说明，并在愿意继续时确认。</value></data>
+  <data name="Error_CodexAlreadyRunning_Message" xml:space="preserve"><value>Codex 已经在运行，因此 Backdrop 没有连接到该进程。</value></data>
+  <data name="Error_CodexAlreadyRunning_Recovery" xml:space="preserve"><value>请完全退出 Codex，然后再次应用壁纸。</value></data>
+  <data name="Error_CodexUnavailable_Message" xml:space="preserve"><value>找不到经过审核的官方 Codex 安装。</value></data>
+  <data name="Error_CodexUnavailable_Recovery" xml:space="preserve"><value>请安装或修复官方 Codex 应用后重试。</value></data>
+  <data name="Error_CodexVersionUnsupported_Message" xml:space="preserve"><value>当前 Codex 版本尚未经过兼容性审核。</value></data>
+  <data name="Error_CodexVersionUnsupported_Recovery" xml:space="preserve"><value>请使用受支持的 Codex 版本，或等待 Backdrop 更新。</value></data>
+  <data name="Error_EndpointAmbiguous_Message" xml:space="preserve"><value>发现了多个已验证的 Codex 本机调试端点。</value></data>
+  <data name="Error_EndpointAmbiguous_Recovery" xml:space="preserve"><value>请退出所有 Codex 进程，然后只重试一次。</value></data>
+  <data name="Error_EndpointTimedOut_Message" xml:space="preserve"><value>Codex 未能及时提供经过验证的本机窗口。</value></data>
+  <data name="Error_EndpointTimedOut_Recovery" xml:space="preserve"><value>等待 Codex 完全退出后重试。</value></data>
+  <data name="Error_MediaLoadFailed_Message" xml:space="preserve"><value>Codex 无法载入所选媒体。</value></data>
+  <data name="Error_MediaLoadFailed_Recovery" xml:space="preserve"><value>请选择其他本地文件，或关闭 Codex 后重试。</value></data>
+  <data name="Error_WallpaperApplyFailed_Message" xml:space="preserve"><value>设置已保存，但壁纸未能启用。</value></data>
+  <data name="Error_WallpaperApplyFailed_Recovery" xml:space="preserve"><value>请完全退出 Codex，然后重试已保存的壁纸。</value></data>
+  <data name="Error_WallpaperRestoreFailed_Message" xml:space="preserve"><value>无法确认官方背景已经恢复。</value></data>
+  <data name="Error_WallpaperRestoreFailed_Recovery" xml:space="preserve"><value>请重试，或完全退出 Codex 以移除注入页面。</value></data>
+  <data name="Error_ShortcutCreateFailed_Message" xml:space="preserve"><value>壁纸已经就绪，但未能创建增强启动快捷方式。</value></data>
+  <data name="Error_ShortcutCreateFailed_Recovery" xml:space="preserve"><value>检查桌面访问权限后，可在设置中重试。</value></data>
+  <data name="Error_ShortcutRemoveFailed_Message" xml:space="preserve"><value>无法移除由本应用创建的增强启动快捷方式。</value></data>
+  <data name="Error_ShortcutRemoveFailed_Recovery" xml:space="preserve"><value>关闭正在使用该快捷方式的应用后，再次重置。</value></data>
+  <data name="Error_UnsupportedPlatform_Message" xml:space="preserve"><value>Backdrop for Codex 需要运行在 x64 硬件上的 Windows 11。</value></data>
+  <data name="Error_UnsupportedPlatform_Recovery" xml:space="preserve"><value>请在受支持的 Windows 设备上运行本应用。</value></data>
+  <data name="Error_AccessDenied_Message" xml:space="preserve"><value>Windows 拒绝了此操作所需的访问权限。</value></data>
+  <data name="Error_AccessDenied_Recovery" xml:space="preserve"><value>请检查文件权限后重试。</value></data>
+</root>

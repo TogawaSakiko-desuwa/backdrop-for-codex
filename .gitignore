@@ -24,6 +24,4 @@ Thumbs.db
 settings.local.json
 
 # Local-only development overlays
-/tests/
 /.agents/
-/src/Directory.Build.targets

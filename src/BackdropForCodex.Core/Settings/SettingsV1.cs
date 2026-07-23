@@ -79,6 +79,33 @@ public sealed record SettingsV1
         };
     }
 
+    /// <summary>
+    /// Returns a copy without <paramref name="mediaPath"/> in the recent list.
+    /// Paths are compared case-insensitively because this application targets Windows.
+    /// </summary>
+    public SettingsV1 RemoveRecentMediaPath(string mediaPath)
+    {
+        var normalizedPath = ValidateAndNormalizePath(mediaPath, nameof(mediaPath));
+        var currentPaths = RecentMediaPaths ?? Array.Empty<string>();
+        var paths = currentPaths
+            .Where(candidate =>
+                !string.Equals(candidate, normalizedPath, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+
+        return this with
+        {
+            RecentMediaPaths = new ReadOnlyCollection<string>(paths),
+        };
+    }
+
+    /// <summary>
+    /// Returns a copy with an empty recent-media list.
+    /// </summary>
+    public SettingsV1 ClearRecentMediaPaths() => this with
+    {
+        RecentMediaPaths = Array.Empty<string>(),
+    };
+
     public void Validate()
     {
         var errors = GetValidationErrors();

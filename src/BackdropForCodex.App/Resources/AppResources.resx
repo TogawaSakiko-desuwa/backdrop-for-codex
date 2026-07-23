@@ -1,0 +1,180 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="App_Title" xml:space="preserve"><value>Backdrop for Codex</value></data>
+  <data name="App_Description" xml:space="preserve"><value>A private, local wallpaper layer for Codex.</value></data>
+  <data name="Action_SelectMedia" xml:space="preserve"><value>Choose media</value></data>
+  <data name="Action_ApplyChanges" xml:space="preserve"><value>Apply changes</value></data>
+  <data name="Action_ApplyAndLaunch" xml:space="preserve"><value>Apply &amp; launch Codex</value></data>
+  <data name="Action_Cancel" xml:space="preserve"><value>Cancel</value></data>
+  <data name="Action_PauseVideo" xml:space="preserve"><value>Pause video</value></data>
+  <data name="Action_ResumeVideo" xml:space="preserve"><value>Resume video</value></data>
+  <data name="Action_RestoreOfficial" xml:space="preserve"><value>Restore official background</value></data>
+  <data name="Action_Retry" xml:space="preserve"><value>Retry</value></data>
+  <data name="Action_Settings" xml:space="preserve"><value>Settings</value></data>
+  <data name="Action_Remove" xml:space="preserve"><value>Remove</value></data>
+  <data name="Action_ClearRecent" xml:space="preserve"><value>Clear recent</value></data>
+  <data name="Action_Close" xml:space="preserve"><value>Close</value></data>
+  <data name="Action_Confirm" xml:space="preserve"><value>Confirm</value></data>
+  <data name="Action_Reset" xml:space="preserve"><value>Reset</value></data>
+  <data name="Action_RevokeRisk" xml:space="preserve"><value>Revoke acknowledgement</value></data>
+  <data name="Action_LearnMore" xml:space="preserve"><value>Learn more</value></data>
+  <data name="Section_Preview" xml:space="preserve"><value>Preview</value></data>
+  <data name="Section_Wallpaper" xml:space="preserve"><value>Wallpaper</value></data>
+  <data name="Section_RecentMedia" xml:space="preserve"><value>Recent media</value></data>
+  <data name="Section_Appearance" xml:space="preserve"><value>Appearance</value></data>
+  <data name="Section_SafetyPrivacy" xml:space="preserve"><value>Safety &amp; privacy</value></data>
+  <data name="Section_About" xml:space="preserve"><value>About</value></data>
+  <data name="Section_DangerZone" xml:space="preserve"><value>Danger zone</value></data>
+  <data name="Label_Fit" xml:space="preserve"><value>Image fit</value></data>
+  <data name="Label_PanelOpacity" xml:space="preserve"><value>Panel opacity</value></data>
+  <data name="Label_Blur" xml:space="preserve"><value>Background blur</value></data>
+  <data name="Label_Theme" xml:space="preserve"><value>App theme</value></data>
+  <data name="Theme_System" xml:space="preserve"><value>Use system setting</value></data>
+  <data name="Theme_Light" xml:space="preserve"><value>Light</value></data>
+  <data name="Theme_Dark" xml:space="preserve"><value>Dark</value></data>
+  <data name="Fit_Cover" xml:space="preserve"><value>Fill frame</value></data>
+  <data name="Fit_Contain" xml:space="preserve"><value>Show entire image</value></data>
+  <data name="Media_Image" xml:space="preserve"><value>Image</value></data>
+  <data name="Media_Video" xml:space="preserve"><value>Video</value></data>
+  <data name="Media_None" xml:space="preserve"><value>No media selected</value></data>
+  <data name="Hint_DropMedia" xml:space="preserve"><value>Drop one image or video here</value></data>
+  <data name="Hint_SupportedFormats" xml:space="preserve"><value>PNG, JPEG, WebP, MP4, or WebM</value></data>
+  <data name="Hint_NoMedia" xml:space="preserve"><value>Choose media to start designing your wallpaper.</value></data>
+  <data name="Hint_NoRecentMedia" xml:space="preserve"><value>Your recently used media will appear here.</value></data>
+  <data name="Hint_MissingMedia" xml:space="preserve"><value>This file is no longer available on this device.</value></data>
+  <data name="Status_Ready" xml:space="preserve"><value>Ready</value></data>
+  <data name="Status_ChangesPending" xml:space="preserve"><value>Preview updated. Apply when you are ready.</value></data>
+  <data name="Status_SavedNotActive" xml:space="preserve"><value>Settings are saved, but the wallpaper is not active.</value></data>
+  <data name="Status_Active" xml:space="preserve"><value>Wallpaper is active.</value></data>
+  <data name="Status_Paused" xml:space="preserve"><value>Video wallpaper is paused.</value></data>
+  <data name="Status_Restored" xml:space="preserve"><value>The official Codex background has been restored.</value></data>
+  <data name="Status_Canceled" xml:space="preserve"><value>The operation was canceled.</value></data>
+  <data name="Status_ShortcutCreated" xml:space="preserve"><value>The enhanced-launch shortcut is ready on your desktop.</value></data>
+  <data name="Status_ShortcutFailed" xml:space="preserve"><value>The wallpaper is active, but the desktop shortcut could not be updated.</value></data>
+  <data name="Status_ClosingToTray" xml:space="preserve"><value>Backdrop for Codex is still running in the notification area.</value></data>
+  <data name="OperationStage_Validating" xml:space="preserve"><value>Validating media and compatibility…</value></data>
+  <data name="OperationStage_Launching" xml:space="preserve"><value>Launching Codex…</value></data>
+  <data name="OperationStage_Discovering" xml:space="preserve"><value>Discovering the local Codex window…</value></data>
+  <data name="OperationStage_Applying" xml:space="preserve"><value>Applying wallpaper…</value></data>
+  <data name="OperationStage_Saving" xml:space="preserve"><value>Saving settings…</value></data>
+  <data name="OperationStage_Updating" xml:space="preserve"><value>Updating playback…</value></data>
+  <data name="OperationStage_Restoring" xml:space="preserve"><value>Restoring the official Codex background…</value></data>
+  <data name="OperationStage_Resetting" xml:space="preserve"><value>Resetting Backdrop for Codex…</value></data>
+  <data name="Stage_Saving" xml:space="preserve"><value>Saving settings…</value></data>
+  <data name="Stage_Updating" xml:space="preserve"><value>Updating playback…</value></data>
+  <data name="Stage_Validating" xml:space="preserve"><value>Validating media and Codex…</value></data>
+  <data name="Stage_Launching" xml:space="preserve"><value>Launching Codex securely…</value></data>
+  <data name="Stage_Discovering" xml:space="preserve"><value>Discovering the local Codex endpoint…</value></data>
+  <data name="Stage_Applying" xml:space="preserve"><value>Applying wallpaper and glass effects…</value></data>
+  <data name="Stage_Restoring" xml:space="preserve"><value>Restoring the official Codex background…</value></data>
+  <data name="Stage_Resetting" xml:space="preserve"><value>Resetting Backdrop for Codex…</value></data>
+  <data name="Status_AppliedTitle" xml:space="preserve"><value>Wallpaper is active</value></data>
+  <data name="Status_AppliedMessage" xml:space="preserve"><value>Codex is using the saved wallpaper and the enhanced desktop shortcut is ready.</value></data>
+  <data name="Status_AppliedShortcutFailedTitle" xml:space="preserve"><value>Wallpaper active</value></data>
+  <data name="Status_AppliedShortcutFailedMessage" xml:space="preserve"><value>The wallpaper is active, but the desktop shortcut could not be updated. You can retry it.</value></data>
+  <data name="Status_AutoLaunchNeedsMediaTitle" xml:space="preserve"><value>Wallpaper needs attention</value></data>
+  <data name="Status_AutoLaunchNeedsMediaMessage" xml:space="preserve"><value>Choose an available wallpaper before using the enhanced shortcut.</value></data>
+  <data name="Status_MissingTitle" xml:space="preserve"><value>Media unavailable</value></data>
+  <data name="Status_MissingMessage" xml:space="preserve"><value>The saved file no longer exists. Choose another file or remove it from recent media.</value></data>
+  <data name="Status_PausedTitle" xml:space="preserve"><value>Video paused</value></data>
+  <data name="Status_PausedMessage" xml:space="preserve"><value>Codex and the local preview are paused.</value></data>
+  <data name="Status_ReadyTitle" xml:space="preserve"><value>Ready</value></data>
+  <data name="Status_ReadyMessage" xml:space="preserve"><value>Choose local media, tune the glass panel, then apply when ready.</value></data>
+  <data name="Status_RecentsClearedTitle" xml:space="preserve"><value>Recent media cleared</value></data>
+  <data name="Status_RecentsClearedMessage" xml:space="preserve"><value>No wallpaper files were deleted from disk.</value></data>
+  <data name="Status_ResetCompleteTitle" xml:space="preserve"><value>Reset complete</value></data>
+  <data name="Status_ResetCompleteMessage" xml:space="preserve"><value>Settings, recent media, acknowledgement, UI preferences, and the owned shortcut were reset.</value></data>
+  <data name="Status_RestoredTitle" xml:space="preserve"><value>Official background restored</value></data>
+  <data name="Status_RestoredMessage" xml:space="preserve"><value>Saved wallpaper settings remain available for the next launch.</value></data>
+  <data name="Status_ResumedTitle" xml:space="preserve"><value>Video resumed</value></data>
+  <data name="Status_ResumedMessage" xml:space="preserve"><value>Codex and the local preview are playing.</value></data>
+  <data name="Status_RiskAcceptedTitle" xml:space="preserve"><value>Enhanced launch enabled</value></data>
+  <data name="Status_RiskAcceptedMessage" xml:space="preserve"><value>The local debugging-port acknowledgement was saved.</value></data>
+  <data name="Status_RiskRequiredTitle" xml:space="preserve"><value>Review enhanced launch</value></data>
+  <data name="Status_RiskRequiredMessage" xml:space="preserve"><value>Review the local Chromium debugging-port notice before applying.</value></data>
+  <data name="Status_RiskRevokedTitle" xml:space="preserve"><value>Enhanced launch disabled</value></data>
+  <data name="Status_RiskRevokedMessage" xml:space="preserve"><value>Future launches will require acknowledgement again.</value></data>
+  <data name="Status_RuntimeStoppedTitle" xml:space="preserve"><value>Wallpaper connection stopped</value></data>
+  <data name="Status_RuntimeStoppedMessage" xml:space="preserve"><value>The runtime connection ended and the app attempted to restore the official background.</value></data>
+  <data name="Status_SavedInactiveTitle" xml:space="preserve"><value>Saved, not active</value></data>
+  <data name="Status_SavedInactiveMessage" xml:space="preserve"><value>Your wallpaper settings were saved, but Codex did not activate them. Resolve the message above and retry.</value></data>
+  <data name="Status_SelectMediaTitle" xml:space="preserve"><value>Choose a wallpaper</value></data>
+  <data name="Status_SelectMediaMessage" xml:space="preserve"><value>Select an available image or muted video first.</value></data>
+  <data name="Status_ShortcutReadyTitle" xml:space="preserve"><value>Shortcut ready</value></data>
+  <data name="Status_ShortcutReadyMessage" xml:space="preserve"><value>The enhanced desktop shortcut was created or updated.</value></data>
+  <data name="Risk_Title" xml:space="preserve"><value>Allow local Codex debugging?</value></data>
+  <data name="Risk_Summary" xml:space="preserve"><value>This feature starts Codex with a local Chromium debugging endpoint.</value></data>
+  <data name="Risk_Detail" xml:space="preserve"><value>The endpoint is limited to this device and remains available until Codex exits. Backdrop verifies the official package and a reviewed version before connecting.</value></data>
+  <data name="Risk_Acknowledgement" xml:space="preserve"><value>I understand and want to continue</value></data>
+  <data name="Risk_Revoked" xml:space="preserve"><value>The acknowledgement has been revoked. You will be asked again before the next enhanced launch.</value></data>
+  <data name="Settings_ThemeDescription" xml:space="preserve"><value>Follow Windows by default, including high-contrast mode.</value></data>
+  <data name="Settings_RiskDescription" xml:space="preserve"><value>Review or revoke the local debugging acknowledgement.</value></data>
+  <data name="Settings_PrivacyDescription" xml:space="preserve"><value>Media stays on this device and is served only through an authenticated loopback address.</value></data>
+  <data name="Settings_Licenses" xml:space="preserve"><value>Open-source licenses</value></data>
+  <data name="Settings_ResetTitle" xml:space="preserve"><value>Reset Backdrop for Codex?</value></data>
+  <data name="Settings_ResetDescription" xml:space="preserve"><value>This restores the official background, clears settings and recent media, revokes acknowledgement, resets UI preferences, and removes only a shortcut verified as owned by this app.</value></data>
+  <data name="About_NonAffiliation" xml:space="preserve"><value>An independent project. Not affiliated with or endorsed by OpenAI.</value></data>
+  <data name="Tray_Open" xml:space="preserve"><value>Open Backdrop for Codex</value></data>
+  <data name="Tray_Apply" xml:space="preserve"><value>Apply wallpaper</value></data>
+  <data name="Tray_Restore" xml:space="preserve"><value>Restore official background</value></data>
+  <data name="Tray_Exit" xml:space="preserve"><value>Exit</value></data>
+  <data name="Tray_FirstCloseTitle" xml:space="preserve"><value>Still running</value></data>
+  <data name="Tray_FirstCloseMessage" xml:space="preserve"><value>Backdrop for Codex moved to the notification area so the wallpaper can stay active.</value></data>
+  <data name="Error_Title" xml:space="preserve"><value>Something needs attention</value></data>
+  <data name="Error_Unexpected_Message" xml:space="preserve"><value>The action could not be completed.</value></data>
+  <data name="Error_Unexpected_Recovery" xml:space="preserve"><value>Try again. If the problem continues, restart Backdrop for Codex.</value></data>
+  <data name="Error_OperationCanceled_Message" xml:space="preserve"><value>The current operation stopped.</value></data>
+  <data name="Error_OperationCanceled_Recovery" xml:space="preserve"><value>You can retry when you are ready.</value></data>
+  <data name="Error_PreferencesReadFailed_Message" xml:space="preserve"><value>Appearance preferences could not be read, so safe defaults are being used.</value></data>
+  <data name="Error_PreferencesReadFailed_Recovery" xml:space="preserve"><value>Choose your preferences again to replace the unreadable file.</value></data>
+  <data name="Error_PreferencesWriteFailed_Message" xml:space="preserve"><value>Appearance preferences could not be saved.</value></data>
+  <data name="Error_PreferencesWriteFailed_Recovery" xml:space="preserve"><value>Check access to your local app-data folder, then retry.</value></data>
+  <data name="Error_PreferencesResetFailed_Message" xml:space="preserve"><value>Appearance preferences could not be reset.</value></data>
+  <data name="Error_PreferencesResetFailed_Recovery" xml:space="preserve"><value>Close other instances and retry.</value></data>
+  <data name="Error_WallpaperSettingsReadFailed_Message" xml:space="preserve"><value>Wallpaper settings could not be read, so safe defaults are being used.</value></data>
+  <data name="Error_WallpaperSettingsReadFailed_Recovery" xml:space="preserve"><value>Select media and apply again to rebuild the settings file.</value></data>
+  <data name="Error_WallpaperSettingsWriteFailed_Message" xml:space="preserve"><value>Wallpaper settings could not be saved.</value></data>
+  <data name="Error_WallpaperSettingsWriteFailed_Recovery" xml:space="preserve"><value>Check access to your local app-data folder, then retry.</value></data>
+  <data name="Error_WallpaperConfigurationInvalid_Message" xml:space="preserve"><value>One or more wallpaper settings are outside the supported range.</value></data>
+  <data name="Error_WallpaperConfigurationInvalid_Recovery" xml:space="preserve"><value>Review the wallpaper controls and retry.</value></data>
+  <data name="Error_MediaInvalid_Message" xml:space="preserve"><value>The selected file is missing, unreadable, or not a supported image or video.</value></data>
+  <data name="Error_MediaInvalid_Recovery" xml:space="preserve"><value>Choose a valid PNG, JPEG, WebP, MP4, or WebM file.</value></data>
+  <data name="Error_RiskAcknowledgementRequired_Message" xml:space="preserve"><value>Enhanced launch needs your acknowledgement before local debugging can be enabled.</value></data>
+  <data name="Error_RiskAcknowledgementRequired_Recovery" xml:space="preserve"><value>Review the safety notice and confirm if you want to continue.</value></data>
+  <data name="Error_CodexAlreadyRunning_Message" xml:space="preserve"><value>Codex was already running, so Backdrop did not attach to it.</value></data>
+  <data name="Error_CodexAlreadyRunning_Recovery" xml:space="preserve"><value>Exit Codex completely, then apply the wallpaper again.</value></data>
+  <data name="Error_CodexUnavailable_Message" xml:space="preserve"><value>The reviewed official Codex installation could not be found.</value></data>
+  <data name="Error_CodexUnavailable_Recovery" xml:space="preserve"><value>Install or repair the official Codex app, then retry.</value></data>
+  <data name="Error_CodexVersionUnsupported_Message" xml:space="preserve"><value>This Codex version has not been reviewed for compatibility.</value></data>
+  <data name="Error_CodexVersionUnsupported_Recovery" xml:space="preserve"><value>Use a supported release of Codex or wait for a Backdrop update.</value></data>
+  <data name="Error_EndpointAmbiguous_Message" xml:space="preserve"><value>More than one verified local Codex debugging endpoint was found.</value></data>
+  <data name="Error_EndpointAmbiguous_Recovery" xml:space="preserve"><value>Exit every Codex process, then retry once.</value></data>
+  <data name="Error_EndpointTimedOut_Message" xml:space="preserve"><value>Codex did not expose its verified local window in time.</value></data>
+  <data name="Error_EndpointTimedOut_Recovery" xml:space="preserve"><value>Wait for Codex to finish closing, then retry.</value></data>
+  <data name="Error_MediaLoadFailed_Message" xml:space="preserve"><value>Codex could not load the selected media.</value></data>
+  <data name="Error_MediaLoadFailed_Recovery" xml:space="preserve"><value>Choose another local file or retry after closing Codex.</value></data>
+  <data name="Error_WallpaperApplyFailed_Message" xml:space="preserve"><value>The settings were saved, but the wallpaper could not be activated.</value></data>
+  <data name="Error_WallpaperApplyFailed_Recovery" xml:space="preserve"><value>Close Codex completely and retry the saved wallpaper.</value></data>
+  <data name="Error_WallpaperRestoreFailed_Message" xml:space="preserve"><value>The official background could not be confirmed as restored.</value></data>
+  <data name="Error_WallpaperRestoreFailed_Recovery" xml:space="preserve"><value>Retry, or exit Codex completely to remove the injected page.</value></data>
+  <data name="Error_ShortcutCreateFailed_Message" xml:space="preserve"><value>The wallpaper is ready, but the enhanced-launch shortcut could not be created.</value></data>
+  <data name="Error_ShortcutCreateFailed_Recovery" xml:space="preserve"><value>Retry from Settings after checking access to your desktop.</value></data>
+  <data name="Error_ShortcutRemoveFailed_Message" xml:space="preserve"><value>The app-owned enhanced-launch shortcut could not be removed.</value></data>
+  <data name="Error_ShortcutRemoveFailed_Recovery" xml:space="preserve"><value>Close other apps using the shortcut, then retry the reset.</value></data>
+  <data name="Error_UnsupportedPlatform_Message" xml:space="preserve"><value>Backdrop for Codex requires Windows 11 on x64 hardware.</value></data>
+  <data name="Error_UnsupportedPlatform_Recovery" xml:space="preserve"><value>Run the app on a supported Windows device.</value></data>
+  <data name="Error_AccessDenied_Message" xml:space="preserve"><value>Windows denied access needed for this action.</value></data>
+  <data name="Error_AccessDenied_Recovery" xml:space="preserve"><value>Check file permissions and retry.</value></data>
+</root>

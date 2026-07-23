@@ -1,45 +1,69 @@
-using System.Drawing;
 using System.Windows;
-using Forms = System.Windows.Forms;
+using System.Windows.Controls;
+using System.Windows.Media;
+using BackdropForCodex.App.Services.Localization;
+using Wpf.Ui.Tray.Controls;
 
 namespace BackdropForCodex.App;
 
+/// <summary>
+/// Owns the pure-WPF notification-area icon and routes actions back to the composition root.
+/// </summary>
 internal sealed class TrayController : IAsyncDisposable
 {
     private readonly MainWindow _window;
+    private readonly Func<Task> _disableWallpaper;
     private readonly Func<Task> _shutdown;
-    private readonly Forms.NotifyIcon _notifyIcon;
-    private readonly Forms.ContextMenuStrip _menu;
+    private readonly NotifyIcon _notifyIcon;
     private bool _disposed;
 
-    public TrayController(MainWindow window, Func<Task> shutdown)
+    public TrayController(
+        MainWindow window,
+        Func<Task> disableWallpaper,
+        Func<Task> shutdown,
+        IAppTextProvider text)
     {
-        _window = window;
-        _shutdown = shutdown;
+        _window = window ?? throw new ArgumentNullException(nameof(window));
+        _disableWallpaper =
+            disableWallpaper ?? throw new ArgumentNullException(nameof(disableWallpaper));
+        _shutdown = shutdown ?? throw new ArgumentNullException(nameof(shutdown));
+        ArgumentNullException.ThrowIfNull(text);
 
-        _menu = new Forms.ContextMenuStrip();
-        _menu.Items.Add("打开设置", null, (_, _) => ShowWindow());
-        _menu.Items.Add("关闭壁纸并恢复背景", null, DisableWallpaperFromTray);
-        _menu.Items.Add(new Forms.ToolStripSeparator());
-        _menu.Items.Add("退出", null, ExitFromTray);
-
-        _notifyIcon = new Forms.NotifyIcon
+        var menu = new ContextMenu();
+        var openItem = new MenuItem
         {
-            Text = "Backdrop for Codex",
-            Icon = SystemIcons.Application,
-            ContextMenuStrip = _menu,
-            Visible = true,
+            Header = Localize(text, "Tray_Open", "Open Backdrop for Codex"),
         };
-        _notifyIcon.DoubleClick += (_, _) => ShowWindow();
-
-        _window.Closing += (_, args) =>
+        openItem.Click += (_, _) => ShowWindow();
+        var restoreItem = new MenuItem
         {
-            if (!_disposed)
-            {
-                args.Cancel = true;
-                _window.Hide();
-            }
+            Header = Localize(text, "Tray_Restore", "Restore official background"),
         };
+        restoreItem.Click += (_, _) => _ = RunSafelyAsync(_disableWallpaper);
+        var exitItem = new MenuItem
+        {
+            Header = Localize(text, "Tray_Exit", "Exit"),
+        };
+        exitItem.Click += (_, _) => _ = RunSafelyAsync(_shutdown);
+        _ = menu.Items.Add(openItem);
+        _ = menu.Items.Add(restoreItem);
+        _ = menu.Items.Add(new Separator());
+        _ = menu.Items.Add(exitItem);
+
+        _notifyIcon = new NotifyIcon
+        {
+            TooltipText = "Backdrop for Codex",
+            Icon = (ImageSource)System.Windows.Application.Current.FindResource("AppIconImage"),
+            Menu = menu,
+            MenuOnRightClick = true,
+            FocusOnLeftClick = true,
+        };
+        // WPF-UI.Tray 4.3 exposes this public event through a delegate whose sender type is
+        // internal, so consumers cannot spell its annotated signature exactly.
+#pragma warning disable CS8622
+        _notifyIcon.LeftDoubleClick += (_, _) => ShowWindow();
+#pragma warning restore CS8622
+        _notifyIcon.Register();
     }
 
     internal void ShowWindow()
@@ -52,12 +76,16 @@ internal sealed class TrayController : IAsyncDisposable
         try
         {
             _window.Show();
-            _window.WindowState = WindowState.Normal;
+            if (_window.WindowState == WindowState.Minimized)
+            {
+                _window.WindowState = WindowState.Normal;
+            }
+
             _window.Activate();
         }
         catch (InvalidOperationException)
         {
-            // The application is already closing the settings window.
+            // The app is already closing its final window.
         }
     }
 
@@ -69,52 +97,40 @@ internal sealed class TrayController : IAsyncDisposable
         }
 
         _disposed = true;
-        TryCleanup(() => _notifyIcon.Visible = false);
+        TryCleanup(_notifyIcon.Unregister);
         TryCleanup(_notifyIcon.Dispose);
-        TryCleanup(_menu.Dispose);
-        TryCleanup(_window.Close);
+        TryCleanup(_window.CloseForShutdown);
         return ValueTask.CompletedTask;
     }
 
-    private void DisableWallpaperFromTray(object? sender, EventArgs e) =>
-        _ = DisableWallpaperFromTraySafelyAsync();
-
-    private async Task DisableWallpaperFromTraySafelyAsync()
+    private async Task RunSafelyAsync(Func<Task> operation)
     {
         try
         {
-            await _window.DisableWallpaperAsync();
+            await operation();
         }
         catch (Exception exception)
         {
-            TryReportUnexpectedError(exception);
+            try
+            {
+                _window.ReportUnexpectedError(exception);
+            }
+            catch (Exception)
+            {
+                // The window may already be gone; tray event exceptions must never escape.
+            }
         }
     }
 
-    private void ExitFromTray(object? sender, EventArgs e) => _ = ExitFromTraySafelyAsync();
-
-    private async Task ExitFromTraySafelyAsync()
+    private static string Localize(
+        IAppTextProvider text,
+        string key,
+        string fallback)
     {
-        try
-        {
-            await _shutdown();
-        }
-        catch (Exception exception)
-        {
-            TryReportUnexpectedError(exception);
-        }
-    }
-
-    private void TryReportUnexpectedError(Exception exception)
-    {
-        try
-        {
-            _window.ReportUnexpectedError(exception);
-        }
-        catch (Exception)
-        {
-            // The window may already be closed; no async event exception may escape the tray.
-        }
+        var value = text.GetString(key);
+        return string.Equals(value, key, StringComparison.Ordinal)
+            ? fallback
+            : value;
     }
 
     private static void TryCleanup(Action cleanup)
@@ -125,7 +141,7 @@ internal sealed class TrayController : IAsyncDisposable
         }
         catch (Exception)
         {
-            // Tray teardown is best effort; App owns the final shutdown and mutex release.
+            // Tray teardown is best effort; the application owns final process shutdown.
         }
     }
 }
