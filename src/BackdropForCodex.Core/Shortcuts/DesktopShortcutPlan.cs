@@ -35,6 +35,34 @@ public sealed class DesktopShortcutPlan
     public string ShortcutPath { get; }
 
     /// <summary>
+    /// Returns whether resolved shell-link values identify a shortcut owned by this app instance.
+    /// The Windows target path is compared case-insensitively; launch arguments must be exact.
+    /// </summary>
+    public bool MatchesOwnedShortcut(string? targetPath, string? arguments)
+    {
+        if (string.IsNullOrWhiteSpace(targetPath) ||
+            !string.Equals(arguments, LaunchArguments, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        try
+        {
+            return string.Equals(
+                TargetPath,
+                Path.GetFullPath(targetPath),
+                StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception exception) when (
+            exception is ArgumentException or
+            IOException or
+            NotSupportedException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Builds a deterministic shortcut plan without touching the file system.
     /// </summary>
     public static DesktopShortcutPlan Create(string executablePath, string desktopDirectory)

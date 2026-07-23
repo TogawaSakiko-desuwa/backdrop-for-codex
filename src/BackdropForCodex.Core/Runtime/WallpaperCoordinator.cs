@@ -356,14 +356,10 @@ public sealed class WallpaperCoordinator : IAsyncDisposable
                 await _injectionSession
                     .ApplyAsync(_endpoint, injectionOptions, cancellationToken)
                     .ConfigureAwait(false);
-                if (_paused)
-                {
-                    await _injectionSession.SetPausedAsync(true, cancellationToken).ConfigureAwait(false);
-                }
-
-                Publish(
-                    _paused ? WallpaperRuntimePhase.Paused : WallpaperRuntimePhase.Active,
-                    _paused ? "Wallpaper video playback is paused." : "Wallpaper is active.");
+                // Pause belongs to one injected media generation. A replacement starts from its
+                // own default playback state and must not inherit a stale pause from the prior video.
+                _paused = false;
+                Publish(WallpaperRuntimePhase.Active, "Wallpaper is active.");
                 return settings;
             }
             catch (Exception operationException)
@@ -607,6 +603,7 @@ public sealed class WallpaperCoordinator : IAsyncDisposable
             failures.Add(exception);
         }
 
+        _paused = false;
         ThrowCollectedExceptions("Wallpaper cleanup failed.", failures);
     }
 
