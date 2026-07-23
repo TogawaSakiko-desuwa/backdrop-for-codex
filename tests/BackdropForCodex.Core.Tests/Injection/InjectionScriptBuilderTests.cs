@@ -175,7 +175,7 @@ public sealed class InjectionScriptBuilderTests
             body [role="main"]:has([data-home-ambient-suggestions])
             section[class~="group/home-suggestions"]
             button[type="button"][aria-labelledby] {
-            """,
+            """.ReplaceLineEndings("\n"),
             forcedColorsBlock,
             StringComparison.Ordinal);
         Assert.Contains(
