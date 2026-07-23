@@ -1,0 +1,125 @@
+<UserControl x:Class="BackdropForCodex.App.Views.SettingsDialogContent"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:localization="clr-namespace:BackdropForCodex.App.Services.Localization"
+             xmlns:preferences="clr-namespace:BackdropForCodex.App.Services.Preferences"
+             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+             MinWidth="520"
+             MaxWidth="600">
+  <Grid>
+    <TabControl>
+      <TabItem Header="{localization:Loc Section_Appearance, Fallback=Appearance}">
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+          <StackPanel Margin="4,18,4,4">
+            <ui:Card>
+              <StackPanel Margin="16">
+                <TextBlock Style="{StaticResource SectionHeadingStyle}"
+                           Text="{localization:Loc Label_Theme, Fallback='App theme'}" />
+                <TextBlock Margin="0,4,0,12"
+                           Style="{StaticResource CaptionTextStyle}"
+                           Text="{localization:Loc Settings_ThemeDescription, Fallback='Follow Windows by default, including high contrast.'}" />
+                <ComboBox x:Name="ThemeComboBox"
+                          SelectedValuePath="Tag"
+                          SelectionChanged="ThemeComboBox_SelectionChanged">
+                  <ComboBoxItem Content="{localization:Loc Theme_System, Fallback='Use system setting'}"
+                                Tag="{x:Static preferences:ThemeMode.System}" />
+                  <ComboBoxItem Content="{localization:Loc Theme_Light, Fallback=Light}"
+                                Tag="{x:Static preferences:ThemeMode.Light}" />
+                  <ComboBoxItem Content="{localization:Loc Theme_Dark, Fallback=Dark}"
+                                Tag="{x:Static preferences:ThemeMode.Dark}" />
+                </ComboBox>
+              </StackPanel>
+            </ui:Card>
+          </StackPanel>
+        </ScrollViewer>
+      </TabItem>
+
+      <TabItem Header="{localization:Loc Section_SafetyPrivacy, Fallback='Safety &amp; privacy'}">
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+          <StackPanel Margin="4,18,4,4">
+            <ui:Card Margin="0,0,0,12">
+              <StackPanel Margin="16">
+                <TextBlock Style="{StaticResource SectionHeadingStyle}"
+                           Text="{localization:Loc Risk_Title, Fallback='Local Codex debugging'}" />
+                <TextBlock Margin="0,4,0,8"
+                           Style="{StaticResource CaptionTextStyle}"
+                           Text="{localization:Loc Settings_RiskDescription, Fallback='Review or revoke the local debugging acknowledgement.'}" />
+                <TextBlock x:Name="RiskStateText"
+                           Margin="0,4,0,12"
+                           FontWeight="SemiBold"
+                           TextWrapping="Wrap" />
+                <ui:Button x:Name="RevokeRiskButton"
+                           HorizontalAlignment="Left"
+                           Content="{localization:Loc Action_Reset, Fallback='Revoke acknowledgement'}"
+                           Click="RevokeRiskButton_Click" />
+              </StackPanel>
+            </ui:Card>
+            <ui:Card>
+              <StackPanel Margin="16">
+                <TextBlock Style="{StaticResource SectionHeadingStyle}"
+                           Text="{localization:Loc Section_SafetyPrivacy, Fallback='Privacy'}" />
+                <TextBlock Margin="0,4,0,0"
+                           Style="{StaticResource CaptionTextStyle}"
+                           Text="{localization:Loc Settings_PrivacyDescription, Fallback='Media stays on this device and is served only through an authenticated loopback address.'}" />
+              </StackPanel>
+            </ui:Card>
+          </StackPanel>
+        </ScrollViewer>
+      </TabItem>
+
+      <TabItem Header="{localization:Loc Section_About, Fallback=About}">
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+          <StackPanel Margin="4,18,4,4">
+            <ui:Card Margin="0,0,0,12">
+              <Grid Margin="16">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="56" />
+                  <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Image Width="44" Height="44"
+                       Source="{StaticResource AppIconImage}" />
+                <StackPanel Grid.Column="1" Margin="12,0,0,0">
+                  <TextBlock Style="{StaticResource SectionHeadingStyle}"
+                             Text="{localization:Loc App_Title, Fallback='Backdrop for Codex'}" />
+                  <TextBlock x:Name="VersionText"
+                             Margin="0,3,0,0"
+                             Style="{StaticResource CaptionTextStyle}" />
+                  <TextBlock Margin="0,6,0,0"
+                             Style="{StaticResource CaptionTextStyle}"
+                             Text="{localization:Loc About_NonAffiliation, Fallback='An independent project. Not affiliated with or endorsed by OpenAI.'}" />
+                </StackPanel>
+              </Grid>
+            </ui:Card>
+            <ui:Card Margin="0,0,0,12">
+              <StackPanel Margin="16">
+                <TextBlock Style="{StaticResource SectionHeadingStyle}"
+                           Text="{localization:Loc Settings_Licenses, Fallback='Open-source licenses'}" />
+                <TextBlock Margin="0,8,0,0" Text="WPF-UI 4.3.0 — MIT" />
+                <TextBlock Margin="0,4,0,0" Text="WPF-UI.Tray 4.3.0 — MIT" />
+                <TextBlock Margin="0,4,0,0" Text="CommunityToolkit.Mvvm 8.4.2 — MIT" />
+                <TextBlock Margin="0,4,0,0" Text="PuppeteerSharp 25.3.4 — MIT" />
+                <TextBlock Margin="0,8,0,0"
+                           Style="{StaticResource CaptionTextStyle}"
+                           Text="See THIRD_PARTY_NOTICES.md in the source distribution for full notices." />
+              </StackPanel>
+            </ui:Card>
+            <ui:Card>
+              <StackPanel Margin="16">
+                <TextBlock Foreground="#C42B1C"
+                           FontWeight="SemiBold"
+                           Text="{localization:Loc Section_DangerZone, Fallback='Danger zone'}" />
+                <TextBlock Margin="0,5,0,12"
+                           Style="{StaticResource CaptionTextStyle}"
+                           Text="{localization:Loc Settings_ResetDescription, Fallback='Restore the official background and clear all app-owned state.'}" />
+                <ui:Button HorizontalAlignment="Left"
+                           Appearance="Danger"
+                           Content="{localization:Loc Action_Reset, Fallback='Reset app'}"
+                           Click="ResetButton_Click" />
+              </StackPanel>
+            </ui:Card>
+          </StackPanel>
+        </ScrollViewer>
+      </TabItem>
+    </TabControl>
+  </Grid>
+</UserControl>

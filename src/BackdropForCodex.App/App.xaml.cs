@@ -2,6 +2,11 @@ using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Threading;
 using System.Windows;
+using BackdropForCodex.App.Services.Errors;
+using BackdropForCodex.App.Services.Localization;
+using BackdropForCodex.App.Services.Preferences;
+using BackdropForCodex.App.Services.Wallpaper;
+using BackdropForCodex.App.ViewModels;
 using BackdropForCodex.Core.Runtime;
 
 namespace BackdropForCodex.App;
@@ -15,7 +20,9 @@ public partial class App : System.Windows.Application
     private Mutex? _instanceMutex;
     private SingleInstanceCommandServer? _commandServer;
     private TrayController? _trayController;
-    private WallpaperCoordinator? _coordinator;
+    private WallpaperApplicationService? _wallpaperService;
+    private AppPreferencesStore? _preferencesStore;
+    private UserFacingErrorMapper? _errorMapper;
     private MainWindow? _mainWindow;
     private int _shutdownStarted;
     private int _launchCommandRunning;
@@ -39,7 +46,7 @@ public partial class App : System.Windows.Application
                 if (!forwarded)
                 {
                     ShowMessageSafely(
-                        "Backdrop for Codex 已在运行，但暂时无法联系托盘实例。请从系统托盘打开后重试。",
+                        "Backdrop for Codex is already running, but its notification-area instance could not be reached. Open it from the notification area and retry.",
                         MessageBoxImage.Warning);
                 }
 
@@ -57,9 +64,22 @@ public partial class App : System.Windows.Application
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "CodexWallpaper",
                 "settings.json");
-            _coordinator = WallpaperCoordinator.CreateDefault(settingsPath);
-            _mainWindow = new MainWindow(_coordinator);
-            _trayController = new TrayController(_mainWindow, ShutdownSafelyAsync);
+            var text = new AppTextProvider();
+            _errorMapper = new UserFacingErrorMapper(text);
+            _preferencesStore = AppPreferencesStore.CreateForCurrentUser();
+            _wallpaperService = new WallpaperApplicationService(
+                WallpaperCoordinator.CreateDefault(settingsPath));
+            var viewModel = new MainWindowViewModel(
+                _wallpaperService,
+                _preferencesStore,
+                _errorMapper,
+                text);
+            _mainWindow = new MainWindow(viewModel, text);
+            _trayController = new TrayController(
+                _mainWindow,
+                viewModel.DisableAsync,
+                ShutdownSafelyAsync,
+                text);
 
             if (HasLaunchArgument(e.Args))
             {
@@ -181,12 +201,12 @@ public partial class App : System.Windows.Application
                 await AttemptAsync(async () => await commandServer.DisposeAsync());
             }
 
-            if (_coordinator is not null)
+            if (_wallpaperService is not null)
             {
-                var coordinator = _coordinator;
-                _coordinator = null;
-                await AttemptAsync(() => coordinator.DisableAsync());
-                await AttemptAsync(async () => await coordinator.DisposeAsync());
+                var wallpaperService = _wallpaperService;
+                _wallpaperService = null;
+                await AttemptAsync(() => wallpaperService.DisableAsync());
+                await AttemptAsync(async () => await wallpaperService.DisposeAsync());
             }
         }
         catch (Exception)
@@ -203,6 +223,20 @@ public partial class App : System.Windows.Application
             }
 
             _mainWindow = null;
+
+            if (_preferencesStore is not null)
+            {
+                try
+                {
+                    _preferencesStore.Dispose();
+                }
+                catch (Exception)
+                {
+                    cleanupFailed = true;
+                }
+
+                _preferencesStore = null;
+            }
 
             if (_instanceMutex is not null)
             {
@@ -232,7 +266,7 @@ public partial class App : System.Windows.Application
             if (cleanupFailed)
             {
                 ShowMessageSafely(
-                    "退出清理未能被完全确认。页面租约会继续尝试恢复背景；为立即关闭调试端口，请完全退出 Codex。",
+                    "Cleanup could not be fully confirmed. The page lease will keep trying to restore the background; exit Codex completely to close the debugging endpoint immediately.",
                     MessageBoxImage.Warning);
             }
 
@@ -247,11 +281,18 @@ public partial class App : System.Windows.Application
         }
     }
 
-    private static string ToStartupMessage(Exception exception) => exception switch
+    private string ToStartupMessage(Exception exception)
     {
-        PlatformNotSupportedException => "Backdrop for Codex 第一版仅支持 Windows 11 x64。",
-        _ => "Backdrop for Codex 无法安全启动。请确认系统为 Windows 11 x64，并重试。",
-    };
+        if (_errorMapper is not null)
+        {
+            var error = _errorMapper.Map(exception);
+            return $"{error.Message} {error.Recovery}";
+        }
+
+        return exception is PlatformNotSupportedException
+            ? "Backdrop for Codex requires Windows 11 on x64 hardware."
+            : "Backdrop for Codex could not start safely. Confirm this is Windows 11 x64 and retry.";
+    }
 
     private static void ShowMessageSafely(string message, MessageBoxImage image)
     {

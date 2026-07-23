@@ -1,78 +1,515 @@
-<Window x:Class="BackdropForCodex.App.MainWindow"
-        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Backdrop for Codex" Height="720" Width="980"
-        MinHeight="600" MinWidth="820"
-        WindowStartupLocation="CenterScreen"
-        Background="{StaticResource WindowBackgroundBrush}"
-        Foreground="White"
-        IsVisibleChanged="Window_IsVisibleChanged">
-  <Grid Margin="28">
-    <Grid.ColumnDefinitions>
-      <ColumnDefinition Width="3*" />
-      <ColumnDefinition Width="24" />
-      <ColumnDefinition Width="2*" />
-    </Grid.ColumnDefinitions>
+<ui:FluentWindow x:Class="BackdropForCodex.App.MainWindow"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:converters="clr-namespace:BackdropForCodex.App.Converters"
+                 xmlns:localization="clr-namespace:BackdropForCodex.App.Services.Localization"
+                 xmlns:settings="clr-namespace:BackdropForCodex.Core.Settings;assembly=BackdropForCodex.Core"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 Title="{localization:Loc App_Title, Fallback='Backdrop for Codex'}"
+                 Width="1040"
+                 Height="700"
+                 MinWidth="640"
+                 MinHeight="520"
+                 WindowStartupLocation="CenterScreen"
+                 WindowBackdropType="Mica"
+                 WindowCornerPreference="Round"
+                 ExtendsContentIntoTitleBar="True"
+                 AllowDrop="True"
+                 Closing="Window_Closing"
+                 DragEnter="Window_DragEnter"
+                 DragOver="Window_DragOver"
+                 DragLeave="Window_DragLeave"
+                 Drop="Window_Drop"
+                 IsVisibleChanged="Window_IsVisibleChanged"
+                 SizeChanged="Window_SizeChanged">
+  <ui:FluentWindow.Resources>
+    <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+    <converters:WallpaperFitToStretchConverter x:Key="FitToStretchConverter" />
+    <converters:UiStatusToneToInfoBarSeverityConverter x:Key="StatusToneConverter" />
+  </ui:FluentWindow.Resources>
 
-    <Border Grid.Column="0" Background="#111318" CornerRadius="14" ClipToBounds="True">
+  <Grid>
+    <Grid.RowDefinitions>
+      <RowDefinition Height="48" />
+      <RowDefinition Height="*" />
+      <RowDefinition Height="Auto" />
+    </Grid.RowDefinitions>
+
+    <ui:TitleBar Grid.Row="0"
+                 Title="{localization:Loc App_Title, Fallback='Backdrop for Codex'}"
+                 Icon="{StaticResource AppIconImage}">
+      <ui:TitleBar.TrailingContent>
+        <ui:Button Margin="0,0,138,0"
+                   Width="38"
+                   Height="34"
+                   Appearance="Transparent"
+                   ToolTip="{localization:Loc Action_Settings, Fallback=Settings}"
+                   AutomationProperties.Name="{localization:Loc Action_Settings, Fallback=Settings}"
+                   Click="Settings_Click">
+          <ui:SymbolIcon Symbol="Settings24" />
+        </ui:Button>
+      </ui:TitleBar.TrailingContent>
+    </ui:TitleBar>
+
+    <Grid x:Name="MainContentGrid" Grid.Row="1" Margin="24,14,24,14">
+      <Grid.RowDefinitions>
+        <RowDefinition x:Name="MainTopRow" Height="*" />
+        <RowDefinition x:Name="MainGapRow" Height="0" />
+        <RowDefinition x:Name="MainBottomRow" Height="0" />
+      </Grid.RowDefinitions>
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition x:Name="PreviewColumn" Width="3*" />
+        <ColumnDefinition x:Name="ColumnGap" Width="20" />
+        <ColumnDefinition x:Name="InspectorColumn" Width="2*" MinWidth="330" />
+      </Grid.ColumnDefinitions>
+
+      <Grid x:Name="PreviewPane" Grid.Row="0" Grid.Column="0">
+        <Grid.RowDefinitions>
+          <RowDefinition Height="*" />
+          <RowDefinition Height="14" />
+          <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <ui:Card Grid.Row="0" ClipToBounds="True">
+          <Grid x:Name="PreviewSurface"
+                MinHeight="220"
+                Background="#171A20"
+                ClipToBounds="True">
+            <Image x:Name="ImagePreview"
+                   Stretch="{Binding Fit, Converter={StaticResource FitToStretchConverter}}"
+                   Visibility="Collapsed" />
+            <MediaElement x:Name="VideoPreview"
+                          Stretch="{Binding Fit, Converter={StaticResource FitToStretchConverter}}"
+                          LoadedBehavior="Manual"
+                          UnloadedBehavior="Stop"
+                          IsMuted="True"
+                          ScrubbingEnabled="True"
+                          Visibility="Collapsed"
+                          MediaOpened="VideoPreview_MediaOpened"
+                          MediaEnded="VideoPreview_MediaEnded"
+                          MediaFailed="VideoPreview_MediaFailed" />
+
+            <Border x:Name="EmptyPreview"
+                    Margin="32"
+                    Background="Transparent">
+              <StackPanel HorizontalAlignment="Center"
+                          VerticalAlignment="Center"
+                          MaxWidth="340">
+                <Border Width="64"
+                        Height="64"
+                        Margin="0,0,0,16"
+                        CornerRadius="18"
+                        Background="#242B36">
+                  <ui:SymbolIcon Symbol="Image24"
+                                 FontSize="30"
+                                 Foreground="#A9C7FF"
+                                 HorizontalAlignment="Center"
+                                 VerticalAlignment="Center" />
+                </Border>
+                <TextBlock Text="{localization:Loc Hint_NoMedia, Fallback='Choose media to start designing your wallpaper.'}"
+                           Foreground="#F5F7FA"
+                           FontSize="18"
+                           FontWeight="SemiBold"
+                           TextAlignment="Center"
+                           TextWrapping="Wrap" />
+                <TextBlock Margin="0,8,0,0"
+                           Text="{localization:Loc Hint_DropMedia, Fallback='Drop one image or video here'}"
+                           Foreground="#AAB2BF"
+                           TextAlignment="Center" />
+              </StackPanel>
+            </Border>
+
+            <!-- A compact Codex-like shell makes opacity and fit changes legible without
+                 pretending to be a pixel-perfect copy of the injected page. -->
+            <Border Height="42"
+                    VerticalAlignment="Top"
+                    Background="#8013171D"
+                    BorderBrush="#40FFFFFF"
+                    BorderThickness="0,0,0,1">
+              <Grid Margin="14,0">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                  <Ellipse Width="8" Height="8" Fill="#8AB4F8" />
+                  <Rectangle Width="74" Height="7" Margin="9,0,0,0"
+                             RadiusX="3.5" RadiusY="3.5" Fill="#C8FFFFFF" />
+                </StackPanel>
+              </Grid>
+            </Border>
+
+            <Grid Width="42%"
+                  MinWidth="180"
+                  MaxWidth="340"
+                  HorizontalAlignment="Right"
+                  Margin="0,58,18,18">
+              <Border CornerRadius="16"
+                      Background="{DynamicResource ApplicationBackgroundBrush}"
+                      Opacity="{Binding PanelOpacity}" />
+              <StackPanel Margin="18">
+                <TextBlock Text="Codex"
+                           FontSize="18"
+                           FontWeight="SemiBold"
+                           Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                <TextBlock Margin="0,5,0,16"
+                           Text="{localization:Loc Section_Preview, Fallback=Preview}"
+                           Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                <Border Height="54" CornerRadius="9"
+                        Background="{DynamicResource ControlFillColorDefaultBrush}" />
+                <Border Height="34" Margin="0,10,0,0" CornerRadius="9"
+                        Background="{DynamicResource ControlFillColorDefaultBrush}" />
+                <Border Height="34" Margin="0,10,0,0" CornerRadius="9"
+                        Background="{DynamicResource AccentFillColorDefaultBrush}"
+                        Opacity="0.85" />
+              </StackPanel>
+            </Grid>
+
+            <Border HorizontalAlignment="Left"
+                    VerticalAlignment="Bottom"
+                    Margin="16"
+                    Padding="10,6"
+                    CornerRadius="8"
+                    Background="#B020242B"
+                    Visibility="{Binding HasSelectedMedia, Converter={StaticResource BooleanToVisibilityConverter}}">
+              <StackPanel Orientation="Horizontal">
+                <ui:SymbolIcon Symbol="Image24" Foreground="White" />
+                <TextBlock Margin="7,0,0,0"
+                           MaxWidth="280"
+                           VerticalAlignment="Center"
+                           Foreground="White"
+                           FontWeight="SemiBold"
+                           Text="{Binding SelectedMediaName}"
+                           TextTrimming="CharacterEllipsis" />
+              </StackPanel>
+            </Border>
+
+            <Border x:Name="DropOverlay"
+                    Visibility="Collapsed"
+                    Margin="10"
+                    CornerRadius="14"
+                    BorderBrush="{DynamicResource AccentFillColorDefaultBrush}"
+                    BorderThickness="2"
+                    Background="#D9192636"
+                    IsHitTestVisible="False">
+              <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                <ui:SymbolIcon Symbol="ArrowUpload24"
+                               FontSize="36"
+                               Foreground="#DCEAFF" />
+                <TextBlock Margin="0,12,0,0"
+                           Text="{localization:Loc Hint_DropMedia, Fallback='Drop one image or video here'}"
+                           Foreground="White"
+                           FontSize="17"
+                           FontWeight="SemiBold" />
+              </StackPanel>
+            </Border>
+          </Grid>
+        </ui:Card>
+
+        <ui:Card Grid.Row="2">
+          <Grid Margin="14,12">
+            <Grid.RowDefinitions>
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <Grid>
+              <TextBlock Style="{StaticResource SectionHeadingStyle}"
+                         Text="{localization:Loc Section_RecentMedia, Fallback='Recent media'}" />
+              <ui:Button HorizontalAlignment="Right"
+                         Appearance="Transparent"
+                         Padding="8,3"
+                         FontSize="12"
+                         Content="{localization:Loc Action_ClearRecent, Fallback='Clear recent'}"
+                         Command="{Binding ClearRecentsCommand}" />
+            </Grid>
+            <Grid Grid.Row="1" Margin="0,10,0,0">
+              <TextBlock Text="{localization:Loc Hint_NoRecentMedia, Fallback='Your recently used media will appear here.'}">
+                <TextBlock.Style>
+                  <Style TargetType="TextBlock" BasedOn="{StaticResource CaptionTextStyle}">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                    <Style.Triggers>
+                      <DataTrigger Binding="{Binding Recents.Count}" Value="0">
+                        <Setter Property="Visibility" Value="Visible" />
+                      </DataTrigger>
+                    </Style.Triggers>
+                  </Style>
+                </TextBlock.Style>
+              </TextBlock>
+              <ListBox x:Name="RecentMediaList"
+                       ItemsSource="{Binding Recents}"
+                       Background="Transparent"
+                       BorderThickness="0"
+                       ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                       ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                       SelectionChanged="RecentMediaList_SelectionChanged">
+                <ListBox.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <StackPanel Orientation="Horizontal" />
+                  </ItemsPanelTemplate>
+                </ListBox.ItemsPanel>
+                <ListBox.ItemTemplate>
+                  <DataTemplate>
+                    <Grid Width="154" Margin="0,0,8,0">
+                      <Border Height="58"
+                              Padding="10"
+                              CornerRadius="8"
+                              Background="{DynamicResource ControlFillColorDefaultBrush}">
+                        <Grid>
+                          <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="30" />
+                            <ColumnDefinition Width="*" />
+                          </Grid.ColumnDefinitions>
+                          <Border Width="28" Height="28" CornerRadius="7"
+                                  Background="{DynamicResource AccentFillColorSecondaryBrush}">
+                            <ui:SymbolIcon Symbol="Image24"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center" />
+                          </Border>
+                          <StackPanel Grid.Column="1" Margin="8,0,0,0"
+                                      VerticalAlignment="Center">
+                            <TextBlock Text="{Binding DisplayName}"
+                                       TextTrimming="CharacterEllipsis"
+                                       FontWeight="SemiBold" />
+                            <TextBlock FontSize="11"
+                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}">
+                              <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                  <Setter Property="Text" Value="{localization:Loc Media_Image, Fallback=Image}" />
+                                  <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Kind}" Value="Video">
+                                      <Setter Property="Text" Value="{localization:Loc Media_Video, Fallback=Video}" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding Exists}" Value="False">
+                                      <Setter Property="Text" Value="{localization:Loc Hint_MissingMedia, Fallback=Missing}" />
+                                    </DataTrigger>
+                                  </Style.Triggers>
+                                </Style>
+                              </TextBlock.Style>
+                            </TextBlock>
+                          </StackPanel>
+                        </Grid>
+                      </Border>
+                      <ui:Button Width="26"
+                                 Height="26"
+                                 Padding="0"
+                                 Margin="0,-8,-5,0"
+                                 HorizontalAlignment="Right"
+                                 VerticalAlignment="Top"
+                                 Appearance="Secondary"
+                                 ToolTip="{localization:Loc Action_Remove, Fallback=Remove}"
+                                 Tag="{Binding Path}"
+                                 Click="RemoveRecent_Click">
+                        <ui:SymbolIcon Symbol="Dismiss16" FontSize="12" />
+                      </ui:Button>
+                    </Grid>
+                  </DataTemplate>
+                </ListBox.ItemTemplate>
+              </ListBox>
+            </Grid>
+          </Grid>
+        </ui:Card>
+      </Grid>
+
+      <ScrollViewer x:Name="InspectorScroller"
+                    Grid.Row="0"
+                    Grid.Column="2"
+                    VerticalScrollBarVisibility="Auto"
+                    HorizontalScrollBarVisibility="Disabled">
+        <StackPanel>
+          <TextBlock Style="{StaticResource PageHeadingStyle}"
+                     Text="{localization:Loc Section_Wallpaper, Fallback=Wallpaper}" />
+          <TextBlock Margin="0,5,0,18"
+                     Style="{StaticResource CaptionTextStyle}"
+                     Text="{localization:Loc App_Description, Fallback='A private, local wallpaper layer for Codex.'}" />
+
+          <ui:Card Margin="0,0,0,12">
+            <StackPanel Margin="16">
+              <Grid>
+                <StackPanel>
+                  <TextBlock Style="{StaticResource SectionHeadingStyle}"
+                             Text="{localization:Loc Section_Wallpaper, Fallback=Wallpaper}" />
+                  <TextBlock Margin="0,3,105,0"
+                             Style="{StaticResource CaptionTextStyle}"
+                             Text="{localization:Loc Hint_SupportedFormats, Fallback='PNG, JPEG, WebP, MP4, or WebM'}" />
+                </StackPanel>
+                <ui:Button HorizontalAlignment="Right"
+                           VerticalAlignment="Top"
+                           Content="{localization:Loc Action_SelectMedia, Fallback='Choose media'}"
+                           IsEnabled="{Binding CanEdit}"
+                           Click="ChooseMedia_Click" />
+              </Grid>
+              <Border Margin="0,14,0,0"
+                      Padding="11,9"
+                      CornerRadius="8"
+                      Background="{DynamicResource ControlFillColorDefaultBrush}">
+                <Grid>
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                  </Grid.ColumnDefinitions>
+                  <ui:SymbolIcon Symbol="Document24" />
+                  <StackPanel Grid.Column="1" Margin="9,0,0,0">
+                    <TextBlock Text="{Binding SelectedMediaName}"
+                               TextTrimming="CharacterEllipsis"
+                               FontWeight="SemiBold"
+                               ToolTip="{Binding SelectedMediaPath}" />
+                    <TextBlock Text="{localization:Loc Hint_MissingMedia, Fallback='This file is no longer available.'}"
+                               Style="{StaticResource CaptionTextStyle}"
+                               Visibility="{Binding IsMediaMissing, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                  </StackPanel>
+                </Grid>
+              </Border>
+            </StackPanel>
+          </ui:Card>
+
+          <ui:Card Margin="0,0,0,12">
+            <StackPanel Margin="16">
+              <TextBlock Margin="0,0,0,14"
+                         Style="{StaticResource SectionHeadingStyle}"
+                         Text="{localization:Loc Section_Appearance, Fallback=Appearance}" />
+
+              <TextBlock Style="{StaticResource InspectorLabelStyle}"
+                         Text="{localization:Loc Label_Fit, Fallback='Image fit'}" />
+              <ComboBox Margin="0,0,0,16"
+                        SelectedValue="{Binding Fit, Mode=TwoWay}"
+                        SelectedValuePath="Tag"
+                        IsEnabled="{Binding CanEdit}">
+                <ComboBoxItem Content="{localization:Loc Fit_Cover, Fallback='Fill frame'}"
+                              Tag="{x:Static settings:WallpaperFit.Cover}" />
+                <ComboBoxItem Content="{localization:Loc Fit_Contain, Fallback='Show entire image'}"
+                              Tag="{x:Static settings:WallpaperFit.Contain}" />
+              </ComboBox>
+
+              <Grid>
+                <TextBlock Style="{StaticResource InspectorLabelStyle}"
+                           Text="{localization:Loc Label_PanelOpacity, Fallback='Panel opacity'}" />
+                <TextBlock HorizontalAlignment="Right"
+                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                           Text="{Binding PanelOpacityPercent}" />
+              </Grid>
+              <Slider Minimum="0.60"
+                      Maximum="0.95"
+                      TickFrequency="0.01"
+                      Value="{Binding PanelOpacity, Mode=TwoWay}"
+                      IsEnabled="{Binding CanEdit}"
+                      AutomationProperties.Name="{localization:Loc Label_PanelOpacity, Fallback='Panel opacity'}"
+                      Margin="0,0,0,16" />
+
+              <Grid>
+                <TextBlock Style="{StaticResource InspectorLabelStyle}"
+                           Text="{localization:Loc Label_Blur, Fallback='Background blur'}" />
+                <TextBlock HorizontalAlignment="Right"
+                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                           Text="{Binding BlurLabel}" />
+              </Grid>
+              <Slider Minimum="0"
+                      Maximum="24"
+                      TickFrequency="1"
+                      IsSnapToTickEnabled="True"
+                      Value="{Binding BlurPx, Mode=TwoWay}"
+                      IsEnabled="{Binding CanEdit}"
+                      AutomationProperties.Name="{localization:Loc Label_Blur, Fallback='Background blur'}" />
+            </StackPanel>
+          </ui:Card>
+
+          <ui:Card>
+            <Grid Margin="16">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+              </Grid.ColumnDefinitions>
+              <Border Width="34" Height="34" CornerRadius="10"
+                      Background="{DynamicResource AccentFillColorSecondaryBrush}">
+                <ui:SymbolIcon Symbol="ShieldLock24"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center" />
+              </Border>
+              <StackPanel Grid.Column="1" Margin="11,0,10,0">
+                <TextBlock Style="{StaticResource SectionHeadingStyle}"
+                           Text="{localization:Loc Section_SafetyPrivacy, Fallback='Safety &amp; privacy'}" />
+                <TextBlock Margin="0,3,0,0"
+                           Style="{StaticResource CaptionTextStyle}"
+                           Text="{localization:Loc Risk_Summary, Fallback='Enhanced launch uses a local Chromium debugging endpoint.'}" />
+              </StackPanel>
+              <ui:Button Grid.Column="2"
+                         VerticalAlignment="Center"
+                         Content="{localization:Loc Action_LearnMore, Fallback='Review'}"
+                         Click="ReviewRisk_Click" />
+            </Grid>
+          </ui:Card>
+        </StackPanel>
+      </ScrollViewer>
+    </Grid>
+
+    <Border Grid.Row="2"
+            Padding="24,12,24,16"
+            Background="{DynamicResource ApplicationBackgroundBrush}"
+            BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+            BorderThickness="0,1,0,0">
       <Grid>
-        <Image x:Name="ImagePreview" Stretch="UniformToFill" Visibility="Collapsed" />
-        <MediaElement x:Name="VideoPreview" Stretch="UniformToFill" LoadedBehavior="Manual"
-                      UnloadedBehavior="Stop" IsMuted="True" Visibility="Collapsed"
-                      MediaEnded="VideoPreview_MediaEnded" MediaFailed="VideoPreview_MediaFailed" />
-        <TextBlock x:Name="EmptyPreview" Text="选择一张图片或一段静音视频进行预览"
-                   HorizontalAlignment="Center" VerticalAlignment="Center"
-                   Foreground="#9BA3AF" FontSize="18" TextWrapping="Wrap" />
+        <Grid.RowDefinitions>
+          <RowDefinition Height="Auto" />
+          <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <ui:InfoBar Grid.Row="0"
+                    Margin="0,0,0,10"
+                    IsOpen="{Binding IsStatusOpen, Mode=TwoWay}"
+                    IsClosable="True"
+                    Title="{Binding StatusTitle}"
+                    Message="{Binding StatusMessage}"
+                    Severity="{Binding StatusTone, Converter={StaticResource StatusToneConverter}}" />
+
+        <Grid Grid.Row="1">
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="Auto" />
+          </Grid.ColumnDefinitions>
+
+          <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+            <ui:ProgressRing Width="22"
+                             Height="22"
+                             Margin="0,0,9,0"
+                             IsIndeterminate="True"
+                             Visibility="{Binding IsBusy, Converter={StaticResource BooleanToVisibilityConverter}}" />
+            <TextBlock VerticalAlignment="Center"
+                       Text="{Binding OperationStage}"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+            <ui:Button Margin="10,0,0,0"
+                       Appearance="Transparent"
+                       Content="{localization:Loc Action_Cancel, Fallback=Cancel}"
+                       Command="{Binding CancelCommand}"
+                       Visibility="{Binding IsBusy, Converter={StaticResource BooleanToVisibilityConverter}}" />
+            <ui:Button Margin="10,0,0,0"
+                       Appearance="Transparent"
+                       Content="{localization:Loc Action_Retry, Fallback=Retry}"
+                       Command="{Binding RetryShortcutCommand}"
+                       Visibility="{Binding ShortcutNeedsRetry, Converter={StaticResource BooleanToVisibilityConverter}}" />
+          </StackPanel>
+
+          <WrapPanel Grid.Column="1" HorizontalAlignment="Right">
+            <ui:Button Margin="0,0,8,0"
+                       Content="{Binding PauseButtonText}"
+                       Command="{Binding TogglePauseCommand}" />
+            <ui:Button Margin="0,0,8,0"
+                       Content="{localization:Loc Action_RestoreOfficial, Fallback='Restore official'}"
+                       Command="{Binding DisableCommand}" />
+            <ui:Button MinWidth="154"
+                       Appearance="Primary"
+                       Content="{Binding ApplyButtonText}"
+                       IsEnabled="{Binding CanEdit}"
+                       Click="Apply_Click" />
+          </WrapPanel>
+        </Grid>
       </Grid>
     </Border>
 
-    <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto">
-      <StackPanel>
-        <TextBlock Text="Backdrop for Codex" FontSize="30" FontWeight="SemiBold" />
-        <TextBlock Margin="0,8,0,24" Foreground="#AAB2BF" TextWrapping="Wrap"
-                   Text="为官方 Codex 添加可随时关闭的本地动态背景。非 OpenAI 官方项目。" />
-
-        <Button x:Name="ChooseMediaButton" Height="42" Content="选择壁纸…" Click="ChooseMedia_Click" />
-        <TextBlock x:Name="MediaPathText" Margin="0,8,0,18" Foreground="#AAB2BF"
-                   Text="尚未选择" TextTrimming="CharacterEllipsis" ToolTipService.ShowDuration="30000" />
-
-        <TextBlock Text="填充方式" />
-        <ComboBox x:Name="FitComboBox" SelectedIndex="0" Margin="0,4,0,14" Height="34">
-          <ComboBoxItem Content="裁切铺满（Cover）" />
-          <ComboBoxItem Content="完整显示（Contain）" />
-        </ComboBox>
-
-        <TextBlock Text="面板不透明度" />
-        <Slider x:Name="PanelOpacitySlider" Minimum="0.60" Maximum="0.95" Value="0.78"
-                TickFrequency="0.01" Margin="0,4,0,14" />
-        <TextBlock Text="模糊强度" />
-        <Slider x:Name="BlurSlider" Minimum="0" Maximum="24" Value="14"
-                TickFrequency="1" Margin="0,4,0,20" />
-
-        <CheckBox x:Name="RiskAcknowledgement" Margin="0,0,0,18"
-                  Unchecked="RiskAcknowledgement_Unchecked">
-          <TextBlock TextWrapping="Wrap"
-                     Text="我了解：增强启动会开启仅限本机的 Chromium 调试端口；该端口会持续到 Codex 退出。" />
-        </CheckBox>
-
-        <Button x:Name="LaunchButton" Height="46" FontWeight="SemiBold"
-                Background="{StaticResource AccentBrush}" Foreground="#101318"
-                Content="保存并增强启动 Codex" Click="Launch_Click" />
-        <Grid Margin="0,10,0,0">
-          <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="*" />
-            <ColumnDefinition Width="10" />
-            <ColumnDefinition Width="*" />
-          </Grid.ColumnDefinitions>
-          <Button x:Name="PauseButton" Grid.Column="0" Height="40" Content="暂停视频"
-                  Click="Pause_Click" IsEnabled="False" />
-          <Button Grid.Column="2" Height="40" Content="关闭壁纸并恢复官方背景"
-                  Click="Disable_Click" />
-        </Grid>
-
-        <TextBlock x:Name="StatusText" Margin="0,20,0,0" Foreground="#9BA3AF"
-                   TextWrapping="Wrap" Text="状态：尚未启动" />
-      </StackPanel>
-    </ScrollViewer>
+    <ui:SnackbarPresenter x:Name="SnackbarPresenter"
+                          Grid.Row="1"
+                          Grid.RowSpan="2"
+                          HorizontalAlignment="Right"
+                          VerticalAlignment="Bottom"
+                          Margin="24,24,24,88" />
+    <ui:ContentDialogHost x:Name="DialogHost"
+                          Grid.Row="0"
+                          Grid.RowSpan="3"
+                          IsDisableSiblingsEnabled="True" />
   </Grid>
-</Window>
+</ui:FluentWindow>

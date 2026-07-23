@@ -4,7 +4,6 @@
     <TargetFramework>net10.0-windows10.0.22000.0</TargetFramework>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <UseWPF>true</UseWPF>
-    <UseWindowsForms>true</UseWindowsForms>
     <RootNamespace>BackdropForCodex.App</RootNamespace>
     <AssemblyName>BackdropForCodex</AssemblyName>
     <AssemblyTitle>Backdrop for Codex</AssemblyTitle>
@@ -17,5 +16,10 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../BackdropForCodex.Core/BackdropForCodex.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" />
+    <PackageReference Include="WPF-UI" />
+    <PackageReference Include="WPF-UI.Tray" />
   </ItemGroup>
 </Project>
