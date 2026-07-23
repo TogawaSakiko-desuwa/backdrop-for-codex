@@ -125,16 +125,30 @@ jobs:
             @{ Package = "microsoft.netcore.app.runtime.win-x64"; Source = "THIRD-PARTY-NOTICES.TXT"; Destination = "dotnet-runtime-THIRD-PARTY-NOTICES.txt" },
             @{ Package = "microsoft.windowsdesktop.app.runtime.win-x64"; Source = "LICENSE"; Destination = "windowsdesktop-LICENSE.txt" },
             @{ Package = "microsoft.aspnetcore.app.runtime.win-x64"; Source = "LICENSE.txt"; Destination = "aspnetcore-LICENSE.txt" },
-            @{ Package = "microsoft.aspnetcore.app.runtime.win-x64"; Source = "THIRD-PARTY-NOTICES.TXT"; Destination = "aspnetcore-THIRD-PARTY-NOTICES.txt" }
+            @{ Package = "microsoft.aspnetcore.app.runtime.win-x64"; Source = "THIRD-PARTY-NOTICES.TXT"; Destination = "aspnetcore-THIRD-PARTY-NOTICES.txt" },
+            @{ Package = "wpf-ui"; Version = "4.3.0"; Source = "LICENSE.md"; Destination = "wpf-ui-LICENSE.md" },
+            @{ Package = "wpf-ui"; Version = "4.3.0"; Source = "ThirdPartyNotices.txt"; Destination = "wpf-ui-THIRD-PARTY-NOTICES.txt" },
+            @{ Package = "wpf-ui.tray"; Version = "4.3.0"; Source = "LICENSE.md"; Destination = "wpf-ui-tray-LICENSE.md" },
+            @{ Package = "wpf-ui.tray"; Version = "4.3.0"; Source = "ThirdPartyNotices.txt"; Destination = "wpf-ui-tray-THIRD-PARTY-NOTICES.txt" },
+            @{ Package = "communitytoolkit.mvvm"; Version = "8.4.2"; Source = "License.md"; Destination = "communitytoolkit-mvvm-LICENSE.md" },
+            @{ Package = "communitytoolkit.mvvm"; Version = "8.4.2"; Source = "ThirdPartyNotices.txt"; Destination = "communitytoolkit-mvvm-THIRD-PARTY-NOTICES.txt" }
           )
 
           foreach ($notice in $noticeFiles) {
             $packageRoot = Join-Path $nugetRoot $notice.Package
-            $versionDirectory = @(
-              Get-ChildItem -LiteralPath $packageRoot -Directory -ErrorAction Stop |
-                Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName $notice.Source) } |
-                Sort-Object LastWriteTimeUtc -Descending
-            ) | Select-Object -First 1
+            if ($notice.ContainsKey("Version")) {
+              $versionDirectory = Get-Item -LiteralPath (Join-Path $packageRoot $notice.Version) -ErrorAction Stop
+              if (-not (Test-Path -LiteralPath (Join-Path $versionDirectory.FullName $notice.Source) -PathType Leaf)) {
+                throw "Required upstream notice was not restored: $($notice.Package)/$($notice.Version)/$($notice.Source)"
+              }
+            }
+            else {
+              $versionDirectory = @(
+                Get-ChildItem -LiteralPath $packageRoot -Directory -ErrorAction Stop |
+                  Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName $notice.Source) -PathType Leaf } |
+                  Sort-Object LastWriteTimeUtc -Descending
+              ) | Select-Object -First 1
+            }
             if ($null -eq $versionDirectory) {
               throw "Required upstream notice was not restored: $($notice.Package)/$($notice.Source)"
             }
@@ -183,7 +197,10 @@ jobs:
           $sbom = Get-Content -LiteralPath $generatedSbom -Raw -Encoding utf8 | ConvertFrom-Json
           $packageNames = @($sbom.packages | ForEach-Object name)
           $requiredPackages = @(
+            "CommunityToolkit.Mvvm",
             "PuppeteerSharp",
+            "WPF-UI",
+            "WPF-UI.Tray",
             "Microsoft.NETCore.App.Runtime.win-x64",
             "Microsoft.WindowsDesktop.App.Runtime.win-x64",
             "Microsoft.AspNetCore.App.Runtime.win-x64"

@@ -1,25 +1,30 @@
 # 第三方软件声明
 
-最后人工核对：2026-07-22
+最后人工核对：2026-07-23
 
-Backdrop for Codex 依据 Apache License 2.0 发布，但它依赖或随发布物包含由其他作者提供的软件。第三方组件仍受各自许可证和声明约束。本文件是便于阅读的基线；具体发行版中直接、传递、运行时及相关构建组件的机器可读清单是随该发行版发布的 SPDX SBOM，发行 ZIP 同时保留适用的 .NET/ASP.NET Core/Windows Desktop 上游许可证与第三方 notice。
+Backdrop for Codex 依据 Apache License 2.0 发布，但它依赖或随发布物包含由其他作者提供的软件。第三方组件仍受各自许可证和声明约束。本文件是便于阅读的基线；具体发行版中直接、传递、运行时及相关构建组件的机器可读清单是随该发行版发布的 SPDX SBOM，发行 ZIP 同时保留适用的 WPF-UI、WPF-UI.Tray、CommunityToolkit.Mvvm、.NET/ASP.NET Core/Windows Desktop 上游许可证与第三方 notice。
 
 ## 运行时直接依赖
 
 | 组件 | 当前直接版本/来源 | 用途 | 上游许可证 |
 | --- | --- | --- | --- |
+| WPF-UI | 4.3.0 | Fluent 控件、主题、Mica 与窗口基础 | MIT |
+| WPF-UI.Tray | 4.3.0 | 纯 WPF 通知区域图标 | MIT |
+| CommunityToolkit.Mvvm | 8.4.2 | ViewModel、可观察属性与命令基础设施 | MIT |
 | PuppeteerSharp | 25.3.4 | CDP 客户端 | MIT |
 | WebDriverBiDi | 0.0.54（传递依赖） | 浏览器协议模型 | MIT |
 | Microsoft.IO.RecyclableMemoryStream | 3.0.1（传递依赖） | PuppeteerSharp 缓冲区 | MIT |
-| .NET Runtime / Windows Desktop | .NET 10，self-contained `win-x64` | 托管运行时、WPF/WinForms | MIT 及其上游第三方声明 |
+| .NET Runtime / Windows Desktop | .NET 10，self-contained `win-x64` | 托管运行时与 WPF | MIT 及其上游第三方声明 |
 | ASP.NET Core shared framework | .NET 10 | 回环媒体服务 | MIT 及其上游第三方声明 |
 
 上游项目：
 
+- WPF-UI / WPF-UI.Tray: <https://github.com/lepoco/wpfui>
+- CommunityToolkit.Mvvm: <https://github.com/CommunityToolkit/dotnet>
 - PuppeteerSharp: <https://github.com/hardkoded/puppeteer-sharp>
 - WebDriverBiDi.NET: <https://github.com/webdriverbidi-net/webdriverbidi-net>
 - Microsoft.IO.RecyclableMemoryStream: <https://github.com/microsoft/Microsoft.IO.RecyclableMemoryStream>
-- .NET Runtime、WPF、WinForms、ASP.NET Core: <https://github.com/dotnet>
+- .NET Runtime、WPF、ASP.NET Core: <https://github.com/dotnet>
 
 Windows API、媒体栈、Microsoft Store/MSIX 与官方 Codex 由用户系统或独立产品提供，不因本项目而重新许可或成为本项目的一部分。
 
