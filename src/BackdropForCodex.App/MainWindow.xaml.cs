@@ -5,13 +5,20 @@ using System.Runtime.InteropServices;
 using System.Security;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
+using BackdropForCodex.App.Models;
 using BackdropForCodex.App.Services.Appearance;
 using BackdropForCodex.App.Services.Localization;
 using BackdropForCodex.App.ViewModels;
 using BackdropForCodex.App.Views;
 using BackdropForCodex.Core.Media;
+using BackdropForCodex.Core.Settings;
 using Microsoft.Win32;
+using Wpf.Ui.Appearance;
 using Wpf.Ui.Controls;
 using TextBlock = System.Windows.Controls.TextBlock;
 
@@ -28,11 +35,16 @@ public partial class MainWindow : FluentWindow
     private readonly MainWindowViewModel _viewModel;
     private readonly IAppTextProvider _text;
     private readonly ThemeController _themeController;
+    private readonly DispatcherTimer _focusFadeTimer;
     private bool _allowClose;
     private bool _closeTipInProgress;
+    private bool _isDraggingFocus;
     private bool _videoPreviewSelected;
     private bool _previewPlaybackRequested;
+    private bool _previewMediaReady;
     private bool _reducedMotion;
+    private double _previewMediaWidth;
+    private double _previewMediaHeight;
     private string? _previewPath;
     private MediaKind _previewKind;
     private Task? _initializationTask;
@@ -46,9 +58,16 @@ public partial class MainWindow : FluentWindow
         InitializeComponent();
         DataContext = _viewModel;
         _themeController = new ThemeController(this);
+        _focusFadeTimer = new DispatcherTimer(
+            TimeSpan.FromMilliseconds(850),
+            DispatcherPriority.Background,
+            FocusFadeTimer_Tick,
+            Dispatcher);
+        _focusFadeTimer.Stop();
         Loaded += MainWindow_Loaded;
         Closed += MainWindow_Closed;
         _viewModel.PropertyChanged += ViewModel_PropertyChanged;
+        ApplicationThemeManager.Changed += ApplicationThemeManager_Changed;
     }
 
     public Task InitializeAsync() =>
@@ -95,6 +114,7 @@ public partial class MainWindow : FluentWindow
     {
         await _viewModel.InitializeAsync();
         _themeController.Apply(_viewModel.ThemeMode);
+        UpdatePreviewThemeOverlay();
         ClampInitialSizeToWorkArea();
         UpdateResponsiveLayout(ActualWidth);
         UpdatePreview(
@@ -117,6 +137,9 @@ public partial class MainWindow : FluentWindow
     private void MainWindow_Closed(object? sender, EventArgs e)
     {
         _viewModel.PropertyChanged -= ViewModel_PropertyChanged;
+        ApplicationThemeManager.Changed -= ApplicationThemeManager_Changed;
+        _focusFadeTimer.Stop();
+        _focusFadeTimer.Tick -= FocusFadeTimer_Tick;
         _viewModel.Dispose();
         _themeController.Dispose();
         StopAndClearPreview();
@@ -139,6 +162,23 @@ public partial class MainWindow : FluentWindow
         else if (e.PropertyName == nameof(MainWindowViewModel.ThemeMode))
         {
             _themeController.Apply(_viewModel.ThemeMode);
+            UpdatePreviewThemeOverlay();
+        }
+        else if (e.PropertyName is nameof(MainWindowViewModel.Fit) or
+                 nameof(MainWindowViewModel.FocusX) or
+                 nameof(MainWindowViewModel.FocusY))
+        {
+            ApplyPreviewLayout();
+            UpdateFocusIndicatorPosition();
+            if (!_viewModel.CanAdjustFocus)
+            {
+                HideFocusIndicator();
+            }
+        }
+        else if (e.PropertyName is nameof(MainWindowViewModel.DarkOverlay) or
+                 nameof(MainWindowViewModel.LightOverlay))
+        {
+            UpdatePreviewThemeOverlay();
         }
     }
 
@@ -456,6 +496,205 @@ public partial class MainWindow : FluentWindow
                extension.Equals(".webm", StringComparison.OrdinalIgnoreCase);
     }
 
+    private void MediaViewport_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (!_previewMediaReady &&
+            _videoPreviewSelected &&
+            VideoPreview.Source is not null)
+        {
+            SetPreviewFallbackBounds(VideoPreview);
+        }
+
+        ApplyPreviewLayout();
+        UpdateFocusIndicatorPosition();
+    }
+
+    private void FocusInteractionSurface_MouseLeftButtonDown(
+        object sender,
+        MouseButtonEventArgs e)
+    {
+        if (!_viewModel.CanAdjustFocus)
+        {
+            return;
+        }
+
+        _isDraggingFocus = true;
+        _ = FocusInteractionSurface.Focus();
+        _ = FocusInteractionSurface.CaptureMouse();
+        SetFocusFromPointer(e.GetPosition(FocusInteractionSurface));
+        ShowFocusIndicator(scheduleFade: false);
+        e.Handled = true;
+    }
+
+    private void FocusInteractionSurface_MouseMove(object sender, MouseEventArgs e)
+    {
+        if (!_isDraggingFocus)
+        {
+            return;
+        }
+
+        if (e.LeftButton != MouseButtonState.Pressed)
+        {
+            EndFocusDrag();
+            return;
+        }
+
+        SetFocusFromPointer(e.GetPosition(FocusInteractionSurface));
+        ShowFocusIndicator(scheduleFade: false);
+        e.Handled = true;
+    }
+
+    private void FocusInteractionSurface_MouseLeftButtonUp(
+        object sender,
+        MouseButtonEventArgs e)
+    {
+        if (!_isDraggingFocus)
+        {
+            return;
+        }
+
+        SetFocusFromPointer(e.GetPosition(FocusInteractionSurface));
+        EndFocusDrag();
+        e.Handled = true;
+    }
+
+    private void FocusInteractionSurface_LostMouseCapture(
+        object sender,
+        MouseEventArgs e)
+    {
+        if (!_isDraggingFocus)
+        {
+            return;
+        }
+
+        _isDraggingFocus = false;
+        ShowFocusIndicator(scheduleFade: true);
+    }
+
+    private void FocusInteractionSurface_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (!_viewModel.CanAdjustFocus)
+        {
+            return;
+        }
+
+        if (!MediaFocusInput.TryGetKeyboardDelta(
+                e.Key,
+                Keyboard.Modifiers,
+                out var delta))
+        {
+            return;
+        }
+
+        _viewModel.NudgeFocus(delta.Horizontal, delta.Vertical);
+        ShowFocusIndicator(scheduleFade: true);
+        e.Handled = true;
+    }
+
+    private void CenterFocus_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_viewModel.CanAdjustFocus)
+        {
+            return;
+        }
+
+        _viewModel.ResetFocus();
+        _ = FocusInteractionSurface.Focus();
+        ShowFocusIndicator(scheduleFade: true);
+    }
+
+    private void SetFocusFromPointer(Point point)
+    {
+        if (!MediaFocusInput.TryNormalizePointer(
+                point.X,
+                point.Y,
+                FocusInteractionSurface.ActualWidth,
+                FocusInteractionSurface.ActualHeight,
+                out var focus))
+        {
+            return;
+        }
+
+        _viewModel.SetFocus(focus.X, focus.Y);
+    }
+
+    private void EndFocusDrag()
+    {
+        _isDraggingFocus = false;
+        if (FocusInteractionSurface.IsMouseCaptured)
+        {
+            FocusInteractionSurface.ReleaseMouseCapture();
+        }
+
+        ShowFocusIndicator(scheduleFade: true);
+    }
+
+    private void ShowFocusIndicator(bool scheduleFade)
+    {
+        if (!_viewModel.CanAdjustFocus)
+        {
+            HideFocusIndicator();
+            return;
+        }
+
+        _focusFadeTimer.Stop();
+        FocusIndicator.BeginAnimation(OpacityProperty, null);
+        FocusIndicator.Opacity = 1;
+        UpdateFocusIndicatorPosition();
+        if (scheduleFade && !_isDraggingFocus)
+        {
+            _focusFadeTimer.Start();
+        }
+    }
+
+    private void HideFocusIndicator()
+    {
+        _focusFadeTimer.Stop();
+        FocusIndicator.BeginAnimation(OpacityProperty, null);
+        FocusIndicator.Opacity = 0;
+    }
+
+    private void FocusFadeTimer_Tick(object? sender, EventArgs e)
+    {
+        _focusFadeTimer.Stop();
+        if (!SystemParameters.ClientAreaAnimation)
+        {
+            HideFocusIndicator();
+            return;
+        }
+
+        FocusIndicator.BeginAnimation(
+            OpacityProperty,
+            new DoubleAnimation(
+                fromValue: FocusIndicator.Opacity,
+                toValue: 0,
+                duration: TimeSpan.FromMilliseconds(260))
+            {
+                EasingFunction = new QuadraticEase
+                {
+                    EasingMode = EasingMode.EaseOut,
+                },
+            });
+    }
+
+    private void UpdateFocusIndicatorPosition()
+    {
+        if (FocusInteractionSurface.ActualWidth <= 0 ||
+            FocusInteractionSurface.ActualHeight <= 0)
+        {
+            return;
+        }
+
+        Canvas.SetLeft(
+            FocusIndicator,
+            (_viewModel.FocusX * FocusInteractionSurface.ActualWidth) -
+            (FocusIndicator.Width / 2));
+        Canvas.SetTop(
+            FocusIndicator,
+            (_viewModel.FocusY * FocusInteractionSurface.ActualHeight) -
+            (FocusIndicator.Height / 2));
+    }
+
     private void UpdatePreview(string? path, MediaKind kind)
     {
         if (string.Equals(_previewPath, path, StringComparison.OrdinalIgnoreCase) &&
@@ -481,8 +720,11 @@ public partial class MainWindow : FluentWindow
                 VideoPreview.Position = TimeSpan.Zero;
                 VideoPreview.Visibility = Visibility.Visible;
                 EmptyPreview.Visibility = Visibility.Collapsed;
+                PreviewThemeOverlay.Visibility = Visibility.Visible;
                 _videoPreviewSelected = true;
                 _previewPlaybackRequested = !_viewModel.IsPaused;
+                SetPreviewFallbackBounds(VideoPreview);
+                UpdatePreviewThemeOverlay();
                 SynchronizePreviewPlayback();
                 return;
             }
@@ -497,6 +739,12 @@ public partial class MainWindow : FluentWindow
             ImagePreview.Source = bitmap;
             ImagePreview.Visibility = Visibility.Visible;
             EmptyPreview.Visibility = Visibility.Collapsed;
+            PreviewThemeOverlay.Visibility = Visibility.Visible;
+            _previewMediaWidth = bitmap.PixelWidth;
+            _previewMediaHeight = bitmap.PixelHeight;
+            _previewMediaReady = true;
+            ApplyPreviewLayout();
+            UpdatePreviewThemeOverlay();
         }
         catch (Exception exception) when (IsControlledPreviewException(exception))
         {
@@ -506,6 +754,16 @@ public partial class MainWindow : FluentWindow
 
     private void VideoPreview_MediaOpened(object sender, RoutedEventArgs e)
     {
+        _previewMediaWidth = VideoPreview.NaturalVideoWidth;
+        _previewMediaHeight = VideoPreview.NaturalVideoHeight;
+        _previewMediaReady =
+            _previewMediaWidth > 0 &&
+            _previewMediaHeight > 0;
+        if (_previewMediaReady)
+        {
+            ApplyPreviewLayout();
+        }
+
         if (_reducedMotion)
         {
             try
@@ -534,6 +792,74 @@ public partial class MainWindow : FluentWindow
 
     private void VideoPreview_MediaFailed(object sender, ExceptionRoutedEventArgs e) =>
         ShowPreviewFailure();
+
+    private void ApplyPreviewLayout()
+    {
+        if (!_previewMediaReady)
+        {
+            return;
+        }
+
+        var plan = MediaPreviewLayout.CalculateForMedia(
+            _previewKind,
+            MediaViewport.ActualWidth,
+            MediaViewport.ActualHeight,
+            _previewMediaWidth,
+            _previewMediaHeight,
+            _viewModel.Fit,
+            _viewModel.FocusX,
+            _viewModel.FocusY);
+        if (plan.IsEmpty)
+        {
+            return;
+        }
+
+        FrameworkElement previewElement = plan.MediaKind == MediaKind.Video
+            ? VideoPreview
+            : ImagePreview;
+        var placement = plan.Placement;
+        previewElement.Width = placement.Width;
+        previewElement.Height = placement.Height;
+        Canvas.SetLeft(previewElement, placement.OffsetX);
+        Canvas.SetTop(previewElement, placement.OffsetY);
+    }
+
+    private void SetPreviewFallbackBounds(FrameworkElement previewElement)
+    {
+        previewElement.Width = Math.Max(0, MediaViewport.ActualWidth);
+        previewElement.Height = Math.Max(0, MediaViewport.ActualHeight);
+        Canvas.SetLeft(previewElement, 0);
+        Canvas.SetTop(previewElement, 0);
+    }
+
+    private void ApplicationThemeManager_Changed(
+        ApplicationTheme currentApplicationTheme,
+        Color systemAccent)
+    {
+        _ = currentApplicationTheme;
+        _ = systemAccent;
+        if (Dispatcher.CheckAccess())
+        {
+            UpdatePreviewThemeOverlay();
+            return;
+        }
+
+        _ = Dispatcher.BeginInvoke(UpdatePreviewThemeOverlay);
+    }
+
+    private void UpdatePreviewThemeOverlay()
+    {
+        var applicationTheme = ApplicationThemeManager.GetAppTheme();
+        var systemTheme = ApplicationThemeManager.GetSystemTheme();
+        var overlay = PreviewThemeOverlayResolver.Resolve(
+            applicationTheme,
+            systemTheme,
+            _viewModel.DarkOverlay,
+            _viewModel.LightOverlay);
+        PreviewThemeOverlay.Background =
+            overlay.IsLight ? Brushes.White : Brushes.Black;
+        PreviewThemeOverlay.Opacity = overlay.Opacity;
+    }
 
     private void Window_IsVisibleChanged(
         object sender,
@@ -580,9 +906,15 @@ public partial class MainWindow : FluentWindow
         ImagePreview.Source = null;
         ImagePreview.Visibility = Visibility.Collapsed;
         VideoPreview.Visibility = Visibility.Collapsed;
+        PreviewThemeOverlay.Visibility = Visibility.Collapsed;
         EmptyPreview.Visibility = Visibility.Visible;
+        _previewMediaWidth = 0;
+        _previewMediaHeight = 0;
+        _previewMediaReady = false;
         _videoPreviewSelected = false;
         _previewPlaybackRequested = false;
+        _isDraggingFocus = false;
+        HideFocusIndicator();
     }
 
     private void ShowPreviewFailure()

@@ -6,7 +6,8 @@ namespace BackdropForCodex.Core.Settings;
 public enum WallpaperFit
 {
     Cover = 0,
-    Contain,
+    Contain = 1,
+    Stretch = 2,
 }
 
 /// <summary>
@@ -20,6 +21,8 @@ public sealed record SettingsV1
     public const int MaximumRecentMediaPaths = 8;
 
     public const int MaximumPathLength = 32767;
+
+    public const double MaximumEffectiveOverlay = 0.60;
 
     public int SchemaVersion { get; init; } = CurrentSchemaVersion;
 
@@ -200,6 +203,16 @@ public sealed record SettingsV1
         return this with
         {
             RecentMediaPaths = new ReadOnlyCollection<string>(RecentMediaPaths.ToArray()),
+        };
+    }
+
+    internal SettingsV1 SnapshotForSave()
+    {
+        var snapshot = Snapshot();
+        return snapshot with
+        {
+            DarkOverlay = Math.Min(snapshot.DarkOverlay, MaximumEffectiveOverlay),
+            LightOverlay = Math.Min(snapshot.LightOverlay, MaximumEffectiveOverlay),
         };
     }
 

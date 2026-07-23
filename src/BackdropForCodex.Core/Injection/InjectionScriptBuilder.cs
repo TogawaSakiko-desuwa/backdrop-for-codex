@@ -41,6 +41,10 @@ public static class InjectionScriptBuilder
                 options.MediaKind == WallpaperMediaKind.Video ? "video" : "image",
                 ToCss(options.ObjectFit),
                 options.MediaOpacity,
+                options.Composition.FocusX,
+                options.Composition.FocusY,
+                options.Composition.DarkOverlay,
+                options.Composition.LightOverlay,
                 checked((int)HeartbeatInterval.TotalMilliseconds),
                 checked((int)LeaseTimeout.TotalMilliseconds),
                 checked((int)MediaLoadTimeout.TotalMilliseconds),
@@ -117,10 +121,15 @@ public static class InjectionScriptBuilder
                   --codex-wallpaper-saturation: ${cfg.glassSaturation};
                   --codex-wallpaper-border: rgb(255 255 255 / 0.14);
                   --codex-wallpaper-radius: 16px;
+                  --codex-wallpaper-overlay: light-dark(
+                    rgb(255 255 255 / ${cfg.lightOverlay}),
+                    rgb(0 0 0 / ${cfg.darkOverlay}));
                 }
-                html,
-                body {
-                  background: transparent !important;
+                :root:is(.dark, .electron-dark, [data-theme="dark"]) {
+                  --codex-wallpaper-overlay: rgb(0 0 0 / ${cfg.darkOverlay});
+                }
+                :root:is(.light, .electron-light, [data-theme="light"]) {
+                  --codex-wallpaper-overlay: rgb(255 255 255 / ${cfg.lightOverlay});
                 }
                 #${cfg.rootId} {
                   position: fixed;
@@ -139,19 +148,32 @@ public static class InjectionScriptBuilder
                   width: 100%;
                   height: 100%;
                   object-fit: ${cfg.objectFit};
+                  object-position:
+                    ${cfg.objectFit === "cover" ? cfg.focusX * 100 : 50}%
+                    ${cfg.objectFit === "cover" ? cfg.focusY * 100 : 50}%;
                   opacity: ${cfg.mediaOpacity};
                 }
-                body > #root {
-                  position: relative;
-                  z-index: 1;
-                  background: transparent !important;
-                }
-                body main {
-                  background: transparent !important;
-                  -webkit-backdrop-filter: none !important;
-                  backdrop-filter: none !important;
+                #${cfg.rootId} > [data-codex-wallpaper-overlay] {
+                  position: absolute;
+                  inset: 0;
+                  background-color: var(--codex-wallpaper-overlay);
+                  pointer-events: none;
                 }
                 @media (forced-colors: none) {
+                  html,
+                  body {
+                    background: transparent !important;
+                  }
+                  body > #root {
+                    position: relative;
+                    z-index: 1;
+                    background: transparent !important;
+                  }
+                  body main {
+                    background: transparent !important;
+                    -webkit-backdrop-filter: none !important;
+                    backdrop-filter: none !important;
+                  }
                   body [role="main"]:has([data-home-ambient-suggestions])
                     section[class~="group/home-suggestions"]
                     button[type="button"][aria-labelledby] {
@@ -166,37 +188,72 @@ public static class InjectionScriptBuilder
                     -webkit-backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
                     backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
                   }
+                  /*
+                   * The reviewed right-panel shell owns the opaque theme surface. Glass that
+                   * shell once so the tab strip and every right-side detail share one layer.
+                   */
+                  body aside[data-app-shell-focus-area="right-panel"]
+                    > div:has([role="tabpanel"][data-app-shell-tab-panel-controller="right"])
+                    > div[class~="bg-token-main-surface-primary"] {
+                    background-color: var(--codex-wallpaper-glass) !important;
+                    -webkit-backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
+                    backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
+                    border-color: var(--codex-wallpaper-border);
+                  }
+                  /*
+                   * Clear only the audited file-layout and Markdown shells. Editor, diff,
+                   * code, table, and Popcorn content surfaces keep their theme backgrounds.
+                   */
+                  body [role="tabpanel"][data-app-shell-tab-panel-controller="right"]
+                    > [class~="bg-token-main-surface-primary"],
+                  body [role="tabpanel"][data-app-shell-tab-panel-controller="right"]
+                    [class~="relative"][class~="rounded-lg"][class~="bg-token-main-surface-primary"]:has(.markdown) {
+                    background-color: transparent !important;
+                  }
+                  body :is(
+                    aside:not([data-app-shell-focus-area="right-panel"]),
+                    .app-header-tint,
+                    [role="dialog"],
+                    [data-codex-wallpaper-glass]) {
+                    background-color: var(--codex-wallpaper-glass) !important;
+                    -webkit-backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
+                    backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
+                    border-color: var(--codex-wallpaper-border);
+                  }
+                  body :is(
+                    aside:not([data-app-shell-focus-area="right-panel"]),
+                    .app-header-tint,
+                    [role="dialog"],
+                    [data-codex-wallpaper-glass]) :is(nav, header) {
+                    background: transparent !important;
+                    -webkit-backdrop-filter: none !important;
+                    backdrop-filter: none !important;
+                  }
+                  body main [data-response-annotation-conversation][data-response-annotation-target],
+                  body main [data-user-message-bubble="true"] {
+                    background-color: var(--codex-wallpaper-glass) !important;
+                    -webkit-backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
+                    backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
+                    border: 1px solid var(--codex-wallpaper-border);
+                    border-radius: var(--codex-wallpaper-radius);
+                    box-sizing: border-box;
+                    box-shadow: 0 8px 28px rgb(0 0 0 / 0.18);
+                  }
+                  body main [data-response-annotation-conversation][data-response-annotation-target] {
+                    padding: 12px 16px;
+                  }
+                  body main [data-local-conversation-item-target-ids] {
+                    background-color: rgba(16, 18, 24, 0.58) !important;
+                    border: 1px solid rgb(255 255 255 / 0.06);
+                    border-radius: 10px;
+                    box-sizing: border-box;
+                    padding: 4px 8px;
+                  }
                 }
-                body :is(aside, .app-header-tint, [role="dialog"], [data-codex-wallpaper-glass]) {
-                  background-color: var(--codex-wallpaper-glass) !important;
-                  -webkit-backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
-                  backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
-                  border-color: var(--codex-wallpaper-border);
-                }
-                body :is(aside, .app-header-tint, [role="dialog"], [data-codex-wallpaper-glass]) :is(nav, header) {
-                  background: transparent !important;
-                  -webkit-backdrop-filter: none !important;
-                  backdrop-filter: none !important;
-                }
-                body main [data-response-annotation-conversation][data-response-annotation-target],
-                body main [data-user-message-bubble="true"] {
-                  background-color: var(--codex-wallpaper-glass) !important;
-                  -webkit-backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
-                  backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
-                  border: 1px solid var(--codex-wallpaper-border);
-                  border-radius: var(--codex-wallpaper-radius);
-                  box-sizing: border-box;
-                  box-shadow: 0 8px 28px rgb(0 0 0 / 0.18);
-                }
-                body main [data-response-annotation-conversation][data-response-annotation-target] {
-                  padding: 12px 16px;
-                }
-                body main [data-local-conversation-item-target-ids] {
-                  background-color: rgba(16, 18, 24, 0.58) !important;
-                  border: 1px solid rgb(255 255 255 / 0.06);
-                  border-radius: 10px;
-                  box-sizing: border-box;
-                  padding: 4px 8px;
+                @media (forced-colors: active) {
+                  #${cfg.rootId} {
+                    display: none !important;
+                  }
                 }
               `;
 
@@ -222,6 +279,12 @@ public static class InjectionScriptBuilder
                 media.decoding = "async";
               }
 
+              const overlay = document.createElement("div");
+              overlay.setAttribute("aria-hidden", "true");
+              overlay.dataset.codexWallpaperOverlay = "";
+              overlay.dataset.codexWallpaperOwner = cfg.owner;
+              overlay.dataset.codexWallpaperGeneration = String(cfg.generation);
+
               const fileInput = document.createElement("input");
               fileInput.id = cfg.fileInputId;
               fileInput.type = "file";
@@ -231,7 +294,7 @@ public static class InjectionScriptBuilder
               fileInput.dataset.codexWallpaperOwner = cfg.owner;
               fileInput.dataset.codexWallpaperGeneration = String(cfg.generation);
 
-              root.append(media, fileInput);
+              root.append(media, overlay, fileInput);
               (document.head || document.documentElement).appendChild(style);
               (document.body || document.documentElement).appendChild(root);
 
@@ -248,6 +311,7 @@ public static class InjectionScriptBuilder
                 activation: 0,
                 cancelActivation: null,
                 media,
+                overlay,
                 root,
                 style,
                 fileInput,
@@ -459,7 +523,7 @@ public static class InjectionScriptBuilder
               const state = globalThis[{{JsonSerializer.Serialize(StateProperty)}}];
               if (!state || state.generation !== {{generation}} || !state.mediaReady ||
                   !state.root?.isConnected || !state.style?.isConnected ||
-                  !state.media?.isConnected ||
+                  !state.media?.isConnected || !state.overlay?.isConnected ||
                   state.root.id !== {{JsonSerializer.Serialize(RootElementId)}} ||
                   state.style.id !== {{JsonSerializer.Serialize(StyleElementId)}} ||
                   document.getElementById({{JsonSerializer.Serialize(RootElementId)}}) !== state.root ||
@@ -470,7 +534,10 @@ public static class InjectionScriptBuilder
                   state.style.dataset.codexWallpaperGeneration !== {{JsonSerializer.Serialize(generation.ToString(System.Globalization.CultureInfo.InvariantCulture))}} ||
                   state.media.dataset.codexWallpaperOwner !== {{JsonSerializer.Serialize(Owner)}} ||
                   state.media.dataset.codexWallpaperGeneration !== {{JsonSerializer.Serialize(generation.ToString(System.Globalization.CultureInfo.InvariantCulture))}} ||
-                  state.media.parentElement !== state.root || !state.blobUrl ||
+                  state.overlay.dataset.codexWallpaperOwner !== {{JsonSerializer.Serialize(Owner)}} ||
+                  state.overlay.dataset.codexWallpaperGeneration !== {{JsonSerializer.Serialize(generation.ToString(System.Globalization.CultureInfo.InvariantCulture))}} ||
+                  state.media.parentElement !== state.root ||
+                  state.overlay.parentElement !== state.root || !state.blobUrl ||
                   state.media.currentSrc !== state.blobUrl || state.media.error) {
                 return false;
               }
@@ -587,6 +654,10 @@ public static class InjectionScriptBuilder
         string MediaKind,
         string ObjectFit,
         double MediaOpacity,
+        double FocusX,
+        double FocusY,
+        double DarkOverlay,
+        double LightOverlay,
         int HeartbeatIntervalMs,
         int LeaseTimeoutMs,
         int MediaLoadTimeoutMs,

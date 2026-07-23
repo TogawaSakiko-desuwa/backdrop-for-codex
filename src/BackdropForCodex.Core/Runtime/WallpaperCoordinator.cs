@@ -230,7 +230,7 @@ public sealed class WallpaperCoordinator : IAsyncDisposable
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(settings);
-        var snapshot = settings.Snapshot();
+        var snapshot = settings.SnapshotForSave();
 
         await _operationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -286,8 +286,9 @@ public sealed class WallpaperCoordinator : IAsyncDisposable
                 MediaPath = mediaPath,
                 MediaKind = metadata.Kind,
                 LastCompatibilityProfileId = profile.Id,
-            }).AddRecentMediaPath(mediaPath);
-            settings.Validate();
+            })
+                .AddRecentMediaPath(mediaPath)
+                .SnapshotForSave();
             await _settingsStore.SaveAsync(settings, cancellationToken).ConfigureAwait(false);
 
             var processes = await _processSource
@@ -700,13 +701,26 @@ public sealed class WallpaperCoordinator : IAsyncDisposable
                 MediaKind.Video => WallpaperMediaKind.Video,
                 _ => throw new InvalidOperationException("The validated media has no injectable kind."),
             },
-            settings.Fit == WallpaperFit.Cover
-                ? WallpaperObjectFit.Cover
-                : WallpaperObjectFit.Contain,
+            settings.Fit switch
+            {
+                WallpaperFit.Cover => WallpaperObjectFit.Cover,
+                WallpaperFit.Contain => WallpaperObjectFit.Contain,
+                WallpaperFit.Stretch => WallpaperObjectFit.Fill,
+                _ => throw new InvalidOperationException("The validated wallpaper fit is not injectable."),
+            },
             mediaOpacity: 1,
             glass: new GlassEffectOptions(
                 opacity: settings.PanelOpacity,
-                blurPixels: settings.BlurPx));
+                blurPixels: settings.BlurPx),
+            composition: new WallpaperCompositionOptions(
+                settings.FocusX,
+                settings.FocusY,
+                Math.Min(
+                    settings.DarkOverlay,
+                    WallpaperCompositionOptions.MaximumOverlayOpacity),
+                Math.Min(
+                    settings.LightOverlay,
+                    WallpaperCompositionOptions.MaximumOverlayOpacity)));
 
     private void Publish(WallpaperRuntimePhase phase, string detail)
     {

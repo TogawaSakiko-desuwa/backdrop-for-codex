@@ -7,6 +7,14 @@ namespace BackdropForCodex.Core.Tests.Settings;
 public sealed class SettingsV1Tests
 {
     [Fact]
+    public void WallpaperFit_PreservesLegacyValuesAndAppendsStretch()
+    {
+        Assert.Equal(0, (int)WallpaperFit.Cover);
+        Assert.Equal(1, (int)WallpaperFit.Contain);
+        Assert.Equal(2, (int)WallpaperFit.Stretch);
+    }
+
+    [Fact]
     public void CreateDefaultUsesReviewedDefaultsAndIsValid()
     {
         var settings = SettingsV1.CreateDefault();
@@ -21,6 +29,7 @@ public sealed class SettingsV1Tests
         Assert.Equal(14, settings.BlurPx);
         Assert.Equal(0.30, settings.DarkOverlay);
         Assert.Equal(0.18, settings.LightOverlay);
+        Assert.Equal(0.60, SettingsV1.MaximumEffectiveOverlay);
         Assert.Empty(settings.RecentMediaPaths);
         Assert.False(settings.AcceptedCdpRisk);
         Assert.Null(settings.LastCompatibilityProfileId);
