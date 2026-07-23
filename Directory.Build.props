@@ -3,7 +3,7 @@
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <VersionPrefix>1.1.1</VersionPrefix>
+    <VersionPrefix>1.2.0</VersionPrefix>
     <Authors>Backdrop for Codex contributors</Authors>
     <Product>Backdrop for Codex</Product>
     <Copyright>Copyright © 2026 Backdrop for Codex contributors</Copyright>
