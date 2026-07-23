@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-07-24
+
 ### Added
 
 - 图片和视频新增“完整显示”“裁剪填满”“拉伸”三种适配模式；裁剪填满支持直接拖动焦点、键盘微调和一键恢复居中。
@@ -74,7 +76,8 @@
 - 复验完整 MSIX 包名、激活 PID、进程启动时间、Windows 会话和监听器所有权；媒体服务保持已校验文件的只读句柄。
 - 明确禁止 CSP bypass；关闭、更换或 lease 到期时移除媒体 `src`、撤销 `blob:` URL，并仅删除带有本项目 owner/generation 的节点和样式。
 
-[Unreleased]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.1.1...HEAD
+[Unreleased]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/releases/tag/v1.2.0
 [1.1.1]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/releases/tag/v1.1.1
 [1.1.0]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/releases/tag/v1.1.0
 [1.0.0]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/commit/ec1e464
