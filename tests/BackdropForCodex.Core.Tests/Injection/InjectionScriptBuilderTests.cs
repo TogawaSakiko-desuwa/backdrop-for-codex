@@ -197,25 +197,48 @@ public sealed class InjectionScriptBuilderTests
     }
 
     [Fact]
-    public void BuildInstall_GlassesOnlyTheReviewedRightPanelAndItsDirectLayoutShell()
+    public void BuildInstall_GlassesOnlyTheReviewedRightPanelShellAndAuditedContentShells()
     {
         var script = InjectionScriptBuilder.BuildInstall(CreateOptions());
-        const string RightPanel =
+        var normalizedScript = script.ReplaceLineEndings("\n");
+        var compactScript = string.Concat(normalizedScript.Where(character => !char.IsWhiteSpace(character)));
+        const string RightPanelTab =
             "body [role=\"tabpanel\"][data-app-shell-tab-panel-controller=\"right\"]";
+        var compactRightPanelTab = RightPanelTab.Replace(" ", string.Empty, StringComparison.Ordinal);
+        const string RightPanelShell =
+            "body aside[data-app-shell-focus-area=\"right-panel\"]";
         var forcedColorsNone = script.IndexOf(
             "@media (forced-colors: none)",
             StringComparison.Ordinal);
         var forcedColorsActive = script.IndexOf(
             "@media (forced-colors: active)",
             StringComparison.Ordinal);
-        var rightPanel = script.IndexOf(RightPanel, StringComparison.Ordinal);
+        var rightPanel = script.IndexOf(RightPanelShell, StringComparison.Ordinal);
 
         Assert.True(forcedColorsNone >= 0);
         Assert.True(rightPanel > forcedColorsNone);
         Assert.True(forcedColorsActive > rightPanel);
-        Assert.Contains($"{RightPanel} > :is(div, section)", script, StringComparison.Ordinal);
-        Assert.DoesNotContain($"{RightPanel} *", script, StringComparison.Ordinal);
-        Assert.DoesNotContain($"{RightPanel} :is(", script, StringComparison.Ordinal);
+        Assert.Contains(RightPanelShell, normalizedScript, StringComparison.Ordinal);
+        Assert.Contains(
+            "> div:has([role=\"tabpanel\"][data-app-shell-tab-panel-controller=\"right\"])",
+            normalizedScript,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "> div[class~=\"bg-token-main-surface-primary\"] {",
+            normalizedScript,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            $"{compactRightPanelTab}>[class~=\"bg-token-main-surface-primary\"]",
+            compactScript,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "[class~=\"relative\"][class~=\"rounded-lg\"]" +
+            "[class~=\"bg-token-main-surface-primary\"]:has(.markdown)",
+            script,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain($"{RightPanelTab} > :is(div, section)", script, StringComparison.Ordinal);
+        Assert.DoesNotContain($"{RightPanelTab} *", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("[class*=\"bg-token\"]", script, StringComparison.Ordinal);
         Assert.DoesNotContain(".monaco-editor", script, StringComparison.Ordinal);
         Assert.DoesNotContain("[data-diff", script, StringComparison.Ordinal);
         Assert.DoesNotContain("[data-popcorn", script, StringComparison.Ordinal);

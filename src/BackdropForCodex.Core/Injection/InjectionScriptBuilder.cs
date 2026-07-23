@@ -188,17 +188,26 @@ public static class InjectionScriptBuilder
                     -webkit-backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
                     backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
                   }
-                  body [role="tabpanel"][data-app-shell-tab-panel-controller="right"] {
+                  /*
+                   * The reviewed right-panel shell owns the opaque theme surface. Glass that
+                   * shell once so the tab strip and every right-side detail share one layer.
+                   */
+                  body aside[data-app-shell-focus-area="right-panel"]
+                    > div:has([role="tabpanel"][data-app-shell-tab-panel-controller="right"])
+                    > div[class~="bg-token-main-surface-primary"] {
                     background-color: var(--codex-wallpaper-glass) !important;
                     -webkit-backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
                     backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
                     border-color: var(--codex-wallpaper-border);
                   }
                   /*
-                   * Stop at the direct layout shell so editor, diff, code, table,
-                   * and Popcorn content surfaces keep their theme backgrounds.
+                   * Clear only the audited file-layout and Markdown shells. Editor, diff,
+                   * code, table, and Popcorn content surfaces keep their theme backgrounds.
                    */
-                  body [role="tabpanel"][data-app-shell-tab-panel-controller="right"] > :is(div, section) {
+                  body [role="tabpanel"][data-app-shell-tab-panel-controller="right"]
+                    > [class~="bg-token-main-surface-primary"],
+                  body [role="tabpanel"][data-app-shell-tab-panel-controller="right"]
+                    [class~="relative"][class~="rounded-lg"][class~="bg-token-main-surface-primary"]:has(.markdown) {
                     background-color: transparent !important;
                   }
                   body :is(aside, .app-header-tint, [role="dialog"], [data-codex-wallpaper-glass]) {
