@@ -152,39 +152,23 @@ public sealed class MediaFileInspectorTests
     [InlineData(MediaFileInspector.MaximumImageLength + 1, false)]
     public async Task StreamInspectionEnforcesImageSizeLimit(long contentLength, bool accepted)
     {
-        var directoryPath = CreateTemporaryDirectory();
-        try
-        {
-            var mediaPath = Path.Combine(directoryPath, "wallpaper.png");
-            await using var stream = new FileStream(
-                mediaPath,
-                FileMode.CreateNew,
-                FileAccess.ReadWrite,
-                FileShare.None,
-                bufferSize: 4096,
-                FileOptions.Asynchronous);
-            await stream.WriteAsync(PngBytes(1920, 1080));
-            stream.SetLength(contentLength);
-            stream.Position = 0;
-            var inspector = new MediaFileInspector();
+        await using var stream = new DeclaredLengthReadOnlyStream(
+            PngBytes(1920, 1080),
+            contentLength);
+        var inspector = new MediaFileInspector();
 
-            if (accepted)
-            {
-                var metadata = await inspector.InspectAsync(stream, "wallpaper.png");
-                Assert.Equal(contentLength, metadata.ContentLength);
-                Assert.Equal(1920, metadata.PixelWidth);
-                Assert.Equal(1080, metadata.PixelHeight);
-            }
-            else
-            {
-                var exception = await Assert.ThrowsAsync<MediaValidationException>(
-                    () => inspector.InspectAsync(stream, "wallpaper.png"));
-                Assert.Contains("512 MiB", exception.Message, StringComparison.Ordinal);
-            }
-        }
-        finally
+        if (accepted)
         {
-            DeleteTemporaryDirectory(directoryPath);
+            var metadata = await inspector.InspectAsync(stream, "wallpaper.png");
+            Assert.Equal(contentLength, metadata.ContentLength);
+            Assert.Equal(1920, metadata.PixelWidth);
+            Assert.Equal(1080, metadata.PixelHeight);
+        }
+        else
+        {
+            var exception = await Assert.ThrowsAsync<MediaValidationException>(
+                () => inspector.InspectAsync(stream, "wallpaper.png"));
+            Assert.Contains("512 MiB", exception.Message, StringComparison.Ordinal);
         }
     }
 
@@ -193,39 +177,23 @@ public sealed class MediaFileInspectorTests
     [InlineData(MediaFileInspector.MaximumVideoLength + 1, false)]
     public async Task StreamInspectionEnforcesVideoSizeLimit(long contentLength, bool accepted)
     {
-        var directoryPath = CreateTemporaryDirectory();
-        try
-        {
-            var mediaPath = Path.Combine(directoryPath, "wallpaper.mp4");
-            await using var stream = new FileStream(
-                mediaPath,
-                FileMode.CreateNew,
-                FileAccess.ReadWrite,
-                FileShare.None,
-                bufferSize: 4096,
-                FileOptions.Asynchronous);
-            await stream.WriteAsync(Mp4Bytes());
-            stream.SetLength(contentLength);
-            stream.Position = 0;
-            var inspector = new MediaFileInspector();
+        await using var stream = new DeclaredLengthReadOnlyStream(
+            Mp4Bytes(),
+            contentLength);
+        var inspector = new MediaFileInspector();
 
-            if (accepted)
-            {
-                var metadata = await inspector.InspectAsync(stream, "wallpaper.mp4");
-                Assert.Equal(contentLength, metadata.ContentLength);
-                Assert.Null(metadata.PixelWidth);
-                Assert.Null(metadata.PixelHeight);
-            }
-            else
-            {
-                var exception = await Assert.ThrowsAsync<MediaValidationException>(
-                    () => inspector.InspectAsync(stream, "wallpaper.mp4"));
-                Assert.Contains("8 GiB", exception.Message, StringComparison.Ordinal);
-            }
-        }
-        finally
+        if (accepted)
         {
-            DeleteTemporaryDirectory(directoryPath);
+            var metadata = await inspector.InspectAsync(stream, "wallpaper.mp4");
+            Assert.Equal(contentLength, metadata.ContentLength);
+            Assert.Null(metadata.PixelWidth);
+            Assert.Null(metadata.PixelHeight);
+        }
+        else
+        {
+            var exception = await Assert.ThrowsAsync<MediaValidationException>(
+                () => inspector.InspectAsync(stream, "wallpaper.mp4"));
+            Assert.Contains("8 GiB", exception.Message, StringComparison.Ordinal);
         }
     }
 
@@ -400,24 +368,6 @@ public sealed class MediaFileInspectorTests
         destination[2] = (byte)(value >> 16);
     }
 
-    private static string CreateTemporaryDirectory()
-    {
-        var directoryPath = Path.Combine(
-            Path.GetTempPath(),
-            "BackdropForCodex.Core.Tests",
-            Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(directoryPath);
-        return directoryPath;
-    }
-
-    private static void DeleteTemporaryDirectory(string directoryPath)
-    {
-        if (Directory.Exists(directoryPath))
-        {
-            Directory.Delete(directoryPath, recursive: true);
-        }
-    }
-
     private sealed record MediaSample(
         string Extension,
         byte[] Bytes,
@@ -426,4 +376,100 @@ public sealed class MediaFileInspectorTests
         string ContentType,
         int? PixelWidth,
         int? PixelHeight);
+
+    private sealed class DeclaredLengthReadOnlyStream : Stream
+    {
+        private readonly byte[] _prefix;
+        private readonly long _length;
+        private long _position;
+
+        public DeclaredLengthReadOnlyStream(byte[] prefix, long length)
+        {
+            ArgumentNullException.ThrowIfNull(prefix);
+            ArgumentOutOfRangeException.ThrowIfLessThan(
+                length,
+                prefix.LongLength);
+
+            _prefix = prefix;
+            _length = length;
+        }
+
+        public override bool CanRead => true;
+
+        public override bool CanSeek => true;
+
+        public override bool CanWrite => false;
+
+        public override long Length => _length;
+
+        public override long Position
+        {
+            get => _position;
+            set
+            {
+                if (value < 0 || value > _length)
+                {
+                    throw new ArgumentOutOfRangeException(nameof(value));
+                }
+
+                _position = value;
+            }
+        }
+
+        public override void Flush()
+        {
+        }
+
+        public override int Read(byte[] buffer, int offset, int count) =>
+            Read(buffer.AsSpan(offset, count));
+
+        public override int Read(Span<byte> buffer)
+        {
+            var count = (int)Math.Min(buffer.Length, _length - _position);
+            if (count == 0)
+            {
+                return 0;
+            }
+
+            var destination = buffer[..count];
+            destination.Clear();
+            if (_position < _prefix.LongLength)
+            {
+                var prefixCount = (int)Math.Min(
+                    count,
+                    _prefix.LongLength - _position);
+                _prefix.AsSpan((int)_position, prefixCount).CopyTo(destination);
+            }
+
+            _position += count;
+            return count;
+        }
+
+        public override ValueTask<int> ReadAsync(
+            Memory<byte> buffer,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return ValueTask.FromResult(Read(buffer.Span));
+        }
+
+        public override long Seek(long offset, SeekOrigin origin)
+        {
+            var start = origin switch
+            {
+                SeekOrigin.Begin => 0,
+                SeekOrigin.Current => _position,
+                SeekOrigin.End => _length,
+                _ => throw new ArgumentOutOfRangeException(nameof(origin)),
+            };
+            Position = checked(start + offset);
+            return _position;
+        }
+
+        public override void SetLength(long value) =>
+            throw new NotSupportedException();
+
+        public override void Write(byte[] buffer, int offset, int count) =>
+            throw new NotSupportedException();
+    }
 }

@@ -14,10 +14,6 @@ internal static class CompatibilityProbeScriptBuilder
     private const string GenericProbePackageId = "openai-codex-generic-dom-probes-v1";
     private const string GlassSurfaceSelector =
         "[data-app-shell-focus-area], .app-header-tint, aside";
-    private const string AdvancedSurfaceSelector =
-        "[data-response-annotation-conversation][data-response-annotation-target], " +
-        "[data-user-message-bubble=\"true\"], [data-local-conversation-item-target-ids], " +
-        "[role=\"tabpanel\"][data-app-shell-tab-panel-controller=\"right\"]";
 
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
@@ -34,22 +30,19 @@ internal static class CompatibilityProbeScriptBuilder
                 "openai-codex-26.715.10079.0-windows11-x64-v1-dom-probes",
                 "body > #root",
                 "main",
-                GlassSurfaceSelector,
-                AdvancedSurfaceSelector),
+                GlassSurfaceSelector),
             new ExactProbeDefinition(
                 new Version(26, 721, 3404, 0),
                 "openai-codex-26.721.3404.0-windows11-x64-v1-dom-probes",
                 "body > #root",
                 "main",
-                GlassSurfaceSelector,
-                AdvancedSurfaceSelector),
+                GlassSurfaceSelector),
             new ExactProbeDefinition(
                 new Version(26, 721, 3996, 0),
                 "openai-codex-26.721.3996.0-windows11-x64-v1-dom-probes",
                 "body > #root",
                 "main",
-                GlassSurfaceSelector,
-                AdvancedSurfaceSelector),
+                GlassSurfaceSelector),
         }.ToFrozenDictionary(definition => definition.PackageVersion);
 
     private static readonly ReviewedBandProbeDefinition Reviewed721Band = new(
@@ -58,8 +51,7 @@ internal static class CompatibilityProbeScriptBuilder
         new Version(26, 722, 0, 0),
         "body > #root",
         "main",
-        GlassSurfaceSelector,
-        AdvancedSurfaceSelector);
+        GlassSurfaceSelector);
 
     private static readonly GenericProbeDefinition GenericProbe = new(
         GenericProbePackageId,
@@ -110,8 +102,7 @@ internal static class CompatibilityProbeScriptBuilder
             definition.ProbePackageId,
             definition.AppRootSelector,
             definition.MainSelector,
-            definition.GlassSurfaceSelector,
-            definition.AdvancedSurfaceSelector);
+            definition.GlassSurfaceSelector);
 
     private static string BuildReviewedBand(CodexCompatibilityProfile profile)
     {
@@ -131,8 +122,7 @@ internal static class CompatibilityProbeScriptBuilder
             Reviewed721Band.ProbePackageId,
             Reviewed721Band.AppRootSelector,
             Reviewed721Band.MainSelector,
-            Reviewed721Band.GlassSurfaceSelector,
-            Reviewed721Band.AdvancedSurfaceSelector);
+            Reviewed721Band.GlassSurfaceSelector);
     }
 
     private static string BuildReviewedPresentationProbe(
@@ -140,8 +130,7 @@ internal static class CompatibilityProbeScriptBuilder
         string probePackageId,
         string appRootSelector,
         string mainSelector,
-        string glassSurfaceSelector,
-        string advancedSurfaceSelector)
+        string glassSurfaceSelector)
     {
         var declared = profile.Capabilities;
         var payload = JsonSerializer.Serialize(
@@ -150,7 +139,6 @@ internal static class CompatibilityProbeScriptBuilder
                 appRootSelector,
                 mainSelector,
                 glassSurfaceSelector,
-                advancedSurfaceSelector,
                 declared.Global.IsAvailable,
                 declared.Regions.IsAvailable,
                 declared.Glass.IsAvailable,
@@ -170,8 +158,6 @@ internal static class CompatibilityProbeScriptBuilder
                 Boolean(root && body && appRoot && main && appRoot.contains(main));
               const glassStructure = Boolean(
                 appRoot && appRoot.querySelector(probe.glassSurfaceSelector));
-              const advancedStructure = Boolean(
-                appRoot && appRoot.querySelector(probe.advancedSurfaceSelector));
               const cssApi = globalThis.CSS;
               const glassPlatform = Boolean(cssApi && typeof cssApi.supports === "function" &&
                 (cssApi.supports("backdrop-filter", "blur(1px)") ||
@@ -185,8 +171,10 @@ internal static class CompatibilityProbeScriptBuilder
                 glassStyle: probe.glassStyle && globalBackground &&
                   glassPlatform && selectorPlatform && glassStructure,
                 audio: probe.audio && false,
+                // Advanced route surfaces are optional and appear only after navigation.
+                // Their absence is not a structural failure; reviewed selectors safely no-op.
                 advancedSurfaces: probe.advancedSurfaces && globalBackground &&
-                  selectorPlatform && advancedStructure
+                  selectorPlatform
               });
             })()
             """;
@@ -289,8 +277,7 @@ internal static class CompatibilityProbeScriptBuilder
         string ProbePackageId,
         string AppRootSelector,
         string MainSelector,
-        string GlassSurfaceSelector,
-        string AdvancedSurfaceSelector);
+        string GlassSurfaceSelector);
 
     private sealed record ReviewedBandProbeDefinition(
         string ProbePackageId,
@@ -298,8 +285,7 @@ internal static class CompatibilityProbeScriptBuilder
         Version MaximumVersionExclusive,
         string AppRootSelector,
         string MainSelector,
-        string GlassSurfaceSelector,
-        string AdvancedSurfaceSelector)
+        string GlassSurfaceSelector)
     {
         public bool Contains(Version version) =>
             version >= MinimumVersionInclusive &&
@@ -316,7 +302,6 @@ internal static class CompatibilityProbeScriptBuilder
         string AppRootSelector,
         string MainSelector,
         string GlassSurfaceSelector,
-        string AdvancedSurfaceSelector,
         bool GlobalBackground,
         bool RegionRecognition,
         bool GlassStyle,

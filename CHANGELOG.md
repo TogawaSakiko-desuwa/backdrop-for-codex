@@ -4,6 +4,15 @@
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-07-25
+
+### Fixed
+
+- 修复从 Home 进入 Conversation 后高级内容表面被永久误降级的问题。高级规则现在以核心工作区和所需 CSS 选择器能力为准；只在特定路由出现的聊天、活动卡片和右栏节点缺失时安全地保持不匹配，不放宽包、进程、回环 CDP 或目标身份验证。
+- 适配当前 Codex 右侧面板的嵌套不透明 tabs root 与 toolbar，只清除经审核的右栏 chrome；固定顶栏玻璃收敛到主内容 context surface，不再在视觉上覆盖右侧标题和关闭按钮。
+- 精确移除对话输入区外围的原生向上渐变，同时恢复对话气泡、活动卡片及右侧内容壳的预期玻璃效果。
+- 媒体大小边界测试改用声明长度的只读测试流，不再为 512 MiB 与 8 GiB 上限创建同等大小的临时文件。
+
 ## [1.3.0] - 2026-07-24
 
 ### Added
@@ -118,7 +127,8 @@
 - 复验完整 MSIX 包名、激活 PID、进程启动时间、Windows 会话和监听器所有权；媒体服务保持已校验文件的只读句柄。
 - 明确禁止 CSP bypass；关闭、更换或 lease 到期时移除媒体 `src`、撤销 `blob:` URL，并仅删除带有本项目 owner/generation 的节点和样式。
 
-[Unreleased]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.3.1...HEAD
+[1.3.1]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.2.1...v1.3.0
 [1.2.1]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/releases/tag/v1.2.0

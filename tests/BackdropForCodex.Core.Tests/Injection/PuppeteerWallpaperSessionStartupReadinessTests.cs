@@ -58,7 +58,6 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
                 <div id="root">
                   <header class="app-header-tint"></header>
                   <div data-home-ambient-suggestions></div>
-                  <div data-user-message-bubble="true"></div>
                 </div>
               </body>
             </html>
@@ -92,6 +91,15 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
                 endpoint.Profile.ProbePackageKind);
             Assert.True(session.Capabilities.Glass.IsAvailable);
             Assert.True(session.Capabilities.Advanced.IsAvailable);
+
+            var conversation = await AddConversationAndReadRenderingAsync(endpoint);
+
+            Assert.NotEqual("rgba(0, 0, 0, 0)", conversation.AssistantBackground);
+            Assert.NotEqual("rgba(0, 0, 0, 0)", conversation.UserBackground);
+            Assert.NotEqual("rgba(0, 0, 0, 0)", conversation.ActivityBackground);
+            Assert.NotEqual("0px", conversation.AssistantBorderWidth);
+            Assert.NotEqual("0px", conversation.UserBorderWidth);
+            Assert.NotEqual("none", conversation.AssistantBackdropFilter);
         }
         finally
         {
@@ -411,6 +419,63 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
         }
     }
 
+    private static async Task<ConversationRendering> AddConversationAndReadRenderingAsync(
+        VerifiedCdpEndpoint endpoint)
+    {
+        var browser = await Puppeteer.ConnectAsync(new ConnectOptions
+        {
+            BrowserWSEndpoint = endpoint.BrowserWebSocketUri.AbsoluteUri,
+            DefaultViewport = null,
+            ProtocolTimeout = 5_000,
+            AcceptInsecureCerts = false,
+            NetworkEnabled = false,
+        });
+        try
+        {
+            var reviewedTarget = Assert.Single(endpoint.InjectableTargets);
+            var pages = await browser.PagesAsync(includeAll: true);
+            var page = Assert.Single(
+                pages,
+                candidate =>
+                    !candidate.IsClosed &&
+                    Uri.TryCreate(candidate.Url, UriKind.Absolute, out var candidateUri) &&
+                    VerifiedCodexPageSelector.IsSameReviewedDocument(
+                        candidateUri,
+                        reviewedTarget.Url));
+
+            return await page.EvaluateExpressionAsync<ConversationRendering>(
+                """
+                (() => {
+                  const main = document.querySelector("main");
+                  if (!main) throw new Error("Missing fixture main element.");
+
+                  const assistant = document.createElement("div");
+                  assistant.dataset.responseAnnotationConversation = "conversation";
+                  assistant.dataset.responseAnnotationTarget = "message";
+                  const user = document.createElement("div");
+                  user.dataset.userMessageBubble = "true";
+                  const activity = document.createElement("div");
+                  activity.dataset.localConversationItemTargetIds = "activity";
+                  main.append(assistant, user, activity);
+
+                  const style = element => getComputedStyle(element);
+                  return {
+                    assistantBackground: style(assistant).backgroundColor,
+                    userBackground: style(user).backgroundColor,
+                    activityBackground: style(activity).backgroundColor,
+                    assistantBorderWidth: style(assistant).borderTopWidth,
+                    userBorderWidth: style(user).borderTopWidth,
+                    assistantBackdropFilter: style(assistant).backdropFilter
+                  };
+                })()
+                """);
+        }
+        finally
+        {
+            browser.Disconnect();
+        }
+    }
+
     private static async Task<HomeSuggestionRendering> ReadHomeSuggestionRenderingAsync(
         IPage page)
     {
@@ -559,6 +624,14 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
         string DisabledBackdropFilter,
         string UnrelatedBackdropFilter,
         string ListBackdropFilter);
+
+    private sealed record ConversationRendering(
+        string AssistantBackground,
+        string UserBackground,
+        string ActivityBackground,
+        string AssistantBorderWidth,
+        string UserBorderWidth,
+        string AssistantBackdropFilter);
 
     private static int ReserveLoopbackPort()
     {

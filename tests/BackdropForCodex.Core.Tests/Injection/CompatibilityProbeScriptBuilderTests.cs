@@ -127,16 +127,18 @@ public sealed class CompatibilityProbeScriptBuilderTests
             Assert.Contains("selector(:has(*))", script, StringComparison.Ordinal);
             Assert.Contains("glassPlatform", script, StringComparison.Ordinal);
             Assert.Contains("glassStructure", script, StringComparison.Ordinal);
-            Assert.Contains("advancedStructure", script, StringComparison.Ordinal);
-            Assert.Contains("data-user-message-bubble", script, StringComparison.Ordinal);
             Assert.Contains("data-app-shell-focus-area", script, StringComparison.Ordinal);
             Assert.Contains("app-header-tint", script, StringComparison.Ordinal);
-            Assert.Contains(
-                "data-app-shell-tab-panel-controller",
+            Assert.DoesNotContain(
+                "data-home-ambient-suggestions",
                 script,
                 StringComparison.Ordinal);
             Assert.DoesNotContain(
-                "data-home-ambient-suggestions",
+                "data-user-message-bubble",
+                script,
+                StringComparison.Ordinal);
+            Assert.DoesNotContain(
+                "data-app-shell-tab-panel-controller",
                 script,
                 StringComparison.Ordinal);
             Assert.DoesNotContain(
@@ -148,7 +150,11 @@ public sealed class CompatibilityProbeScriptBuilderTests
                 script,
                 StringComparison.Ordinal);
             Assert.Contains(
-                "selectorPlatform && advancedStructure",
+                "advancedSurfaces: probe.advancedSurfaces && globalBackground",
+                script,
+                StringComparison.Ordinal);
+            Assert.DoesNotContain(
+                "advancedStructure",
                 script,
                 StringComparison.Ordinal);
             Assert.DoesNotContain(

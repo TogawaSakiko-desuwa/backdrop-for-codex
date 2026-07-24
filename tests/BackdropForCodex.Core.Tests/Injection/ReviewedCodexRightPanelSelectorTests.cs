@@ -96,6 +96,118 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
         Assert.DoesNotContain("rounded-surface-without-markdown", modifiedIds);
     }
 
+    [Fact]
+    public void ReviewedSelectors_ClearOnlyTheCurrentRightPanelChrome()
+    {
+        var styleSheet = ExtractGeneratedStyleSheet();
+        var forcedColorsNone = ExtractBlock(styleSheet, "@media (forced-colors: none)");
+        var rules = ParseLeafRules(forcedColorsNone);
+        var fixture = XDocument.Parse(CurrentRightPanelFixture);
+
+        var chromeRule = Assert.Single(rules, IsReviewedRightPanelChromeClearRule);
+
+        Assert.Equal(
+            [
+                CanonicalizeSelector(
+                    """
+                    body aside[data-app-shell-focus-area="right-panel"]
+                      [data-app-shell-tabs="true"][class~="bg-token-main-surface-primary"]:has([role="tabpanel"][data-app-shell-tab-panel-controller="right"])
+                    """),
+                CanonicalizeSelector(
+                    """
+                    body aside[data-app-shell-focus-area="right-panel"]
+                      [data-app-shell-tabs="true"][class~="bg-token-main-surface-primary"]:has([role="tabpanel"][data-app-shell-tab-panel-controller="right"])
+                      > [class~="bg-token-main-surface-primary"]:has([data-app-shell-tab-strip-controller="right"])
+                    """),
+            ],
+            chromeRule.Selectors);
+        Assert.Equal(
+            ["current-tabs-root", "current-toolbar"],
+            SelectFixtureIds(fixture, chromeRule.Selectors));
+        Assert.DoesNotContain("current-selected-tab", SelectFixtureIds(fixture, chromeRule.Selectors));
+        Assert.DoesNotContain("current-close-button", SelectFixtureIds(fixture, chromeRule.Selectors));
+        Assert.DoesNotContain("current-add-button", SelectFixtureIds(fixture, chromeRule.Selectors));
+        Assert.DoesNotContain("current-file-layout", SelectFixtureIds(fixture, chromeRule.Selectors));
+        Assert.DoesNotContain("left-tabs-root", SelectFixtureIds(fixture, chromeRule.Selectors));
+        Assert.DoesNotContain("wrong-controller-tabs-root", SelectFixtureIds(fixture, chromeRule.Selectors));
+    }
+
+    [Fact]
+    public void ReviewedHeaderSelectors_MoveGlassInsideTheEdgeScrollHeader()
+    {
+        var styleSheet = ExtractGeneratedStyleSheet();
+        var forcedColorsNone = ExtractBlock(styleSheet, "@media (forced-colors: none)");
+        var rules = ParseLeafRules(forcedColorsNone);
+        var fixture = XDocument.Parse(CurrentHeaderFixture);
+
+        var generalGlassRule = Assert.Single(rules, IsGeneralGlassRule);
+        var edgeHeaderResetRule = Assert.Single(rules, IsReviewedEdgeHeaderResetRule);
+        var contextGlassRule = Assert.Single(rules, IsReviewedHeaderContextGlassRule);
+
+        Assert.Equal(
+            [
+                CanonicalizeSelector(
+                    """
+                    body .app-header-tint[data-app-shell-header-edge-scroll]
+                    """),
+            ],
+            edgeHeaderResetRule.Selectors);
+        Assert.Equal(
+            [
+                CanonicalizeSelector(
+                    """
+                    body .app-header-tint[data-app-shell-header-edge-scroll]
+                      > [data-testid="app-shell-header-context-menu-surface"]
+                    """),
+            ],
+            contextGlassRule.Selectors);
+
+        Assert.Equal(
+            ["top-app-bar"],
+            SelectFixtureIds(fixture, generalGlassRule.Selectors));
+        Assert.Equal(
+            ["edge-scroll-header"],
+            SelectFixtureIds(fixture, edgeHeaderResetRule.Selectors));
+        Assert.Equal(
+            ["main-header-context"],
+            SelectFixtureIds(fixture, contextGlassRule.Selectors));
+
+        var changedIds = SelectFixtureIds(
+            fixture,
+            [
+                .. generalGlassRule.Selectors,
+                .. edgeHeaderResetRule.Selectors,
+                .. contextGlassRule.Selectors,
+            ]);
+        Assert.DoesNotContain("right-header-slot", changedIds);
+        Assert.DoesNotContain("right-tab-close-button", changedIds);
+        Assert.DoesNotContain("right-panel", changedIds);
+    }
+
+    [Fact]
+    public void ReviewedConversationSelectors_ClearOnlyTheComposerSurfaceFade()
+    {
+        var styleSheet = ExtractGeneratedStyleSheet();
+        var forcedColorsNone = ExtractBlock(styleSheet, "@media (forced-colors: none)");
+        var rules = ParseLeafRules(forcedColorsNone);
+        var fixture = XDocument.Parse(CurrentComposerFixture);
+
+        var composerFadeRule = Assert.Single(rules, IsReviewedComposerFadeClearRule);
+
+        Assert.Equal(
+            [
+                CanonicalizeSelector(
+                    """
+                    body main .thread-scroll-container
+                      [class~="bg-gradient-to-t"][class~="from-token-main-surface-primary"][class~="via-token-main-surface-primary"]
+                    """),
+            ],
+            composerFadeRule.Selectors);
+        Assert.Equal(
+            ["composer-surface-fade"],
+            SelectFixtureIds(fixture, composerFadeRule.Selectors));
+    }
+
     private static bool IsReviewedRightPanelGlassRule(CssRule rule) =>
         rule.Declarations.Contains(
             "background-color: var(--codex-wallpaper-glass) !important",
@@ -114,9 +226,59 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
         CanonicalizeWhitespace(rule.Declarations) ==
         "background-color: transparent !important;" &&
         rule.Selectors.Any(
+            selector =>
+                selector.Contains(
+                    "[data-app-shell-tab-panel-controller=\"right\"]",
+                    StringComparison.Ordinal) &&
+                !selector.Contains(
+                    "[data-app-shell-tabs=\"true\"]",
+                    StringComparison.Ordinal));
+
+    private static bool IsReviewedRightPanelChromeClearRule(CssRule rule) =>
+        CanonicalizeWhitespace(rule.Declarations) ==
+        "background-color: transparent !important;" &&
+        rule.Selectors.Any(
             selector => selector.Contains(
-                "[data-app-shell-tab-panel-controller=\"right\"]",
+                "[data-app-shell-tabs=\"true\"]",
                 StringComparison.Ordinal));
+
+    private static bool IsReviewedEdgeHeaderResetRule(CssRule rule) =>
+        CanonicalizeWhitespace(rule.Declarations) ==
+        "background: transparent !important; -webkit-backdrop-filter: none !important; backdrop-filter: none !important;" &&
+        rule.Selectors.Any(
+            selector => selector.Contains(
+                ".app-header-tint[data-app-shell-header-edge-scroll]",
+                StringComparison.Ordinal));
+
+    private static bool IsReviewedHeaderContextGlassRule(CssRule rule) =>
+        rule.Declarations.Contains(
+            "background-color: var(--codex-wallpaper-glass) !important",
+            StringComparison.Ordinal) &&
+        rule.Declarations.Contains(
+            "backdrop-filter: blur(var(--codex-wallpaper-blur))",
+            StringComparison.Ordinal) &&
+        rule.Selectors.Any(
+            selector => selector.Contains(
+                "[data-testid=\"app-shell-header-context-menu-surface\"]",
+                StringComparison.Ordinal));
+
+    private static bool IsReviewedComposerFadeClearRule(CssRule rule) =>
+        CanonicalizeWhitespace(rule.Declarations) ==
+        "background: transparent !important;" &&
+        rule.Selectors.Any(
+            selector =>
+                selector.Contains(
+                    ".thread-scroll-container",
+                    StringComparison.Ordinal) &&
+                selector.Contains(
+                    "[class~=\"bg-gradient-to-t\"]",
+                    StringComparison.Ordinal) &&
+                selector.Contains(
+                    "[class~=\"from-token-main-surface-primary\"]",
+                    StringComparison.Ordinal) &&
+                selector.Contains(
+                    "[class~=\"via-token-main-surface-primary\"]",
+                    StringComparison.Ordinal));
 
     private static bool IsGeneralGlassRule(CssRule rule) =>
         rule.Declarations.Contains(
@@ -598,6 +760,125 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
                     </div>
                   </div>
                 </div>
+              </div>
+            </aside>
+          </body>
+        </html>
+        """;
+
+    private const string CurrentRightPanelFixture =
+        """
+        <html class="electron-dark">
+          <body>
+            <aside data-app-shell-focus-area="right-panel">
+              <div>
+                <div class="bg-token-main-surface-primary"
+                     data-fixture-id="current-glass-shell">
+                  <div>
+                    <div class="isolate bg-token-main-surface-primary"
+                         data-app-shell-tabs="true"
+                         data-fixture-id="current-tabs-root">
+                      <div class="bg-token-main-surface-primary"
+                           data-fixture-id="current-toolbar">
+                        <div data-app-shell-tab-strip-controller="right">
+                          <div class="bg-token-main-surface-primary"
+                               data-fixture-id="current-selected-tab">
+                            <button data-app-shell-tab-close-button="true"
+                                    data-fixture-id="current-close-button" />
+                          </div>
+                          <div class="bg-token-main-surface-primary">
+                            <button title="Open tab"
+                                    data-fixture-id="current-add-button" />
+                          </div>
+                        </div>
+                      </div>
+                      <div role="tabpanel"
+                           data-app-shell-tab-panel-controller="right">
+                        <div class="bg-token-main-surface-primary"
+                             data-fixture-id="current-file-layout">
+                          <div class="monaco-editor bg-token-main-surface-primary"
+                               data-fixture-id="current-editor" />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </aside>
+
+            <aside data-app-shell-focus-area="left-panel">
+              <div class="bg-token-main-surface-primary"
+                   data-app-shell-tabs="true"
+                   data-fixture-id="left-tabs-root">
+                <div role="tabpanel"
+                     data-app-shell-tab-panel-controller="right" />
+              </div>
+            </aside>
+
+            <aside data-app-shell-focus-area="right-panel">
+              <div class="bg-token-main-surface-primary"
+                   data-app-shell-tabs="true"
+                   data-fixture-id="wrong-controller-tabs-root">
+                <div role="tabpanel"
+                     data-app-shell-tab-panel-controller="left" />
+              </div>
+            </aside>
+          </body>
+        </html>
+        """;
+
+    private const string CurrentHeaderFixture =
+        """
+        <html class="electron-dark">
+          <body>
+            <header class="app-header-tint"
+                    data-fixture-id="top-app-bar" />
+
+            <header class="app-header-tint"
+                    data-app-shell-header-edge-scroll=""
+                    data-fixture-id="edge-scroll-header">
+              <div data-testid="app-shell-header-context-menu-surface"
+                   data-fixture-id="main-header-context">
+                <button data-fixture-id="main-header-menu-button" />
+              </div>
+              <div data-fixture-id="right-header-slot">
+                <button data-app-shell-tab-close-button="true"
+                        data-fixture-id="right-tab-close-button" />
+              </div>
+            </header>
+
+            <aside data-app-shell-focus-area="right-panel"
+                   data-fixture-id="right-panel" />
+          </body>
+        </html>
+        """;
+
+    private const string CurrentComposerFixture =
+        """
+        <html class="electron-dark">
+          <body>
+            <main>
+              <div class="thread-scroll-container">
+                <div class="bg-gradient-to-t from-token-main-surface-primary via-token-main-surface-primary"
+                     data-fixture-id="composer-surface-fade" />
+                <div class="bg-gradient-to-t from-token-main-surface-primary"
+                     data-fixture-id="missing-via-color" />
+                <div class="bg-gradient-to-t via-token-main-surface-primary"
+                     data-fixture-id="missing-from-color" />
+                <div class="from-token-main-surface-primary via-token-main-surface-primary"
+                     data-fixture-id="missing-gradient-direction" />
+                <div class="bg-gradient-to-b from-token-main-surface-primary via-token-main-surface-primary"
+                     data-fixture-id="different-gradient-direction" />
+              </div>
+              <div>
+                <div class="bg-gradient-to-t from-token-main-surface-primary via-token-main-surface-primary"
+                     data-fixture-id="outside-thread-scroll-container" />
+              </div>
+            </main>
+            <aside>
+              <div class="thread-scroll-container">
+                <div class="bg-gradient-to-t from-token-main-surface-primary via-token-main-surface-primary"
+                     data-fixture-id="outside-main" />
               </div>
             </aside>
           </body>

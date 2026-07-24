@@ -229,6 +229,13 @@ public static class InjectionScriptBuilder
                     backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
                     border-color: var(--codex-wallpaper-border);
                   }
+                  {{glassBodySelector}} aside[data-app-shell-focus-area="right-panel"]
+                    [data-app-shell-tabs="true"][class~="bg-token-main-surface-primary"]:has([role="tabpanel"][data-app-shell-tab-panel-controller="right"]),
+                  {{glassBodySelector}} aside[data-app-shell-focus-area="right-panel"]
+                    [data-app-shell-tabs="true"][class~="bg-token-main-surface-primary"]:has([role="tabpanel"][data-app-shell-tab-panel-controller="right"])
+                    > [class~="bg-token-main-surface-primary"]:has([data-app-shell-tab-strip-controller="right"]) {
+                    background-color: transparent !important;
+                  }
                   /* codex-wallpaper-glass:end */
                   /*
                    * Clear only the audited file-layout and Markdown shells. Editor, diff,
@@ -243,9 +250,21 @@ public static class InjectionScriptBuilder
                   }
                   /* codex-wallpaper-advanced:end */
                   /* codex-wallpaper-glass:start */
+                  {{glassBodySelector}} .app-header-tint[data-app-shell-header-edge-scroll] {
+                    background: transparent !important;
+                    -webkit-backdrop-filter: none !important;
+                    backdrop-filter: none !important;
+                  }
+                  {{glassBodySelector}} .app-header-tint[data-app-shell-header-edge-scroll]
+                    > [data-testid="app-shell-header-context-menu-surface"] {
+                    background-color: var(--codex-wallpaper-glass) !important;
+                    -webkit-backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
+                    backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
+                    border-color: var(--codex-wallpaper-border);
+                  }
                   {{glassBodySelector}} :is(
                     aside:not([data-app-shell-focus-area="right-panel"]),
-                    .app-header-tint,
+                    .app-header-tint:not([data-app-shell-header-edge-scroll]),
                     [role="dialog"],
                     [data-codex-wallpaper-glass]) {
                     background-color: var(--codex-wallpaper-glass) !important;
@@ -255,7 +274,7 @@ public static class InjectionScriptBuilder
                   }
                   {{glassBodySelector}} :is(
                     aside:not([data-app-shell-focus-area="right-panel"]),
-                    .app-header-tint,
+                    .app-header-tint:not([data-app-shell-header-edge-scroll]),
                     [role="dialog"],
                     [data-codex-wallpaper-glass]) :is(nav, header) {
                     background: transparent !important;
@@ -264,6 +283,10 @@ public static class InjectionScriptBuilder
                   }
                   /* codex-wallpaper-glass:end */
                   /* codex-wallpaper-advanced:start */
+                  {{advancedBodySelector}} main .thread-scroll-container
+                    [class~="bg-gradient-to-t"][class~="from-token-main-surface-primary"][class~="via-token-main-surface-primary"] {
+                    background: transparent !important;
+                  }
                   {{advancedBodySelector}} main [data-response-annotation-conversation][data-response-annotation-target],
                   {{advancedBodySelector}} main [data-user-message-bubble="true"] {
                     background-color: var(--codex-wallpaper-glass) !important;
