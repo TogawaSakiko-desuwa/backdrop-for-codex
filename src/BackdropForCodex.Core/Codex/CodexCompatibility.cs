@@ -125,14 +125,24 @@ public static class CodexCompatibilityCatalog
 {
     public const string OfficialPackageName = "OpenAI.Codex";
     public const string OfficialPackageFamilyName = "OpenAI.Codex_2p2nqsd0c76g0";
+
+    /// <summary>
+    /// Legacy 1.x alias for the first reviewed package full name. New code must use the profile
+    /// returned by <see cref="Evaluate"/> so it remains correct when more than one version is reviewed.
+    /// </summary>
     public const string SupportedPackageFullName =
         "OpenAI.Codex_26.715.10079.0_x64__2p2nqsd0c76g0";
     public const string OfficialApplicationId = "App";
 
     public static readonly Version MinimumWindowsVersion = new(10, 0, 22000, 0);
+
+    /// <summary>
+    /// Legacy 1.x alias for the first reviewed package version. New code must use the profile
+    /// returned by <see cref="Evaluate"/> so it remains correct when more than one version is reviewed.
+    /// </summary>
     public static readonly Version SupportedPackageVersion = new(26, 715, 10079, 0);
 
-    private static readonly CodexCompatibilityProfile SupportedProfile = new(
+    private static readonly CodexCompatibilityProfile LegacySupportedProfile = new(
         "openai-codex-26.715.10079.0-windows11-x64-v1",
         OfficialPackageName,
         OfficialPackageFamilyName,
@@ -142,6 +152,24 @@ public static class CodexCompatibilityCatalog
         ["ChatGPT.exe"],
         ["Codex"],
         ["chatgpt.com", "codex.openai.com"]);
+
+    private static readonly CodexCompatibilityProfile CurrentSupportedProfile = new(
+        "openai-codex-26.721.3404.0-windows11-x64-v1",
+        OfficialPackageName,
+        OfficialPackageFamilyName,
+        "OpenAI.Codex_26.721.3404.0_x64__2p2nqsd0c76g0",
+        new Version(26, 721, 3404, 0),
+        OfficialApplicationId,
+        ["ChatGPT.exe"],
+        ["Codex"],
+        ["chatgpt.com", "codex.openai.com"]);
+
+    private static readonly FrozenDictionary<Version, CodexCompatibilityProfile>
+        SupportedProfilesByVersion = new[]
+        {
+            LegacySupportedProfile,
+            CurrentSupportedProfile,
+        }.ToFrozenDictionary(profile => profile.PackageVersion);
 
     public static CodexCompatibilityResult Evaluate(
         CodexPackageDescriptor package,
@@ -186,7 +214,7 @@ public static class CodexCompatibilityCatalog
                 "Only the x64 Codex MSIX package is supported.");
         }
 
-        if (package.Version != SupportedPackageVersion)
+        if (!SupportedProfilesByVersion.TryGetValue(package.Version, out var profile))
         {
             return CodexCompatibilityResult.Rejected(
                 CodexCompatibilityFailure.UnsupportedPackageVersion,
@@ -200,6 +228,6 @@ public static class CodexCompatibilityCatalog
                 "The MSIX application id is not the reviewed Codex application id.");
         }
 
-        return CodexCompatibilityResult.Supported(SupportedProfile);
+        return CodexCompatibilityResult.Supported(profile);
     }
 }

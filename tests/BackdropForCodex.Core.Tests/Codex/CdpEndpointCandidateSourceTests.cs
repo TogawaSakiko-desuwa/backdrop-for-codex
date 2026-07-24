@@ -73,6 +73,36 @@ public sealed class CdpEndpointCandidateSourceTests
         Assert.Equal(new Uri("http://127.0.0.1:9222/"), candidate.BaseUri);
     }
 
+    [Fact]
+    public async Task TcpCandidateSource_UsesExactPackageFullNameForCurrentProfile()
+    {
+        var profile = CodexCompatibilityTests.GetProfile(new Version(26, 721, 3404, 0));
+        var processes = new StubProcessSource(
+        [
+            Process(
+                51,
+                "ChatGPT.exe",
+                string.Empty,
+                packageFullName: CodexCompatibilityCatalog.SupportedPackageFullName),
+            Process(
+                52,
+                "ChatGPT.exe",
+                string.Empty,
+                packageFullName: profile.PackageFullName),
+        ]);
+        var listeners = new StubListenerSource(
+        [
+            new TcpListenerSnapshot(51, IPAddress.Loopback, 9222),
+            new TcpListenerSnapshot(52, IPAddress.Loopback, 9333),
+        ]);
+        var source = new LoopbackTcpCdpEndpointCandidateSource(processes, listeners);
+
+        var candidate = Assert.Single(await source.GetCandidatesAsync(profile));
+
+        Assert.Equal(52, candidate.ProcessId);
+        Assert.Equal(new Uri("http://127.0.0.1:9333/"), candidate.BaseUri);
+    }
+
     [Theory]
     [InlineData("--remote-debugging-port=0")]
     [InlineData("--remote-debugging-port=65536")]
@@ -95,11 +125,12 @@ public sealed class CdpEndpointCandidateSourceTests
         int processId,
         string executable,
         string commandLine,
-        string? family = null) => new(
+        string? family = null,
+        string? packageFullName = null) => new(
         processId,
         executable,
         family ?? CodexCompatibilityCatalog.OfficialPackageFamilyName,
-        CodexCompatibilityCatalog.SupportedPackageFullName,
+        packageFullName ?? CodexCompatibilityCatalog.SupportedPackageFullName,
         new DateTimeOffset(2026, 7, 22, 0, 0, 0, TimeSpan.Zero),
         WindowsCodexProcessSnapshotSource.CurrentSessionId,
         commandLine);

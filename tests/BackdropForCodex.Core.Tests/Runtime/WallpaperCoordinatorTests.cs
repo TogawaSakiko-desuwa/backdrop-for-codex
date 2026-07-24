@@ -34,6 +34,23 @@ public sealed class WallpaperCoordinatorTests
         Assert.Equal(WallpaperRuntimePhase.Active, coordinator.Status.Phase);
     }
 
+    [Fact]
+    public async Task StartOrUpdateAsync_PersistsAndActivatesCurrentCompatibilityProfile()
+    {
+        var fixture = new CoordinatorFixture(new Version(26, 721, 3404, 0));
+        await using var coordinator = fixture.CreateCoordinator();
+
+        var saved = await coordinator.StartOrUpdateAsync(fixture.ValidSettings);
+
+        Assert.Equal(
+            "openai-codex-26.721.3404.0-windows11-x64-v1",
+            saved.LastCompatibilityProfileId);
+        Assert.Equal(
+            "OpenAI.Codex_26.721.3404.0_x64__2p2nqsd0c76g0",
+            fixture.Activation.Profile?.PackageFullName);
+        Assert.Equal(fixture.Endpoint, fixture.Injection.LastEndpoint);
+    }
+
     [Theory]
     [InlineData(WallpaperFit.Cover, WallpaperObjectFit.Cover)]
     [InlineData(WallpaperFit.Contain, WallpaperObjectFit.Contain)]
@@ -308,26 +325,31 @@ public sealed class WallpaperCoordinatorTests
     {
         private readonly CodexCompatibilityProfile _profile;
 
-        public CoordinatorFixture()
+        public CoordinatorFixture(Version? packageVersion = null)
         {
+            packageVersion ??= CodexCompatibilityCatalog.SupportedPackageVersion;
             var descriptor = new CodexPackageDescriptor(
                 CodexCompatibilityCatalog.OfficialPackageName,
                 CodexCompatibilityCatalog.OfficialPackageFamilyName,
-                CodexCompatibilityCatalog.SupportedPackageVersion,
+                packageVersion,
                 CodexPackageArchitecture.X64,
                 CodexCompatibilityCatalog.OfficialApplicationId);
-            Package = new InstalledCodexPackage(descriptor, "package", "C:\\Codex", "app/ChatGPT.exe");
             _profile = CodexCompatibilityCatalog.Evaluate(
                 descriptor,
                 new CodexRuntimeDescriptor(
                     IsWindows: true,
                     new Version(10, 0, 22631, 0),
                     CodexPackageArchitecture.X64)).Profile!;
+            Package = new InstalledCodexPackage(
+                descriptor,
+                _profile.PackageFullName,
+                "C:\\Codex",
+                "app/ChatGPT.exe");
             ReviewedProcess = new CodexProcessSnapshot(
                 42,
                 "ChatGPT.exe",
                 CodexCompatibilityCatalog.OfficialPackageFamilyName,
-                CodexCompatibilityCatalog.SupportedPackageFullName,
+                _profile.PackageFullName,
                 new DateTimeOffset(2026, 7, 22, 0, 0, 0, TimeSpan.Zero),
                 WindowsCodexProcessSnapshotSource.CurrentSessionId,
                 null);
@@ -421,6 +443,8 @@ public sealed class WallpaperCoordinatorTests
 
         public string? Arguments { get; private set; }
 
+        public CodexCompatibilityProfile? Profile { get; private set; }
+
         public ApplicationActivationResult Activate(
             CodexCompatibilityProfile profile,
             string? arguments = null,
@@ -428,6 +452,7 @@ public sealed class WallpaperCoordinatorTests
         {
             CallCount++;
             Arguments = arguments;
+            Profile = profile;
             return new ApplicationActivationResult(42);
         }
     }

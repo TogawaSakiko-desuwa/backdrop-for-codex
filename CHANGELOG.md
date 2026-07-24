@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-07-24
+
+### Fixed
+
+- 新增官方 Store/MSIX Codex `26.721.3404.0` 的精确受审兼容配置，同时继续支持 `26.715.10079.0`。
+- 将单一兼容配置改为按精确版本索引的不可变目录；包、进程、会话、回环端点和页面目标仍必须与命中的配置完全一致，未知版本继续失败关闭。
+
 ## [1.2.0] - 2026-07-24
 
 ### Added
@@ -76,7 +83,8 @@
 - 复验完整 MSIX 包名、激活 PID、进程启动时间、Windows 会话和监听器所有权；媒体服务保持已校验文件的只读句柄。
 - 明确禁止 CSP bypass；关闭、更换或 lease 到期时移除媒体 `src`、撤销 `blob:` URL，并仅删除带有本项目 owner/generation 的节点和样式。
 
-[Unreleased]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.2.1...HEAD
+[1.2.1]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/releases/tag/v1.2.0
 [1.1.1]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/releases/tag/v1.1.1
 [1.1.0]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/releases/tag/v1.1.0

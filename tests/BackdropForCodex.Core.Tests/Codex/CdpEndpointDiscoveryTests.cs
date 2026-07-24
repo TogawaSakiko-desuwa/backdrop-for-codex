@@ -28,6 +28,33 @@ public sealed class CdpEndpointDiscoveryTests
     }
 
     [Fact]
+    public async Task DiscoverAsync_VerifiesCurrentReviewedProfileEndToEnd()
+    {
+        const string packageFullName =
+            "OpenAI.Codex_26.721.3404.0_x64__2p2nqsd0c76g0";
+        const string pageUrl =
+            "file:///C:/Program%20Files/WindowsApps/" +
+            "OpenAI.Codex_26.721.3404.0_x64__2p2nqsd0c76g0/app/index.html";
+        var profile = CodexCompatibilityTests.GetProfile(new Version(26, 721, 3404, 0));
+        var candidate = Candidate("http://127.0.0.1:9222/", packageFullName);
+        var transport = new StubTransport(new Dictionary<string, string>
+        {
+            ["/json/version"] = VersionJson(9222),
+            ["/json/list"] = TargetJson(9222, pageUrl),
+        });
+        var discovery = new CdpEndpointDiscovery(
+            new StubCandidateSource([candidate]),
+            transport);
+
+        var result = await discovery.DiscoverAsync(profile);
+
+        var endpoint = Assert.Single(result.Endpoints);
+        Assert.Empty(result.Rejections);
+        Assert.Equal(packageFullName, endpoint.Candidate.PackageFullName);
+        Assert.Single(endpoint.InjectableTargets);
+    }
+
+    [Fact]
     public async Task DiscoverAsync_DoesNotProbeNonLoopbackCandidate()
     {
         var transport = new StubTransport(new Dictionary<string, string>());
@@ -230,11 +257,13 @@ public sealed class CdpEndpointDiscoveryTests
         Assert.Equal(CdpEndpointRejection.MalformedResponse, Assert.Single(result.Rejections).Rejection);
     }
 
-    private static CdpEndpointCandidate Candidate(string baseUri) => new(
+    private static CdpEndpointCandidate Candidate(
+        string baseUri,
+        string? packageFullName = null) => new(
         1234,
         "ChatGPT.exe",
         CodexCompatibilityCatalog.OfficialPackageFamilyName,
-        CodexCompatibilityCatalog.SupportedPackageFullName,
+        packageFullName ?? CodexCompatibilityCatalog.SupportedPackageFullName,
         new DateTimeOffset(2026, 7, 22, 0, 0, 0, TimeSpan.Zero),
         WindowsCodexProcessSnapshotSource.CurrentSessionId,
         new Uri(baseUri));
@@ -249,12 +278,12 @@ public sealed class CdpEndpointDiscoveryTests
         }
         """;
 
-    private static string TargetJson(int port) => $$"""
+    private static string TargetJson(int port, string? pageUrl = null) => $$"""
         [{
           "id":"codex-page",
           "type":"page",
           "title":"Codex",
-          "url":"file:///C:/Program%20Files/WindowsApps/OpenAI.Codex_26.715.10079.0_x64__2p2nqsd0c76g0/app/index.html",
+          "url":"{{pageUrl ?? "file:///C:/Program%20Files/WindowsApps/OpenAI.Codex_26.715.10079.0_x64__2p2nqsd0c76g0/app/index.html"}}",
           "webSocketDebuggerUrl":"ws://127.0.0.1:{{port}}/devtools/page/codex-page"
         }]
         """;

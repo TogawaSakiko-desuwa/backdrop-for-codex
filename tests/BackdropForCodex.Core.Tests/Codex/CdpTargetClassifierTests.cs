@@ -20,6 +20,31 @@ public sealed class CdpTargetClassifierTests
         Assert.Equal(CdpTargetClassification.CodexPage, CdpTargetClassifier.Classify(target, _profile));
     }
 
+    [Fact]
+    public void Classify_AcceptsOnlyPackagedFilePageForMatchingReviewedProfile()
+    {
+        const string legacyUrl =
+            "file:///C:/Program%20Files/WindowsApps/" +
+            "OpenAI.Codex_26.715.10079.0_x64__2p2nqsd0c76g0/app/index.html";
+        const string currentUrl =
+            "file:///C:/Program%20Files/WindowsApps/" +
+            "OpenAI.Codex_26.721.3404.0_x64__2p2nqsd0c76g0/app/index.html";
+        var currentProfile = CodexCompatibilityTests.GetProfile(new Version(26, 721, 3404, 0));
+
+        Assert.Equal(
+            CdpTargetClassification.CodexPage,
+            CdpTargetClassifier.Classify(Target("page", "Codex", legacyUrl), _profile));
+        Assert.Equal(
+            CdpTargetClassification.OtherPage,
+            CdpTargetClassifier.Classify(Target("page", "Codex", currentUrl), _profile));
+        Assert.Equal(
+            CdpTargetClassification.CodexPage,
+            CdpTargetClassifier.Classify(Target("page", "Codex", currentUrl), currentProfile));
+        Assert.Equal(
+            CdpTargetClassification.OtherPage,
+            CdpTargetClassifier.Classify(Target("page", "Codex", legacyUrl), currentProfile));
+    }
+
     [Theory]
     [InlineData("file:///C:/Users/Alice/Codex/index.html")]
     [InlineData("app://evil/index.html")]

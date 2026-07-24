@@ -24,9 +24,29 @@ public sealed class CodexCompatibilityTests
             result.Profile.AppUserModelId);
     }
 
+    [Fact]
+    public void Evaluate_AcceptsCurrentReviewedPackage()
+    {
+        var package = CreateOfficialPackage(new Version(26, 721, 3404, 0));
+
+        var result = CodexCompatibilityCatalog.Evaluate(package, Windows11X64);
+
+        Assert.True(result.IsSupported);
+        Assert.NotNull(result.Profile);
+        Assert.Equal(new Version(26, 721, 3404, 0), result.Profile.PackageVersion);
+        Assert.Equal(
+            "OpenAI.Codex_26.721.3404.0_x64__2p2nqsd0c76g0",
+            result.Profile.PackageFullName);
+        Assert.Equal(
+            "openai-codex-26.721.3404.0-windows11-x64-v1",
+            result.Profile.Id);
+    }
+
     [Theory]
     [InlineData("26.715.10078.0")]
     [InlineData("26.715.10080.0")]
+    [InlineData("26.721.3403.0")]
+    [InlineData("26.721.3405.0")]
     [InlineData("27.0.0.0")]
     public void Evaluate_FailsClosedForUnknownVersion(string version)
     {
@@ -91,6 +111,18 @@ public sealed class CodexCompatibilityTests
         CodexPackageArchitecture.X64,
         CodexCompatibilityCatalog.OfficialApplicationId);
 
+    internal static CodexPackageDescriptor CreateOfficialPackage(Version version) => new(
+        CodexCompatibilityCatalog.OfficialPackageName,
+        CodexCompatibilityCatalog.OfficialPackageFamilyName,
+        version,
+        CodexPackageArchitecture.X64,
+        CodexCompatibilityCatalog.OfficialApplicationId);
+
     internal static CodexCompatibilityProfile GetProfile() =>
-        CodexCompatibilityCatalog.Evaluate(CreateOfficialPackage(), Windows11X64).Profile!;
+        GetProfile(CodexCompatibilityCatalog.SupportedPackageVersion);
+
+    internal static CodexCompatibilityProfile GetProfile(Version version) =>
+        CodexCompatibilityCatalog.Evaluate(
+            CreateOfficialPackage(version),
+            Windows11X64).Profile!;
 }
