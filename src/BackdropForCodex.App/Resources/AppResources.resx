@@ -90,6 +90,8 @@
   <data name="Stage_Resetting" xml:space="preserve"><value>Resetting Backdrop for Codex…</value></data>
   <data name="Status_AppliedTitle" xml:space="preserve"><value>Wallpaper is active</value></data>
   <data name="Status_AppliedMessage" xml:space="preserve"><value>Codex is using the saved wallpaper and the enhanced desktop shortcut is ready.</value></data>
+  <data name="Status_AppliedDegradedTitle" xml:space="preserve"><value>Wallpaper active with reduced effects</value></data>
+  <data name="Status_AppliedDegradedMessage" xml:space="preserve"><value>Compatibility checks disabled one or more optional visual effects. The global wallpaper remains active; export a diagnostic report to review capability reason codes.</value></data>
   <data name="Status_AppliedShortcutFailedTitle" xml:space="preserve"><value>Wallpaper active</value></data>
   <data name="Status_AppliedShortcutFailedMessage" xml:space="preserve"><value>The wallpaper is active, but the desktop shortcut could not be updated. You can retry it.</value></data>
   <data name="Status_AutoLaunchNeedsMediaTitle" xml:space="preserve"><value>Wallpaper needs attention</value></data>
@@ -124,15 +126,20 @@
   <data name="Status_ShortcutReadyMessage" xml:space="preserve"><value>The enhanced desktop shortcut was created or updated.</value></data>
   <data name="Risk_Title" xml:space="preserve"><value>Allow local Codex debugging?</value></data>
   <data name="Risk_Summary" xml:space="preserve"><value>This feature starts Codex with a local Chromium debugging endpoint.</value></data>
-  <data name="Risk_Detail" xml:space="preserve"><value>The endpoint is limited to this device and remains available until Codex exits. Backdrop verifies the official package and a reviewed version before connecting.</value></data>
+  <data name="Risk_Detail" xml:space="preserve"><value>The endpoint is limited to this device and remains available until Codex exits. Backdrop verifies the official package, process, session, endpoint, and target before runtime capability probes decide which visual effects may run.</value></data>
   <data name="Risk_Acknowledgement" xml:space="preserve"><value>I understand and want to continue</value></data>
   <data name="Risk_Revoked" xml:space="preserve"><value>The acknowledgement has been revoked. You will be asked again before the next enhanced launch.</value></data>
   <data name="Settings_ThemeDescription" xml:space="preserve"><value>Follow Windows by default, including high-contrast mode.</value></data>
   <data name="Settings_RiskDescription" xml:space="preserve"><value>Review or revoke the local debugging acknowledgement.</value></data>
-  <data name="Settings_PrivacyDescription" xml:space="preserve"><value>Media stays on this device and is served only through an authenticated loopback address.</value></data>
+  <data name="Settings_PrivacyDescription" xml:space="preserve"><value>Media stays on this device. A verified local CDP session binds the leased file to an owned page input; no media HTTP server is used.</value></data>
+  <data name="Settings_RecoveryTitle" xml:space="preserve"><value>Settings recovery</value></data>
+  <data name="Settings_RecoveryDescription" xml:space="preserve"><value>A preserved read-only V1 backup is available. Restore it by migrating a fresh Settings V2 document; the backup itself remains unchanged.</value></data>
+  <data name="Action_RestoreBackup" xml:space="preserve"><value>Restore V1 backup</value></data>
+  <data name="Status_BackupRestoredTitle" xml:space="preserve"><value>V1 backup restored</value></data>
+  <data name="Status_BackupRestoredMessage" xml:space="preserve"><value>The preserved V1 backup was migrated into Settings V2. The read-only backup remains available for manual downgrade.</value></data>
   <data name="Settings_Licenses" xml:space="preserve"><value>Open-source licenses</value></data>
   <data name="Settings_ResetTitle" xml:space="preserve"><value>Reset Backdrop for Codex?</value></data>
-  <data name="Settings_ResetDescription" xml:space="preserve"><value>This restores the official background, clears settings and recent media, revokes acknowledgement, resets UI preferences, and removes only a shortcut verified as owned by this app.</value></data>
+  <data name="Settings_ResetDescription" xml:space="preserve"><value>This restores the official background; permanently deletes settings, recent media, and any preserved V1 migration backup; revokes acknowledgement; resets UI preferences; and removes only a shortcut verified as owned by this app.</value></data>
   <data name="About_NonAffiliation" xml:space="preserve"><value>An independent project. Not affiliated with or endorsed by OpenAI.</value></data>
   <data name="Tray_Open" xml:space="preserve"><value>Open Backdrop for Codex</value></data>
   <data name="Tray_Apply" xml:space="preserve"><value>Apply wallpaper</value></data>
@@ -151,8 +158,14 @@
   <data name="Error_PreferencesWriteFailed_Recovery" xml:space="preserve"><value>Check access to your local app-data folder, then retry.</value></data>
   <data name="Error_PreferencesResetFailed_Message" xml:space="preserve"><value>Appearance preferences could not be reset.</value></data>
   <data name="Error_PreferencesResetFailed_Recovery" xml:space="preserve"><value>Close other instances and retry.</value></data>
-  <data name="Error_WallpaperSettingsReadFailed_Message" xml:space="preserve"><value>Wallpaper settings could not be read, so safe defaults are being used.</value></data>
-  <data name="Error_WallpaperSettingsReadFailed_Recovery" xml:space="preserve"><value>Select media and apply again to rebuild the settings file.</value></data>
+  <data name="Error_WallpaperSettingsReadFailed_Message" xml:space="preserve"><value>Wallpaper settings could not be loaded. The existing document was left untouched.</value></data>
+  <data name="Error_WallpaperSettingsReadFailed_Recovery" xml:space="preserve"><value>Review the local file before using complete reset to discard it.</value></data>
+  <data name="Error_WallpaperSettingsRecoveryRequired_Message" xml:space="preserve"><value>The settings document or its V1 migration backup needs explicit recovery. Wallpaper editing is read-only and no file was overwritten.</value></data>
+  <data name="Error_WallpaperSettingsRecoveryRequired_Recovery" xml:space="preserve"><value>Preserve any file you need, then use Settings → About → Reset app only if you intend to discard the protected state.</value></data>
+  <data name="Error_WallpaperSettingsFutureVersion_Message" xml:space="preserve"><value>The settings document was created by a newer schema. Wallpaper editing is read-only and the file was not changed.</value></data>
+  <data name="Error_WallpaperSettingsFutureVersion_Recovery" xml:space="preserve"><value>Use a compatible newer release, or move the settings file manually before starting over. Do not reset if you need its contents.</value></data>
+  <data name="Error_WallpaperSettingsUnsupportedFeatures_Message" xml:space="preserve"><value>The Global profile uses media metadata that the 1.3 editor cannot represent. Wallpaper editing is read-only and the settings file was not changed.</value></data>
+  <data name="Error_WallpaperSettingsUnsupportedFeatures_Recovery" xml:space="preserve"><value>Use a release that supports this media source, or preserve the settings file before explicitly resetting the app.</value></data>
   <data name="Error_WallpaperSettingsWriteFailed_Message" xml:space="preserve"><value>Wallpaper settings could not be saved.</value></data>
   <data name="Error_WallpaperSettingsWriteFailed_Recovery" xml:space="preserve"><value>Check access to your local app-data folder, then retry.</value></data>
   <data name="Error_WallpaperConfigurationInvalid_Message" xml:space="preserve"><value>One or more wallpaper settings are outside the supported range.</value></data>
@@ -165,8 +178,8 @@
   <data name="Error_CodexAlreadyRunning_Recovery" xml:space="preserve"><value>Exit Codex completely, then apply the wallpaper again.</value></data>
   <data name="Error_CodexUnavailable_Message" xml:space="preserve"><value>The reviewed official Codex installation could not be found.</value></data>
   <data name="Error_CodexUnavailable_Recovery" xml:space="preserve"><value>Install or repair the official Codex app, then retry.</value></data>
-  <data name="Error_CodexVersionUnsupported_Message" xml:space="preserve"><value>This Codex version has not been reviewed for compatibility.</value></data>
-  <data name="Error_CodexVersionUnsupported_Recovery" xml:space="preserve"><value>Use a supported release of Codex or wait for a Backdrop update.</value></data>
+  <data name="Error_CodexVersionUnsupported_Message" xml:space="preserve"><value>The Codex package or runtime failed security validation.</value></data>
+  <data name="Error_CodexVersionUnsupported_Recovery" xml:space="preserve"><value>Install or repair the trusted Store/MSIX Codex package, and confirm that Windows 11 x64 is in use.</value></data>
   <data name="Error_EndpointAmbiguous_Message" xml:space="preserve"><value>More than one verified local Codex debugging endpoint was found.</value></data>
   <data name="Error_EndpointAmbiguous_Recovery" xml:space="preserve"><value>Exit every Codex process, then retry once.</value></data>
   <data name="Error_EndpointTimedOut_Message" xml:space="preserve"><value>Codex did not expose its verified local window in time.</value></data>
@@ -185,4 +198,11 @@
   <data name="Error_UnsupportedPlatform_Recovery" xml:space="preserve"><value>Run the app on a supported Windows device.</value></data>
   <data name="Error_AccessDenied_Message" xml:space="preserve"><value>Windows denied access needed for this action.</value></data>
   <data name="Error_AccessDenied_Recovery" xml:space="preserve"><value>Check file permissions and retry.</value></data>
+  <data name="Diagnostics_Title" xml:space="preserve"><value>Diagnostic report</value></data>
+  <data name="Diagnostics_Description" xml:space="preserve"><value>Create an allow-listed local report to help investigate compatibility and runtime failures.</value></data>
+  <data name="Diagnostics_Disclosure" xml:space="preserve"><value>The report contains app, Windows, runtime stage, and capability summaries. It does not include media paths, file names, page titles, URLs, DOM or chat text, settings JSON, or stable identifiers.</value></data>
+  <data name="Diagnostics_Export" xml:space="preserve"><value>Export diagnostic report</value></data>
+  <data name="Diagnostics_SaveTitle" xml:space="preserve"><value>Save diagnostic report</value></data>
+  <data name="Diagnostics_CompleteTitle" xml:space="preserve"><value>Diagnostic report saved</value></data>
+  <data name="Diagnostics_CompleteMessage" xml:space="preserve"><value>The allow-listed local report was saved to the location you selected.</value></data>
 </root>

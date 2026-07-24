@@ -22,33 +22,163 @@ public sealed class WallpaperCoordinatorTests
         Assert.Equal(CodexCompatibilityCatalog.SupportedPackageVersion, fixture.Package.Descriptor.Version);
         Assert.Equal(1, fixture.Activation.CallCount);
         Assert.Equal(WallpaperCoordinator.RemoteDebuggingArguments, fixture.Activation.Arguments);
-        Assert.Equal(1, fixture.MediaServer.StartCount);
+        Assert.Equal(1, fixture.SourceProvider.AcquireCount);
         Assert.Equal(1, fixture.Injection.ApplyCount);
         Assert.Equal(fixture.Endpoint, fixture.Injection.LastEndpoint);
-        Assert.Equal(fixture.MediaServer.Endpoint.Uri, fixture.Injection.LastOptions?.Source);
+        Assert.True(fixture.Injection.LastOptions?.Source.IsFile);
         Assert.Equal(fixture.ValidSettings.MediaPath, fixture.Injection.LastOptions?.LocalMediaPath);
         Assert.Equal(
-            fixture.MediaServer.Endpoint.ContentLength,
+            fixture.SourceProvider.ContentLength,
             fixture.Injection.LastOptions?.ExpectedContentLength);
-        Assert.Equal(1, fixture.SettingsStore.SaveCount);
+        Assert.Equal(1, fixture.SettingsRepository.SaveCount);
         Assert.Equal(WallpaperRuntimePhase.Active, coordinator.Status.Phase);
     }
 
     [Fact]
-    public async Task StartOrUpdateAsync_PersistsAndActivatesCurrentCompatibilityProfile()
+    public async Task StartOrUpdateAsync_PersistsAndActivatesInstalled3996CompatibilityProfile()
     {
-        var fixture = new CoordinatorFixture(new Version(26, 721, 3404, 0));
+        var fixture = new CoordinatorFixture(new Version(26, 721, 3996, 0));
         await using var coordinator = fixture.CreateCoordinator();
 
         var saved = await coordinator.StartOrUpdateAsync(fixture.ValidSettings);
 
         Assert.Equal(
-            "openai-codex-26.721.3404.0-windows11-x64-v1",
+            "openai-codex-26.721.3996.0-windows11-x64-v1",
             saved.LastCompatibilityProfileId);
         Assert.Equal(
-            "OpenAI.Codex_26.721.3404.0_x64__2p2nqsd0c76g0",
+            "OpenAI.Codex_26.721.3996.0_x64__2p2nqsd0c76g0",
             fixture.Activation.Profile?.PackageFullName);
+        Assert.Equal(
+            CompatibilityProbePackageKind.Exact,
+            fixture.Activation.Profile?.ProbePackageKind);
+        Assert.True(fixture.Activation.Profile?.Capabilities.Glass.IsAvailable);
+        Assert.True(fixture.Activation.Profile?.Capabilities.Advanced.IsAvailable);
         Assert.Equal(fixture.Endpoint, fixture.Injection.LastEndpoint);
+    }
+
+    [Fact]
+    public async Task StartOrUpdateAsync_UsesReviewedBandForLater721Patch()
+    {
+        var fixture = new CoordinatorFixture(new Version(26, 721, 4000, 0));
+        await using var coordinator = fixture.CreateCoordinator();
+
+        var saved = await coordinator.StartOrUpdateAsync(fixture.ValidSettings);
+
+        Assert.Equal(
+            "openai-codex-26.721-reviewed-band-windows11-x64-v1",
+            saved.LastCompatibilityProfileId);
+        Assert.Equal(
+            "OpenAI.Codex_26.721.4000.0_x64__2p2nqsd0c76g0",
+            fixture.Activation.Profile?.PackageFullName);
+        Assert.Equal(
+            CompatibilityProbePackageKind.ReviewedBand,
+            fixture.Activation.Profile?.ProbePackageKind);
+        Assert.True(fixture.Activation.Profile?.Capabilities.Glass.IsAvailable);
+        Assert.True(fixture.Activation.Profile?.Capabilities.Advanced.IsAvailable);
+        Assert.Equal(fixture.Endpoint, fixture.Injection.LastEndpoint);
+    }
+
+    [Theory]
+    [InlineData(MediaSourceKind.WallpaperEngineWorkshopProject, MediaKind.Video)]
+    [InlineData(MediaSourceKind.LocalFile, MediaKind.None)]
+    public async Task V1FacadeRefusesToOverwriteProjectionIncompatibleV2GlobalMedia(
+        MediaSourceKind sourceKind,
+        MediaKind mediaKind)
+    {
+        var fixture = new CoordinatorFixture();
+        var media = new MediaReference
+        {
+            MediaId = Guid.CreateVersion7(),
+            SourceKind = sourceKind,
+            SourceIdentifier = sourceKind == MediaSourceKind.LocalFile
+                ? @"C:\Wallpapers\unresolved.png"
+                : "42",
+            LastKnownKind = mediaKind,
+        };
+        var profile = WallpaperProfile.CreateDefault() with
+        {
+            MediaId = media.MediaId,
+        };
+        var original = new SettingsV2
+        {
+            Profiles = [profile],
+            MediaCatalog = [media],
+            RegionBindings = new Dictionary<SemanticRegion, Guid>
+            {
+                [SemanticRegion.Global] = profile.ProfileId,
+            },
+        }.Snapshot();
+        fixture.SettingsRepository.Settings = original;
+        await using var coordinator = fixture.CreateCoordinator();
+
+        await Assert.ThrowsAsync<SettingsProjectionException>(
+            () => coordinator.LoadSettingsAsync());
+        await Assert.ThrowsAsync<SettingsProjectionException>(
+            () => coordinator.SaveSettingsAsync(fixture.ValidSettings));
+
+        Assert.Equal(0, fixture.SettingsRepository.SaveCount);
+        Assert.Equal(
+            original.ResolveProfile(SemanticRegion.Global).MediaId,
+            fixture.SettingsRepository.Settings
+                .ResolveProfile(SemanticRegion.Global)
+                .MediaId);
+    }
+
+    [Fact]
+    public async Task LoadSettingsAsyncRechecksRepositoryAfterInitialSuccess()
+    {
+        var fixture = new CoordinatorFixture();
+        await using var coordinator = fixture.CreateCoordinator();
+
+        _ = await coordinator.LoadSettingsAsync();
+        fixture.SettingsRepository.LoadResultOverride =
+            new SettingsLoadResult.FutureReadOnly(
+                SchemaVersion: 99,
+                HasVersion1Backup: true);
+
+        var exception = await Assert.ThrowsAsync<FutureSettingsVersionException>(
+            () => coordinator.LoadSettingsAsync());
+
+        Assert.Equal(99, exception.SchemaVersion);
+        Assert.True(exception.HasVersion1Backup);
+        Assert.Equal(2, fixture.SettingsRepository.LoadCount);
+    }
+
+    [Fact]
+    public async Task SaveSettingsAsyncRechecksProjectionAgainstCurrentRepositoryState()
+    {
+        var fixture = new CoordinatorFixture();
+        await using var coordinator = fixture.CreateCoordinator();
+        _ = await coordinator.LoadSettingsAsync();
+        var workshop = new MediaReference
+        {
+            MediaId = Guid.CreateVersion7(),
+            SourceKind = MediaSourceKind.WallpaperEngineWorkshopProject,
+            SourceIdentifier = "42",
+            LastKnownKind = MediaKind.Video,
+        };
+        var profile = WallpaperProfile.CreateDefault() with
+        {
+            MediaId = workshop.MediaId,
+        };
+        fixture.SettingsRepository.Settings = new SettingsV2
+        {
+            Profiles = [profile],
+            MediaCatalog = [workshop],
+            RegionBindings = new Dictionary<SemanticRegion, Guid>
+            {
+                [SemanticRegion.Global] = profile.ProfileId,
+            },
+        };
+        fixture.SettingsRepository.HasVersion1Backup = true;
+
+        var exception = await Assert.ThrowsAsync<SettingsProjectionException>(
+            () => coordinator.SaveSettingsAsync(fixture.ValidSettings));
+
+        Assert.True(exception.HasVersion1Backup);
+        Assert.Equal(2, fixture.SettingsRepository.LoadCount);
+        Assert.Equal(0, fixture.SettingsRepository.SaveCount);
+        Assert.Equal(workshop.MediaId, fixture.SettingsRepository.Settings.Profiles[0].MediaId);
     }
 
     [Theory]
@@ -80,7 +210,9 @@ public sealed class WallpaperCoordinatorTests
         Assert.Equal(SettingsV1.MaximumEffectiveOverlay, options.Composition.LightOverlay);
         Assert.Equal(SettingsV1.MaximumEffectiveOverlay, saved.DarkOverlay);
         Assert.Equal(SettingsV1.MaximumEffectiveOverlay, saved.LightOverlay);
-        Assert.Equal(saved, fixture.SettingsStore.Settings);
+        AssertSettingsEquivalent(
+            saved,
+            SettingsV1Projection.ProjectGlobal(fixture.SettingsRepository.Settings));
     }
 
     [Fact]
@@ -94,7 +226,8 @@ public sealed class WallpaperCoordinatorTests
             () => coordinator.StartOrUpdateAsync(fixture.ValidSettings));
 
         Assert.Equal(0, fixture.Activation.CallCount);
-        Assert.Equal(0, fixture.MediaServer.StartCount);
+        Assert.Equal(1, fixture.SourceProvider.AcquireCount);
+        Assert.Equal(1, fixture.SourceProvider.DisposeCount);
         Assert.Equal(0, fixture.Injection.ApplyCount);
         Assert.Equal(WallpaperRuntimePhase.Faulted, coordinator.Status.Phase);
     }
@@ -109,7 +242,7 @@ public sealed class WallpaperCoordinatorTests
             () => coordinator.StartOrUpdateAsync(
                 fixture.ValidSettings with { AcceptedCdpRisk = false }));
 
-        Assert.Equal(0, fixture.Inspector.CallCount);
+        Assert.Equal(0, fixture.SourceProvider.AcquireCount);
         Assert.Equal(0, fixture.Activation.CallCount);
     }
 
@@ -123,7 +256,8 @@ public sealed class WallpaperCoordinatorTests
         await Assert.ThrowsAsync<WallpaperInjectionException>(
             () => coordinator.StartOrUpdateAsync(fixture.ValidSettings));
 
-        Assert.Equal(1, fixture.MediaServer.StopCount);
+        Assert.Equal(1, fixture.PlaybackPool.ReleaseCount);
+        Assert.Equal(1, fixture.SourceProvider.DisposeCount);
         Assert.Equal(1, fixture.Injection.StopCount);
         Assert.False(coordinator.IsActive);
     }
@@ -138,7 +272,8 @@ public sealed class WallpaperCoordinatorTests
         await coordinator.DisableAsync();
 
         Assert.Equal(1, fixture.Injection.StopCount);
-        Assert.Equal(1, fixture.MediaServer.StopCount);
+        Assert.Equal(1, fixture.PlaybackPool.ReleaseCount);
+        Assert.Equal(["injection-stop", "pool-release"], fixture.CleanupEvents);
         Assert.False(coordinator.IsActive);
         Assert.Equal(WallpaperRuntimePhase.Idle, coordinator.Status.Phase);
     }
@@ -163,7 +298,7 @@ public sealed class WallpaperCoordinatorTests
             () => coordinator.StartOrUpdateAsync(fixture.ValidSettings));
 
         Assert.Equal(1, fixture.Activation.CallCount);
-        Assert.Equal(1, fixture.MediaServer.StartCount);
+        Assert.Equal(2, fixture.SourceProvider.AcquireCount);
         Assert.False(coordinator.IsActive);
     }
 
@@ -175,7 +310,8 @@ public sealed class WallpaperCoordinatorTests
             fixture.Endpoint.Candidate with { ProcessId = 84 },
             fixture.Endpoint.Browser,
             fixture.Endpoint.BrowserWebSocketUri,
-            fixture.Endpoint.Targets);
+            fixture.Endpoint.Targets,
+            fixture.Endpoint.Profile);
         fixture.Discovery.Results.Clear();
         fixture.Discovery.Results.Enqueue(new CdpDiscoveryResult([foreignEndpoint], []));
         await using var coordinator = fixture.CreateCoordinator(
@@ -211,13 +347,7 @@ public sealed class WallpaperCoordinatorTests
     public async Task StartOrUpdateAsync_NewImageGenerationDoesNotInheritVideoPause()
     {
         var fixture = new CoordinatorFixture();
-        fixture.Inspector.Format = MediaFormat.WebM;
-        fixture.MediaServer.Endpoint = new LoopbackMediaEndpoint(
-            new Uri("http://127.0.0.1:50100/private-video-token"),
-            MediaFormat.WebM,
-            MediaKind.Video,
-            "video/webm",
-            128);
+        fixture.SourceProvider.Format = MediaFormat.WebM;
         await using var coordinator = fixture.CreateCoordinator();
         var videoSettings = fixture.ValidSettings with
         {
@@ -227,13 +357,7 @@ public sealed class WallpaperCoordinatorTests
         await coordinator.StartOrUpdateAsync(videoSettings);
         await coordinator.SetPausedAsync(true);
         fixture.ProcessSource.Processes = [fixture.ReviewedProcess];
-        fixture.Inspector.Format = MediaFormat.Png;
-        fixture.MediaServer.Endpoint = new LoopbackMediaEndpoint(
-            new Uri("http://127.0.0.1:50100/private-image-token"),
-            MediaFormat.Png,
-            MediaKind.Image,
-            "image/png",
-            128);
+        fixture.SourceProvider.Format = MediaFormat.Png;
 
         await coordinator.StartOrUpdateAsync(fixture.ValidSettings);
 
@@ -253,7 +377,7 @@ public sealed class WallpaperCoordinatorTests
         var saved = await coordinator.SaveSettingsAsync(revoked);
 
         Assert.False(saved.AcceptedCdpRisk);
-        Assert.False(fixture.SettingsStore.Settings.AcceptedCdpRisk);
+        Assert.False(fixture.SettingsRepository.Settings.AcceptedCdpRisk);
         Assert.Equal(0, fixture.Activation.CallCount);
     }
 
@@ -272,7 +396,9 @@ public sealed class WallpaperCoordinatorTests
 
         Assert.Equal(SettingsV1.MaximumEffectiveOverlay, saved.DarkOverlay);
         Assert.Equal(SettingsV1.MaximumEffectiveOverlay, saved.LightOverlay);
-        Assert.Equal(saved, fixture.SettingsStore.Settings);
+        AssertSettingsEquivalent(
+            saved,
+            SettingsV1Projection.ProjectGlobal(fixture.SettingsRepository.Settings));
     }
 
     [Fact]
@@ -281,18 +407,19 @@ public sealed class WallpaperCoordinatorTests
         var fixture = new CoordinatorFixture();
         fixture.Injection.StopException = new InvalidOperationException("injection stop failed");
         fixture.Injection.DisposeException = new InvalidOperationException("injection dispose failed");
-        fixture.MediaServer.StopException = new InvalidOperationException("media stop failed");
-        fixture.MediaServer.DisposeException = new InvalidOperationException("media dispose failed");
-        fixture.SettingsStore.DisposeException = new InvalidOperationException("settings dispose failed");
+        fixture.PlaybackPool.ReleaseException = new InvalidOperationException("media release failed");
+        fixture.PlaybackPool.DisposeException = new InvalidOperationException("pool dispose failed");
+        fixture.SettingsRepository.DisposeException =
+            new InvalidOperationException("settings dispose failed");
         var coordinator = fixture.CreateCoordinator();
 
         await Assert.ThrowsAsync<AggregateException>(() => coordinator.DisposeAsync().AsTask());
 
         Assert.Equal(1, fixture.Injection.StopCount);
         Assert.Equal(1, fixture.Injection.DisposeCount);
-        Assert.Equal(1, fixture.MediaServer.StopCount);
-        Assert.Equal(1, fixture.MediaServer.DisposeCount);
-        Assert.Equal(1, fixture.SettingsStore.DisposeCount);
+        Assert.Equal(1, fixture.PlaybackPool.ReleaseCount);
+        Assert.Equal(1, fixture.PlaybackPool.DisposeCount);
+        Assert.Equal(1, fixture.SettingsRepository.DisposeCount);
         Assert.Equal(WallpaperRuntimePhase.Disposed, coordinator.Status.Phase);
     }
 
@@ -316,9 +443,229 @@ public sealed class WallpaperCoordinatorTests
         await faulted.Task.WaitAsync(TimeSpan.FromSeconds(2));
 
         Assert.False(coordinator.IsActive);
-        Assert.False(fixture.MediaServer.IsRunning);
-        Assert.Equal(1, fixture.MediaServer.StopCount);
+        Assert.Null(fixture.PlaybackPool.ActiveLease);
+        Assert.Equal(1, fixture.PlaybackPool.ReleaseCount);
         Assert.Equal(WallpaperRuntimePhase.Faulted, coordinator.Status.Phase);
+    }
+
+    [Fact]
+    public async Task InjectionAmbiguityFault_ReleasesMediaAfterSessionSelfTeardown()
+    {
+        var fixture = new CoordinatorFixture();
+        await using var coordinator = fixture.CreateCoordinator();
+        await coordinator.StartOrUpdateAsync(fixture.ValidSettings);
+        var faulted = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        coordinator.StatusChanged += (_, status) =>
+        {
+            if (status.Phase == WallpaperRuntimePhase.Faulted)
+            {
+                faulted.TrySetResult();
+            }
+        };
+
+        fixture.Injection.RaiseHealthFaultAfterSelfTeardown();
+        await faulted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        Assert.False(coordinator.IsActive);
+        Assert.Equal(0, fixture.Injection.Generation);
+        Assert.Null(fixture.PlaybackPool.ActiveLease);
+        Assert.Equal(1, fixture.PlaybackPool.ReleaseCount);
+        Assert.Equal(WallpaperRuntimePhase.Faulted, coordinator.Status.Phase);
+    }
+
+    [Fact]
+    public async Task CapabilityDegradation_IsForwardedAsTypedRuntimeSignal()
+    {
+        var fixture = new CoordinatorFixture();
+        await using var coordinator = fixture.CreateCoordinator();
+        await coordinator.StartOrUpdateAsync(fixture.ValidSettings);
+        var changed = new TaskCompletionSource<WallpaperInjectionCapabilitiesChangedEventArgs>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        coordinator.CapabilitiesChanged += (_, eventArgs) => changed.TrySetResult(eventArgs);
+
+        fixture.Injection.RaiseGlassCapabilityDegradation();
+        var observed = await changed.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        Assert.Equal(fixture.Injection.Generation, observed.Generation);
+        Assert.True(observed.Previous.Glass.IsAvailable);
+        Assert.False(observed.Current.Glass.IsAvailable);
+        Assert.Equal(observed.Current, coordinator.Capabilities);
+    }
+
+    [Fact]
+    public async Task SecurityRejection_RemainsAvailableToProductionDiagnostics()
+    {
+        var fixture = new CoordinatorFixture();
+        fixture.Package = fixture.Package with
+        {
+            Descriptor = new CodexPackageDescriptor(
+                "Contoso.Codex",
+                "Contoso.Codex_unreviewed",
+                fixture.Package.Descriptor.Version,
+                CodexPackageArchitecture.X64,
+                CodexCompatibilityCatalog.OfficialApplicationId),
+        };
+        await using var coordinator = fixture.CreateCoordinator();
+
+        await Assert.ThrowsAsync<UnsupportedCodexVersionException>(
+            () => coordinator.StartOrUpdateAsync(fixture.ValidSettings));
+
+        Assert.All(
+            GetCapabilities(coordinator.Capabilities),
+            capability =>
+            {
+                Assert.False(capability.IsAvailable);
+                Assert.Equal(
+                    CompatibilityCapabilityReasonCode.SecurityRejected,
+                    capability.ReasonCode);
+            });
+        Assert.Equal(0, fixture.SourceProvider.AcquireCount);
+    }
+
+    [Fact]
+    public async Task StructuralProbeFailure_SurvivesFailedApplyAndSessionCleanup()
+    {
+        var fixture = new CoordinatorFixture();
+        var baseline = fixture.Endpoint.Profile.Capabilities;
+        fixture.Injection.ApplyCapabilities = baseline.DowngradeWith(
+            new CompatibilityCapabilities(
+                new CompatibilityCapability(
+                    false,
+                    CompatibilityCapabilityReasonCode.StructuralProbeFailed),
+                baseline.Regions,
+                baseline.Glass,
+                baseline.Audio,
+                baseline.Advanced));
+        fixture.Injection.ApplyException =
+            new WallpaperInjectionException("global structural probe failed");
+        await using var coordinator = fixture.CreateCoordinator();
+
+        await Assert.ThrowsAsync<WallpaperInjectionException>(
+            () => coordinator.StartOrUpdateAsync(fixture.ValidSettings));
+
+        Assert.Equal(
+            CompatibilityCapabilityReasonCode.StructuralProbeFailed,
+            coordinator.Capabilities.Global.ReasonCode);
+        Assert.Equal(
+            CompatibilityCapabilityReasonCode.AvailableFromExactProbePackage,
+            coordinator.Capabilities.Glass.ReasonCode);
+        Assert.All(
+            GetCapabilities(fixture.Injection.Capabilities),
+            capability => Assert.Equal(
+                CompatibilityCapabilityReasonCode.DisabledForGeneration,
+                capability.ReasonCode));
+    }
+
+    [Fact]
+    public async Task GenericCompatibilityEvidence_SurvivesFailedApply()
+    {
+        var fixture = new CoordinatorFixture(new Version(27, 1, 0, 0));
+        fixture.Injection.ApplyException = new WallpaperInjectionException("test failure");
+        await using var coordinator = fixture.CreateCoordinator();
+
+        await Assert.ThrowsAsync<WallpaperInjectionException>(
+            () => coordinator.StartOrUpdateAsync(fixture.ValidSettings));
+
+        Assert.Equal(
+            CompatibilityCapabilityReasonCode.AvailableFromGenericProbePackage,
+            coordinator.Capabilities.Global.ReasonCode);
+        Assert.Equal(
+            CompatibilityCapabilityReasonCode.NotImplementedInCurrentRelease,
+            coordinator.Capabilities.Regions.ReasonCode);
+        Assert.Equal(
+            CompatibilityCapabilityReasonCode.UnavailableForGenericProbePackage,
+            coordinator.Capabilities.Glass.ReasonCode);
+    }
+
+    [Fact]
+    public async Task DisableAsync_ExplicitlyResetsCapabilitySnapshot()
+    {
+        var fixture = new CoordinatorFixture();
+        await using var coordinator = fixture.CreateCoordinator();
+        await coordinator.StartOrUpdateAsync(fixture.ValidSettings);
+
+        await coordinator.DisableAsync();
+
+        Assert.All(
+            GetCapabilities(coordinator.Capabilities),
+            capability =>
+            {
+                Assert.False(capability.IsAvailable);
+                Assert.Equal(
+                    CompatibilityCapabilityReasonCode.DisabledForGeneration,
+                    capability.ReasonCode);
+            });
+    }
+
+    [Fact]
+    public async Task ResetSettingsAsync_ExplicitlyResetsCapabilitySnapshot()
+    {
+        var fixture = new CoordinatorFixture();
+        await using var coordinator = fixture.CreateCoordinator();
+        await coordinator.StartOrUpdateAsync(fixture.ValidSettings);
+
+        await coordinator.ResetSettingsAsync();
+
+        Assert.All(
+            GetCapabilities(coordinator.Capabilities),
+            capability => Assert.Equal(
+                CompatibilityCapabilityReasonCode.DisabledForGeneration,
+                capability.ReasonCode));
+    }
+
+    [Fact]
+    public async Task CapabilityChange_FromPreviousGenerationCannotOverwriteCurrentSnapshot()
+    {
+        var fixture = new CoordinatorFixture();
+        await using var coordinator = fixture.CreateCoordinator();
+        await coordinator.StartOrUpdateAsync(fixture.ValidSettings);
+        var previousGeneration = fixture.Injection.Generation;
+        fixture.ProcessSource.Processes = [fixture.ReviewedProcess];
+
+        await coordinator.StartOrUpdateAsync(fixture.ValidSettings);
+
+        var current = coordinator.Capabilities;
+        var stale = current.DowngradeWith(
+            new CompatibilityCapabilities(
+                new CompatibilityCapability(
+                    false,
+                    CompatibilityCapabilityReasonCode.StructuralProbeFailed),
+                current.Regions,
+                current.Glass,
+                current.Audio,
+                current.Advanced));
+        fixture.Injection.RaiseCapabilityChange(previousGeneration, stale);
+
+        Assert.NotEqual(previousGeneration, fixture.Injection.Generation);
+        Assert.Equal(current, coordinator.Capabilities);
+    }
+
+    private static CompatibilityCapability[] GetCapabilities(
+        CompatibilityCapabilities capabilities) =>
+        [
+            capabilities.Global,
+            capabilities.Regions,
+            capabilities.Glass,
+            capabilities.Audio,
+            capabilities.Advanced,
+        ];
+
+    private static void AssertSettingsEquivalent(SettingsV1 expected, SettingsV1 actual)
+    {
+        Assert.Equal(expected.SchemaVersion, actual.SchemaVersion);
+        Assert.Equal(expected.MediaPath, actual.MediaPath);
+        Assert.Equal(expected.MediaKind, actual.MediaKind);
+        Assert.Equal(expected.Fit, actual.Fit);
+        Assert.Equal(expected.FocusX, actual.FocusX);
+        Assert.Equal(expected.FocusY, actual.FocusY);
+        Assert.Equal(expected.PanelOpacity, actual.PanelOpacity);
+        Assert.Equal(expected.BlurPx, actual.BlurPx);
+        Assert.Equal(expected.DarkOverlay, actual.DarkOverlay);
+        Assert.Equal(expected.LightOverlay, actual.LightOverlay);
+        Assert.Equal(expected.RecentMediaPaths.ToArray(), actual.RecentMediaPaths.ToArray());
+        Assert.Equal(expected.AcceptedCdpRisk, actual.AcceptedCdpRisk);
+        Assert.Equal(expected.LastCompatibilityProfileId, actual.LastCompatibilityProfileId);
     }
 
     private sealed class CoordinatorFixture
@@ -333,7 +680,8 @@ public sealed class WallpaperCoordinatorTests
                 CodexCompatibilityCatalog.OfficialPackageFamilyName,
                 packageVersion,
                 CodexPackageArchitecture.X64,
-                CodexCompatibilityCatalog.OfficialApplicationId);
+                CodexCompatibilityCatalog.OfficialApplicationId,
+                $"OpenAI.Codex_{packageVersion}_x64__2p2nqsd0c76g0");
             _profile = CodexCompatibilityCatalog.Evaluate(
                 descriptor,
                 new CodexRuntimeDescriptor(
@@ -376,11 +724,14 @@ public sealed class WallpaperCoordinatorTests
                         "Codex",
                         "app://codex/index.html",
                         "ws://127.0.0.1:49152/devtools/page/page"),
-                    CdpTargetClassification.CodexPage)]);
+                    CdpTargetClassification.CodexPage)],
+                _profile);
             Discovery.Results.Enqueue(new CdpDiscoveryResult([Endpoint], []));
+            Injection.Events = CleanupEvents;
+            PlaybackPool.Events = CleanupEvents;
         }
 
-        public InstalledCodexPackage Package { get; }
+        public InstalledCodexPackage Package { get; set; }
 
         public CodexProcessSnapshot ReviewedProcess { get; }
 
@@ -392,13 +743,15 @@ public sealed class WallpaperCoordinatorTests
 
         public FakeDiscovery Discovery { get; } = new();
 
-        public FakeMediaInspector Inspector { get; } = new();
+        public FakeSourceProvider SourceProvider { get; } = new();
 
-        public FakeMediaServer MediaServer { get; } = new();
+        public FakePlaybackPool PlaybackPool { get; } = new();
 
         public FakeInjectionSession Injection { get; } = new();
 
-        public FakeSettingsStore SettingsStore { get; } = new();
+        public FakeSettingsRepository SettingsRepository { get; } = new();
+
+        public List<string> CleanupEvents { get; } = [];
 
         public SettingsV1 ValidSettings { get; } = SettingsV1.CreateDefault() with
         {
@@ -412,10 +765,10 @@ public sealed class WallpaperCoordinatorTests
             ProcessSource,
             Activation,
             Discovery,
-            Inspector,
-            MediaServer,
+            SourceProvider,
+            PlaybackPool,
             Injection,
-            SettingsStore,
+            SettingsRepository,
             options ?? new WallpaperCoordinatorOptions
             {
                 DiscoveryTimeout = TimeSpan.FromSeconds(1),
@@ -468,82 +821,134 @@ public sealed class WallpaperCoordinatorTests
                 Results.Count == 0 ? new CdpDiscoveryResult([], []) : Results.Dequeue());
     }
 
-    private sealed class FakeMediaInspector : IMediaFileInspector
+    private sealed class FakeSourceProvider : IWallpaperSourceProvider
     {
-        public int CallCount { get; private set; }
+        public MediaSourceKind SourceKind => MediaSourceKind.LocalFile;
 
-        public MediaFormat Format { get; set; } = MediaFormat.Png;
-
-        public Task<MediaFileMetadata> InspectAsync(
-            string mediaPath,
-            CancellationToken cancellationToken = default)
-        {
-            CallCount++;
-            return Task.FromResult(MediaFileInspector.CreateMetadata(Format, 128));
-        }
-    }
-
-    private sealed class FakeMediaServer : ILoopbackMediaServer
-    {
-        public LoopbackMediaEndpoint Endpoint { get; set; } = new(
-            new Uri("http://127.0.0.1:50100/private-token"),
-            MediaFormat.Png,
-            MediaKind.Image,
-            "image/png",
-            128);
-
-        public bool IsRunning { get; private set; }
-
-        public LoopbackMediaEndpoint? CurrentEndpoint => IsRunning ? Endpoint : null;
-
-        public int StartCount { get; private set; }
-
-        public int StopCount { get; private set; }
+        public int AcquireCount { get; private set; }
 
         public int DisposeCount { get; private set; }
 
-        public Exception? StartException { get; set; }
+        public MediaFormat Format { get; set; } = MediaFormat.Png;
 
-        public Exception? StopException { get; set; }
+        public long ContentLength { get; set; } = 128;
+
+        public ValueTask<IMediaLease> AcquireLeaseAsync(
+            MediaReference reference,
+            CancellationToken cancellationToken = default)
+        {
+            AcquireCount++;
+            return ValueTask.FromResult<IMediaLease>(
+                new FakeMediaLease(
+                    reference,
+                    MediaFileInspector.CreateMetadata(Format, ContentLength),
+                    () => DisposeCount++));
+        }
+
+        private sealed class FakeMediaLease(
+            MediaReference reference,
+            MediaFileMetadata metadata,
+            Action onDispose) : IMediaLease
+        {
+            private int _disposed;
+
+            public MediaReference Reference { get; } =
+                reference with { LastKnownKind = metadata.Kind };
+
+            public string ResolvedPath { get; } = reference.SourceIdentifier;
+
+            public LocalFileIdentity FileIdentity { get; } = new(1, 1);
+
+            public MediaFileMetadata Metadata { get; } = metadata;
+
+            public ValueTask DisposeAsync()
+            {
+                if (Interlocked.Exchange(ref _disposed, 1) == 0)
+                {
+                    onDispose();
+                }
+
+                return ValueTask.CompletedTask;
+            }
+        }
+    }
+
+    private sealed class FakePlaybackPool : IPlaybackPool
+    {
+        public IMediaLease? ActiveLease { get; private set; }
+
+        public int ActivateCount { get; private set; }
+
+        public int ReleaseCount { get; private set; }
+
+        public int DisposeCount { get; private set; }
+
+        public Exception? ReleaseException { get; set; }
 
         public Exception? DisposeException { get; set; }
 
-        public Task<LoopbackMediaEndpoint> StartAsync(
-            string mediaPath,
+        public List<string> Events { get; set; } = [];
+
+        public async ValueTask ActivateAsync(
+            IMediaLease lease,
             CancellationToken cancellationToken = default)
         {
-            StartCount++;
-            if (StartException is not null)
+            ActivateCount++;
+            var previous = ActiveLease;
+            ActiveLease = lease;
+            if (previous is not null && !ReferenceEquals(previous, lease))
             {
-                return Task.FromException<LoopbackMediaEndpoint>(StartException);
+                await previous.DisposeAsync();
+            }
+        }
+
+        public async ValueTask ReleaseAsync(CancellationToken cancellationToken = default)
+        {
+            ReleaseCount++;
+            Events.Add("pool-release");
+            var lease = ActiveLease;
+            ActiveLease = null;
+            if (lease is not null)
+            {
+                await lease.DisposeAsync();
             }
 
-            IsRunning = true;
-            return Task.FromResult(Endpoint);
+            if (ReleaseException is not null)
+            {
+                throw ReleaseException;
+            }
         }
 
-        public Task StopAsync(CancellationToken cancellationToken = default)
-        {
-            StopCount++;
-            IsRunning = false;
-            return StopException is null ? Task.CompletedTask : Task.FromException(StopException);
-        }
-
-        public ValueTask DisposeAsync()
+        public async ValueTask DisposeAsync()
         {
             DisposeCount++;
-            IsRunning = false;
-            return DisposeException is null
-                ? ValueTask.CompletedTask
-                : ValueTask.FromException(DisposeException);
+            var lease = ActiveLease;
+            ActiveLease = null;
+            if (lease is not null)
+            {
+                await lease.DisposeAsync();
+            }
+
+            if (DisposeException is not null)
+            {
+                throw DisposeException;
+            }
         }
     }
 
     private sealed class FakeInjectionSession :
         IWallpaperInjectionSession,
-        IWallpaperInjectionHealthSource
+        IWallpaperInjectionHealthSource,
+        IWallpaperInjectionCapabilitySource
     {
         public event EventHandler<WallpaperInjectionHealthFaultedEventArgs>? HealthFaulted;
+
+        public event EventHandler<WallpaperInjectionCapabilitiesChangedEventArgs>? CapabilitiesChanged;
+
+        public CompatibilityCapabilities Capabilities { get; private set; } =
+            BackdropForCodex.Core.Tests.Codex.CodexCompatibilityTests
+                .GetProfile()
+                .Capabilities;
 
         public bool IsActive { get; private set; }
 
@@ -557,6 +962,8 @@ public sealed class WallpaperCoordinatorTests
 
         public Exception? ApplyException { get; set; }
 
+        public CompatibilityCapabilities? ApplyCapabilities { get; set; }
+
         public Exception? PauseException { get; set; }
 
         public Exception? StopException { get; set; }
@@ -564,6 +971,8 @@ public sealed class WallpaperCoordinatorTests
         public Exception? DisposeException { get; set; }
 
         public int DisposeCount { get; private set; }
+
+        public List<string> Events { get; set; } = [];
 
         public VerifiedCdpEndpoint? LastEndpoint { get; private set; }
 
@@ -575,13 +984,27 @@ public sealed class WallpaperCoordinatorTests
             CancellationToken cancellationToken = default)
         {
             ApplyCount++;
+            LastEndpoint = endpoint;
+            LastOptions = options;
+            var previous = endpoint.Profile.Capabilities;
+            Capabilities = ApplyCapabilities is null
+                ? previous
+                : previous.DowngradeWith(ApplyCapabilities);
+            if (Capabilities != previous)
+            {
+                CapabilitiesChanged?.Invoke(
+                    this,
+                    new WallpaperInjectionCapabilitiesChangedEventArgs(
+                        options.Generation,
+                        previous,
+                        Capabilities));
+            }
+
             if (ApplyException is not null)
             {
                 return Task.FromException(ApplyException);
             }
 
-            LastEndpoint = endpoint;
-            LastOptions = options;
             IsActive = true;
             return Task.CompletedTask;
         }
@@ -595,7 +1018,11 @@ public sealed class WallpaperCoordinatorTests
         public Task StopAsync(CancellationToken cancellationToken = default)
         {
             StopCount++;
+            Events.Add("injection-stop");
             IsActive = false;
+            LastOptions = null;
+            Capabilities = CompatibilityCapabilities.AllUnavailable(
+                CompatibilityCapabilityReasonCode.DisabledForGeneration);
             return StopException is null ? Task.CompletedTask : Task.FromException(StopException);
         }
 
@@ -620,26 +1047,105 @@ public sealed class WallpaperCoordinatorTests
                 this,
                 new WallpaperInjectionHealthFaultedEventArgs(generation, "test health fault"));
         }
+
+        public void RaiseHealthFaultAfterSelfTeardown()
+        {
+            var generation = Generation;
+            if (generation == 0)
+            {
+                throw new InvalidOperationException("Apply a wallpaper before raising a health fault.");
+            }
+
+            IsActive = false;
+            LastOptions = null;
+            HealthFaulted?.Invoke(
+                this,
+                new WallpaperInjectionHealthFaultedEventArgs(
+                    generation,
+                    "test target ambiguity fault"));
+        }
+
+        public void RaiseGlassCapabilityDegradation()
+        {
+            var generation = Generation;
+            if (generation == 0)
+            {
+                throw new InvalidOperationException(
+                    "Apply a wallpaper before degrading capabilities.");
+            }
+
+            var previous = Capabilities;
+            Capabilities = previous.DowngradeWith(
+                new CompatibilityCapabilities(
+                    previous.Global,
+                    previous.Regions,
+                    new CompatibilityCapability(
+                        false,
+                        CompatibilityCapabilityReasonCode.StructuralProbeFailed),
+                    previous.Audio,
+                    previous.Advanced));
+            CapabilitiesChanged?.Invoke(
+                this,
+                new WallpaperInjectionCapabilitiesChangedEventArgs(
+                    generation,
+                    previous,
+                    Capabilities));
+        }
+
+        public void RaiseCapabilityChange(
+            long generation,
+            CompatibilityCapabilities capabilities)
+        {
+            CapabilitiesChanged?.Invoke(
+                this,
+                new WallpaperInjectionCapabilitiesChangedEventArgs(
+                    generation,
+                    Capabilities,
+                    capabilities));
+        }
     }
 
-    private sealed class FakeSettingsStore : ISettingsStore
+    private sealed class FakeSettingsRepository : ISettingsRepository
     {
+        public bool HasVersion1Backup { get; set; }
+
+        public int LoadCount { get; private set; }
+
         public int SaveCount { get; private set; }
 
-        public SettingsV1 Settings { get; private set; } = SettingsV1.CreateDefault();
+        public SettingsV2 Settings { get; set; } = SettingsV2.CreateDefault();
+
+        public SettingsLoadResult? LoadResultOverride { get; set; }
 
         public int DisposeCount { get; private set; }
 
         public Exception? DisposeException { get; set; }
 
-        public Task<SettingsV1> LoadAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult(Settings);
+        public Task<SettingsLoadResult> LoadAsync(CancellationToken cancellationToken = default)
+        {
+            LoadCount++;
+            return Task.FromResult<SettingsLoadResult>(
+                LoadResultOverride ??
+                new SettingsLoadResult.Ready(Settings, MigratedFromVersion1: false));
+        }
 
-        public Task SaveAsync(SettingsV1 settings, CancellationToken cancellationToken = default)
+        public Task<SettingsV2> SaveAsync(
+            SettingsV2 settings,
+            CancellationToken cancellationToken = default)
         {
             SaveCount++;
             Settings = settings;
-            return Task.CompletedTask;
+            return Task.FromResult(settings);
+        }
+
+        public Task<SettingsLoadResult> RestoreVersion1BackupAsync(
+            CancellationToken cancellationToken = default) =>
+            LoadAsync(cancellationToken);
+
+        public Task<SettingsV2> ResetAsync(CancellationToken cancellationToken = default)
+        {
+            Settings = SettingsV2.CreateDefault();
+            return Task.FromResult(Settings);
         }
 
         public void Dispose()

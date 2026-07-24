@@ -14,17 +14,36 @@ public sealed class PuppeteerWallpaperSessionTests
     {
         var endpoint = VerifiedEndpoint();
 
-        Assert.True(PuppeteerWallpaperSession.IsReviewedTargetDocument(
+        Assert.True(VerifiedCodexPageSelector.IsReviewedTargetDocument(
             "codex-page",
             "app://codex/index.html?thread=1#latest",
             endpoint));
-        Assert.False(PuppeteerWallpaperSession.IsReviewedTargetDocument(
+        Assert.False(VerifiedCodexPageSelector.IsReviewedTargetDocument(
             "different-page",
             "app://codex/index.html",
             endpoint));
-        Assert.False(PuppeteerWallpaperSession.IsReviewedTargetDocument(
+        Assert.False(VerifiedCodexPageSelector.IsReviewedTargetDocument(
             "codex-page",
             "app://codex/auth/index.html",
+            endpoint));
+    }
+
+    [Fact]
+    public void IsEligibleTargetDocument_RejectsTargetAbsentFromVerifiedSnapshot()
+    {
+        var endpoint = VerifiedEndpoint();
+
+        Assert.False(VerifiedCodexPageSelector.IsEligibleTargetDocument(
+            "new-codex-page",
+            "app://codex/index.html?thread=2",
+            endpoint));
+        Assert.False(VerifiedCodexPageSelector.IsEligibleTargetDocument(
+            "new-auth-page",
+            "https://auth.openai.com/login",
+            endpoint));
+        Assert.True(VerifiedCodexPageSelector.IsEligibleTargetDocument(
+            "codex-page",
+            "app://codex/index.html?thread=2",
             endpoint));
     }
 
@@ -40,6 +59,23 @@ public sealed class PuppeteerWallpaperSessionTests
         await session.StopAsync();
 
         Assert.False(session.IsActive);
+    }
+
+    [Fact]
+    public async Task FaultCleanup_PreservesGenerationUntilCoordinatorStopsSession()
+    {
+        await using var session = new PuppeteerWallpaperSession();
+
+        await StopCoreAsync(
+            session,
+            observeHeartbeat: false,
+            preservedFaultGeneration: 42);
+
+        Assert.Equal(42, session.Generation);
+
+        await session.StopAsync();
+
+        Assert.Equal(0, session.Generation);
     }
 
     [Theory]
@@ -134,18 +170,46 @@ public sealed class PuppeteerWallpaperSessionTests
     [Fact]
     public void PendingCleanupTracking_PreservesNewestGeneration()
     {
-        var session = new PuppeteerWallpaperSession();
+        var registry = new InjectedPageRegistry();
         var page = DispatchProxy.Create<IPage, ThrowingPageProxy>();
 
-        TrackPendingCleanup(session, page, generation: 9);
-        TrackPendingCleanup(session, page, generation: 4);
-        RemovePendingCleanupUpTo(session, page, generation: 4);
+        registry.TrackPendingCleanup(page, generation: 9);
+        registry.TrackPendingCleanup(page, generation: 4);
+        registry.RemovePendingCleanupUpTo(page, generation: 4);
 
-        Assert.Equal(9, PreparedPages(session)[page]);
+        Assert.True(registry.TryGetPendingGeneration(page, out var pendingGeneration));
+        Assert.Equal(9, pendingGeneration);
 
-        RemovePendingCleanupUpTo(session, page, generation: 9);
+        registry.RemovePendingCleanupUpTo(page, generation: 9);
 
-        Assert.Empty(PreparedPages(session));
+        Assert.False(registry.TryGetPendingGeneration(page, out _));
+    }
+
+    [Fact]
+    public void TrySelectSoleEligiblePage_RejectsAmbiguousTargetsWithoutSelectingEither()
+    {
+        var first = DispatchProxy.Create<IPage, ThrowingPageProxy>();
+        var second = DispatchProxy.Create<IPage, ThrowingPageProxy>();
+
+        var selected = VerifiedCodexPageSelector.TrySelectSoleEligiblePage(
+            [first, second],
+            out var page);
+
+        Assert.False(selected);
+        Assert.Null(page);
+    }
+
+    [Fact]
+    public void TrySelectSoleEligiblePage_SelectsExactlyOneTarget()
+    {
+        var expected = DispatchProxy.Create<IPage, ThrowingPageProxy>();
+
+        var selected = VerifiedCodexPageSelector.TrySelectSoleEligiblePage(
+            [expected],
+            out var page);
+
+        Assert.True(selected);
+        Assert.Same(expected, page);
     }
 
     private static async Task WaitForCancellationThenGateAsync(
@@ -222,19 +286,9 @@ public sealed class PuppeteerWallpaperSessionTests
     [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "_heartbeatTask")]
     private static extern ref Task? HeartbeatTask(PuppeteerWallpaperSession session);
 
-    [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "_preparedPages")]
-    private static extern ref Dictionary<IPage, long> PreparedPages(
-        PuppeteerWallpaperSession session);
-
-    [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "TrackPendingCleanup")]
-    private static extern void TrackPendingCleanup(
+    [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "StopCoreAsync")]
+    private static extern Task<Task?> StopCoreAsync(
         PuppeteerWallpaperSession session,
-        IPage page,
-        long generation);
-
-    [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "RemovePendingCleanupUpTo")]
-    private static extern void RemovePendingCleanupUpTo(
-        PuppeteerWallpaperSession session,
-        IPage page,
-        long generation);
+        bool observeHeartbeat,
+        long preservedFaultGeneration);
 }

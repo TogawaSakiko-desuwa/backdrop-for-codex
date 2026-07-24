@@ -34,12 +34,20 @@ public partial class SettingsDialogContent : UserControl
         VersionText.Text =
             $"v{Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.0.0"}";
         RefreshRiskState();
+        RecoveryCard.Visibility = _viewModel.HasVersion1Backup
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        RestoreBackupButton.IsEnabled = _viewModel.CanRestoreVersion1Backup;
         _initialized = true;
     }
 
     public event EventHandler<ThemeModeChangedEventArgs>? ThemeChangeRequested;
 
     public event EventHandler? RiskRevokeRequested;
+
+    public event EventHandler? DiagnosticExportRequested;
+
+    public event EventHandler? RestoreBackupRequested;
 
     public event EventHandler? ResetRequested;
 
@@ -74,6 +82,12 @@ public partial class SettingsDialogContent : UserControl
 
     private void ResetButton_Click(object sender, RoutedEventArgs e) =>
         ResetRequested?.Invoke(this, EventArgs.Empty);
+
+    private void RestoreBackupButton_Click(object sender, RoutedEventArgs e) =>
+        RestoreBackupRequested?.Invoke(this, EventArgs.Empty);
+
+    private void DiagnosticExportButton_Click(object sender, RoutedEventArgs e) =>
+        DiagnosticExportRequested?.Invoke(this, EventArgs.Empty);
 
     private string Text(string key, string fallback)
     {

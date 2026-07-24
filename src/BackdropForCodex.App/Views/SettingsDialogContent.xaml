@@ -55,13 +55,26 @@
                            Click="RevokeRiskButton_Click" />
               </StackPanel>
             </ui:Card>
+            <ui:Card x:Name="RecoveryCard" Margin="0,12,0,0">
+              <StackPanel Margin="16">
+                <TextBlock Style="{StaticResource SectionHeadingStyle}"
+                           Text="{localization:Loc Settings_RecoveryTitle, Fallback='Settings recovery'}" />
+                <TextBlock Margin="0,5,0,12"
+                           Style="{StaticResource CaptionTextStyle}"
+                           Text="{localization:Loc Settings_RecoveryDescription, Fallback='A preserved read-only V1 backup is available. Restore it by migrating a fresh Settings V2 document; the backup itself remains unchanged.'}" />
+                <ui:Button x:Name="RestoreBackupButton"
+                           HorizontalAlignment="Left"
+                           Content="{localization:Loc Action_RestoreBackup, Fallback='Restore V1 backup'}"
+                           Click="RestoreBackupButton_Click" />
+              </StackPanel>
+            </ui:Card>
             <ui:Card>
               <StackPanel Margin="16">
                 <TextBlock Style="{StaticResource SectionHeadingStyle}"
                            Text="{localization:Loc Section_SafetyPrivacy, Fallback='Privacy'}" />
                 <TextBlock Margin="0,4,0,0"
                            Style="{StaticResource CaptionTextStyle}"
-                           Text="{localization:Loc Settings_PrivacyDescription, Fallback='Media stays on this device and is served only through an authenticated loopback address.'}" />
+                           Text="{localization:Loc Settings_PrivacyDescription, Fallback='Media stays on this device. A verified local CDP session binds the leased file to an owned page input; no media HTTP server is used.'}" />
               </StackPanel>
             </ui:Card>
           </StackPanel>
@@ -94,10 +107,23 @@
             <ui:Card Margin="0,0,0,12">
               <StackPanel Margin="16">
                 <TextBlock Style="{StaticResource SectionHeadingStyle}"
+                           Text="{localization:Loc Diagnostics_Title, Fallback='Diagnostic report'}" />
+                <TextBlock Margin="0,5,0,12"
+                           Style="{StaticResource CaptionTextStyle}"
+                           Text="{localization:Loc Diagnostics_Description, Fallback='Create an allow-listed local report to help investigate compatibility and runtime failures.'}" />
+                <ui:Button HorizontalAlignment="Left"
+                           Content="{localization:Loc Diagnostics_Export, Fallback='Export diagnostic report'}"
+                           Click="DiagnosticExportButton_Click" />
+              </StackPanel>
+            </ui:Card>
+            <ui:Card Margin="0,0,0,12">
+              <StackPanel Margin="16">
+                <TextBlock Style="{StaticResource SectionHeadingStyle}"
                            Text="{localization:Loc Settings_Licenses, Fallback='Open-source licenses'}" />
                 <TextBlock Margin="0,8,0,0" Text="WPF-UI 4.3.0 — MIT" />
                 <TextBlock Margin="0,4,0,0" Text="WPF-UI.Tray 4.3.0 — MIT" />
                 <TextBlock Margin="0,4,0,0" Text="CommunityToolkit.Mvvm 8.4.2 — MIT" />
+                <TextBlock Margin="0,4,0,0" Text="Microsoft.Extensions.Logging.Abstractions 8.0.0 — MIT" />
                 <TextBlock Margin="0,4,0,0" Text="PuppeteerSharp 25.3.4 — MIT" />
                 <TextBlock Margin="0,8,0,0"
                            Style="{StaticResource CaptionTextStyle}"
@@ -111,7 +137,7 @@
                            Text="{localization:Loc Section_DangerZone, Fallback='Danger zone'}" />
                 <TextBlock Margin="0,5,0,12"
                            Style="{StaticResource CaptionTextStyle}"
-                           Text="{localization:Loc Settings_ResetDescription, Fallback='Restore the official background and clear all app-owned state.'}" />
+                           Text="{localization:Loc Settings_ResetDescription, Fallback='Restore the official background and permanently delete all app-owned state, including any preserved V1 migration backup.'}" />
                 <ui:Button HorizontalAlignment="Left"
                            Appearance="Danger"
                            Content="{localization:Loc Action_Reset, Fallback='Reset app'}"

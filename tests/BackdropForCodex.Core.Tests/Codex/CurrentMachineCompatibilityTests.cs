@@ -22,6 +22,11 @@ public sealed class CurrentMachineCompatibilityTests
         Assert.Equal(CodexCompatibilityCatalog.OfficialPackageFamilyName, package.Descriptor.FamilyName);
         Assert.Equal("ChatGPT.exe", Path.GetFileName(package.ExecutablePath));
         Assert.True(File.Exists(package.ExecutablePath));
+        Assert.NotEqual(
+            CompatibilityProbePackageKind.Generic,
+            result.Profile.ProbePackageKind);
+        Assert.True(result.Capabilities.Glass.IsAvailable);
+        Assert.True(result.Capabilities.Advanced.IsAvailable);
     }
 
     [IntegrationFact(OptInVariable)]

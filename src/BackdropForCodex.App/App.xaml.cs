@@ -2,6 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Threading;
 using System.Windows;
+using BackdropForCodex.App.Services.Diagnostics;
 using BackdropForCodex.App.Services.Errors;
 using BackdropForCodex.App.Services.Localization;
 using BackdropForCodex.App.Services.Preferences;
@@ -74,7 +75,10 @@ public partial class App : System.Windows.Application
                 _preferencesStore,
                 _errorMapper,
                 text);
-            _mainWindow = new MainWindow(viewModel, text);
+            _mainWindow = new MainWindow(
+                viewModel,
+                text,
+                new DiagnosticReportService());
             _trayController = new TrayController(
                 _mainWindow,
                 viewModel.DisableAsync,

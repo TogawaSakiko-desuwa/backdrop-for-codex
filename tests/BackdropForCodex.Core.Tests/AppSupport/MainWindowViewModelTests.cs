@@ -15,6 +15,37 @@ namespace BackdropForCodex.Core.Tests.AppSupport;
 public sealed class MainWindowViewModelTests
 {
     [Fact]
+    public async Task ComposedSettingsStateOwnsConfigurationPreferencesAndRecents()
+    {
+        var mediaPath = CreateTemporaryMediaFile(".png");
+        try
+        {
+            var persisted = SettingsV1.CreateDefault() with
+            {
+                RecentMediaPaths = [mediaPath],
+            };
+            var wallpaper = new FakeWallpaperApplicationService(persisted);
+            using var preferencesStore = new FakeAppPreferencesStore();
+            using var viewModel = CreateViewModel(wallpaper, preferencesStore);
+
+            await viewModel.InitializeAsync();
+            viewModel.SelectMedia(mediaPath);
+            await viewModel.SetThemeModeAsync(ThemeMode.Dark);
+
+            Assert.Same(viewModel.Settings.ConfigurationState, viewModel.ConfigurationState);
+            Assert.Same(viewModel.Settings.Preferences, viewModel.Preferences);
+            Assert.Same(viewModel.Settings.Recents, viewModel.Recents);
+            Assert.Equal(mediaPath, viewModel.Settings.ConfigurationState.Draft.MediaPath);
+            Assert.Equal(ThemeMode.Dark, viewModel.Settings.ThemeMode);
+            Assert.Single(viewModel.Settings.Recents);
+        }
+        finally
+        {
+            File.Delete(mediaPath);
+        }
+    }
+
+    [Fact]
     public async Task InitializeAsyncHydratesPersistedUiStateWithoutStartingRuntime()
     {
         var mediaPath = CreateTemporaryMediaFile(".png");
@@ -354,6 +385,108 @@ public sealed class MainWindowViewModelTests
         Assert.True(viewModel.HasShownTrayTip);
     }
 
+    [Fact]
+    public async Task RecoveryRequiredSettingsAreReadOnlyUntilExplicitBackupRestore()
+    {
+        var mediaPath = CreateTemporaryMediaFile(".png");
+        try
+        {
+            var backupSettings = SettingsV1.CreateDefault() with
+            {
+                MediaPath = mediaPath,
+                MediaKind = MediaKind.Image,
+                AcceptedCdpRisk = true,
+            };
+            var wallpaper = new FakeWallpaperApplicationService(SettingsV1.CreateDefault())
+            {
+                LoadFailure = new SettingsRecoveryRequiredException(
+                    SettingsRecoveryReason.InvalidDocument,
+                    hasVersion1Backup: true),
+                BackupSettings = backupSettings,
+            };
+            using var preferencesStore = new FakeAppPreferencesStore();
+            using var viewModel = CreateViewModel(wallpaper, preferencesStore);
+
+            await viewModel.InitializeAsync();
+
+            Assert.True(viewModel.HasProtectedSettings);
+            Assert.True(viewModel.HasVersion1Backup);
+            Assert.False(viewModel.CanEdit);
+            Assert.True(viewModel.CanOpenSettings);
+            Assert.True(viewModel.CanRestoreVersion1Backup);
+            viewModel.SelectMedia(mediaPath);
+            await viewModel.AcceptRiskAsync();
+            Assert.Null(viewModel.SelectedMediaPath);
+            Assert.Equal(0, wallpaper.SaveCallCount);
+
+            await viewModel.RestoreVersion1BackupAsync();
+
+            Assert.Equal(1, wallpaper.RestoreBackupCallCount);
+            Assert.False(viewModel.HasProtectedSettings);
+            Assert.True(viewModel.CanEdit);
+            Assert.Equal(mediaPath, viewModel.SelectedMediaPath);
+            Assert.True(viewModel.AcceptedCdpRisk);
+        }
+        finally
+        {
+            File.Delete(mediaPath);
+        }
+    }
+
+    [Fact]
+    public async Task ProjectionIncompatibleV2SettingsStayReadOnlyAndCannotBeSaved()
+    {
+        var mediaPath = CreateTemporaryMediaFile(".png");
+        try
+        {
+            var wallpaper = new FakeWallpaperApplicationService(SettingsV1.CreateDefault())
+            {
+                LoadFailure = new SettingsProjectionException(
+                    "A non-local Global selection cannot be represented."),
+            };
+            using var preferencesStore = new FakeAppPreferencesStore();
+            using var viewModel = CreateViewModel(wallpaper, preferencesStore);
+
+            await viewModel.InitializeAsync();
+
+            Assert.True(viewModel.HasProtectedSettings);
+            Assert.False(viewModel.CanEdit);
+            Assert.False(viewModel.CanRestoreVersion1Backup);
+            viewModel.SelectMedia(mediaPath);
+            await viewModel.AcceptRiskAsync();
+            Assert.False(await viewModel.ApplyAsync());
+            Assert.Null(viewModel.SelectedMediaPath);
+            Assert.Equal(0, wallpaper.SaveCallCount);
+            Assert.Equal(0, wallpaper.ApplyCallCount);
+        }
+        finally
+        {
+            File.Delete(mediaPath);
+        }
+    }
+
+    [Fact]
+    public async Task LaterReloadFailureTransitionsEditorIntoProtectedRecoveryState()
+    {
+        var wallpaper = new FakeWallpaperApplicationService(SettingsV1.CreateDefault());
+        using var preferencesStore = new FakeAppPreferencesStore();
+        using var viewModel = CreateViewModel(wallpaper, preferencesStore);
+        await viewModel.InitializeAsync();
+        Assert.False(viewModel.HasProtectedSettings);
+
+        wallpaper.LoadFailure = new FutureSettingsVersionException(
+            schemaVersion: 99,
+            hasVersion1Backup: true);
+
+        await Assert.ThrowsAsync<FutureSettingsVersionException>(
+            () => viewModel.Settings.LoadWallpaperSettingsAsync(CancellationToken.None));
+
+        Assert.True(viewModel.HasProtectedSettings);
+        Assert.True(viewModel.HasVersion1Backup);
+        Assert.False(viewModel.CanEdit);
+        Assert.True(viewModel.CanRestoreVersion1Backup);
+    }
+
     private static MainWindowViewModel CreateViewModel(
         IWallpaperApplicationService wallpaper,
         IAppPreferencesStore preferencesStore) =>
@@ -368,12 +501,30 @@ public sealed class MainWindowViewModelTests
         var path = Path.Combine(
             Path.GetTempPath(),
             $"backdrop-view-model-{Guid.NewGuid():N}{extension}");
-        using var stream = File.Create(path);
+        byte[] bytes = extension.ToLowerInvariant() switch
+        {
+            ".png" =>
+            [
+                0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
+                0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+                0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+            ],
+            ".mp4" =>
+            [
+                0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70,
+                0x69, 0x73, 0x6F, 0x6D,
+            ],
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(extension),
+                "The test helper only creates reviewed media fixtures."),
+        };
+        File.WriteAllBytes(path, bytes);
         return path;
     }
 
     private sealed class FakeWallpaperApplicationService :
-        IWallpaperApplicationService
+        IWallpaperApplicationService,
+        IWallpaperSettingsRecoveryService
     {
         private SettingsV1 _persistedSettings;
 
@@ -396,11 +547,17 @@ public sealed class MainWindowViewModelTests
 
         public Exception? DisableFailure { get; init; }
 
+        public Exception? LoadFailure { get; set; }
+
+        public SettingsV1? BackupSettings { get; init; }
+
         public bool PersistApplyRequestBeforeFailure { get; init; }
 
         public int SaveCallCount { get; private set; }
 
         public int ApplyCallCount { get; private set; }
+
+        public int RestoreBackupCallCount { get; private set; }
 
         public SettingsV1? LastSavedSettings { get; private set; }
 
@@ -408,6 +565,11 @@ public sealed class MainWindowViewModelTests
             CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (LoadFailure is not null)
+            {
+                return Task.FromException<SettingsV1>(LoadFailure);
+            }
+
             return Task.FromResult(_persistedSettings);
         }
 
@@ -466,6 +628,25 @@ public sealed class MainWindowViewModelTests
             IsActive = false;
             IsPaused = false;
             return Task.CompletedTask;
+        }
+
+        public Task<SettingsV1> RestoreVersion1BackupAsync(
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            RestoreBackupCallCount++;
+            _persistedSettings = BackupSettings ?? SettingsV1.CreateDefault();
+            LoadFailure = null;
+            return Task.FromResult(_persistedSettings);
+        }
+
+        public Task<SettingsV1> ResetWallpaperSettingsAsync(
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            _persistedSettings = SettingsV1.CreateDefault();
+            LoadFailure = null;
+            return Task.FromResult(_persistedSettings);
         }
 
         public DesktopShortcutWriteResult CreateOrUpdateShortcut() =>

@@ -1,8 +1,8 @@
 # 第三方软件声明
 
-最后人工核对：2026-07-23
+最后人工核对：2026-07-24
 
-Backdrop for Codex 依据 Apache License 2.0 发布，但它依赖或随发布物包含由其他作者提供的软件。第三方组件仍受各自许可证和声明约束。本文件是便于阅读的基线；具体发行版中直接、传递、运行时及相关构建组件的机器可读清单是随该发行版发布的 SPDX SBOM，发行 ZIP 同时保留适用的 WPF-UI、WPF-UI.Tray、CommunityToolkit.Mvvm、.NET/ASP.NET Core/Windows Desktop 上游许可证与第三方 notice。
+Backdrop for Codex 依据 Apache License 2.0 发布，但它依赖或随发布物包含由其他作者提供的软件。第三方组件仍受各自许可证和声明约束。本文件是便于阅读的基线；具体发行版中直接、传递、运行时及相关构建组件的机器可读清单是随该发行版发布的 SPDX SBOM，发行 ZIP 同时保留适用的 WPF-UI、WPF-UI.Tray、CommunityToolkit.Mvvm、PuppeteerSharp、WebDriverBiDi、Microsoft.IO.RecyclableMemoryStream、Microsoft.Extensions.Logging.Abstractions、.NET Runtime/Windows Desktop 上游许可证与第三方 notice。
 
 ## 运行时直接依赖
 
@@ -12,19 +12,26 @@ Backdrop for Codex 依据 Apache License 2.0 发布，但它依赖或随发布�
 | WPF-UI.Tray | 4.3.0 | 纯 WPF 通知区域图标 | MIT |
 | CommunityToolkit.Mvvm | 8.4.2 | ViewModel、可观察属性与命令基础设施 | MIT |
 | PuppeteerSharp | 25.3.4 | CDP 客户端 | MIT |
+| Microsoft.Extensions.Logging.Abstractions | 8.0.0 | 核心运行时的结构化日志抽象 | MIT |
 | WebDriverBiDi | 0.0.54（传递依赖） | 浏览器协议模型 | MIT |
 | Microsoft.IO.RecyclableMemoryStream | 3.0.1（传递依赖） | PuppeteerSharp 缓冲区 | MIT |
 | .NET Runtime / Windows Desktop | .NET 10，self-contained `win-x64` | 托管运行时与 WPF | MIT 及其上游第三方声明 |
-| ASP.NET Core shared framework | .NET 10 | 回环媒体服务 | MIT 及其上游第三方声明 |
 
 上游项目：
 
 - WPF-UI / WPF-UI.Tray: <https://github.com/lepoco/wpfui>
 - CommunityToolkit.Mvvm: <https://github.com/CommunityToolkit/dotnet>
 - PuppeteerSharp: <https://github.com/hardkoded/puppeteer-sharp>
+- Microsoft.Extensions.Logging.Abstractions: <https://github.com/dotnet/runtime>
 - WebDriverBiDi.NET: <https://github.com/webdriverbidi-net/webdriverbidi-net>
 - Microsoft.IO.RecyclableMemoryStream: <https://github.com/microsoft/Microsoft.IO.RecyclableMemoryStream>
-- .NET Runtime、WPF、ASP.NET Core: <https://github.com/dotnet>
+- .NET Runtime、WPF: <https://github.com/dotnet>
+
+仓库在 `third_party/licenses` 中保留下列包对应源码提交的原始许可证文本，并由 Release 工作流强制复制到发行 ZIP：
+
+- PuppeteerSharp 25.3.4：`cc97ee0992a4ff4fbd88fcfaa7e674ea28502a08` 的 [`LICENSE`](https://github.com/hardkoded/puppeteer-sharp/blob/cc97ee0992a4ff4fbd88fcfaa7e674ea28502a08/LICENSE)
+- WebDriverBiDi 0.0.54：`bd30c1107b16ca24fb4d27ad176f86971085aa34` 的 [`LICENSE`](https://github.com/webdriverbidi-net/webdriverbidi-net/blob/bd30c1107b16ca24fb4d27ad176f86971085aa34/LICENSE)
+- Microsoft.IO.RecyclableMemoryStream 3.0.1：`e29a28387da9018fa9605a1dcb3f7a0435aa9974` 的 [`LICENSE`](https://github.com/microsoft/Microsoft.IO.RecyclableMemoryStream/blob/e29a28387da9018fa9605a1dcb3f7a0435aa9974/LICENSE)
 
 Windows API、媒体栈、Microsoft Store/MSIX 与官方 Codex 由用户系统或独立产品提供，不因本项目而重新许可或成为本项目的一部分。
 

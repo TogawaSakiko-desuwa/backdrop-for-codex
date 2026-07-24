@@ -1,6 +1,5 @@
 using PuppeteerSharp;
 using BackdropForCodex.Core.Codex;
-using System.Diagnostics;
 using System.Text.Json;
 
 namespace BackdropForCodex.Core.Injection;
@@ -41,38 +40,70 @@ public interface IWallpaperInjectionHealthSource
     event EventHandler<WallpaperInjectionHealthFaultedEventArgs>? HealthFaulted;
 }
 
+public interface IWallpaperInjectionCapabilitySource
+{
+    event EventHandler<WallpaperInjectionCapabilitiesChangedEventArgs>? CapabilitiesChanged;
+
+    CompatibilityCapabilities Capabilities { get; }
+}
+
+public sealed class WallpaperInjectionCapabilitiesChangedEventArgs : EventArgs
+{
+    public WallpaperInjectionCapabilitiesChangedEventArgs(
+        long generation,
+        CompatibilityCapabilities previous,
+        CompatibilityCapabilities current)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(generation);
+        Generation = generation;
+        Previous = previous ?? throw new ArgumentNullException(nameof(previous));
+        Current = current ?? throw new ArgumentNullException(nameof(current));
+    }
+
+    public long Generation { get; }
+
+    public CompatibilityCapabilities Previous { get; }
+
+    public CompatibilityCapabilities Current { get; }
+}
+
 /// <summary>
 /// Connects to a previously verified CDP endpoint. Disconnecting this controller never closes
 /// Codex; <see cref="IBrowser.Disconnect"/> is used instead of CloseAsync/DisposeAsync.
 /// </summary>
 public sealed class PuppeteerWallpaperSession :
     IWallpaperInjectionSession,
-    IWallpaperInjectionHealthSource
+    IWallpaperInjectionHealthSource,
+    IWallpaperInjectionCapabilitySource
 {
     private const int MaximumConsecutiveHeartbeatFailures = 3;
-    private static readonly TimeSpan InitialPageReadinessTimeout = TimeSpan.FromSeconds(10);
-    private static readonly TimeSpan InitialPageReadinessPollInterval = TimeSpan.FromMilliseconds(100);
 
     private readonly SemaphoreSlim _lifecycleGate = new(1, 1);
-    private readonly Dictionary<IPage, long> _mutatedPages = new(ReferenceEqualityComparer.Instance);
-    private readonly Dictionary<IPage, long> _preparedPages = new(ReferenceEqualityComparer.Instance);
-    private readonly Dictionary<IPage, string> _targetIds = new(ReferenceEqualityComparer.Instance);
+    private readonly VerifiedCodexPageSelector _pageSelector = new();
+    private readonly InjectedPageRegistry _pageRegistry = new();
+    private readonly InitialPageReadinessGate _readinessGate = new();
+    private readonly InjectionCapabilityState _capabilityState = new();
     private IBrowser? _browser;
     private VerifiedCdpEndpoint? _endpoint;
     private WallpaperInjectionOptions? _options;
     private CancellationTokenSource? _heartbeatCancellation;
     private Task? _heartbeatTask;
     private bool _paused;
+    private long _faultedGeneration;
     private int _disposed;
 
     public event EventHandler<WallpaperInjectionHealthFaultedEventArgs>? HealthFaulted;
+
+    public event EventHandler<WallpaperInjectionCapabilitiesChangedEventArgs>? CapabilitiesChanged;
 
     public bool IsActive =>
         _browser?.IsConnected == true &&
         _options is not null &&
         _heartbeatTask is { IsCompleted: false };
 
-    public long Generation => _options?.Generation ?? 0;
+    public long Generation => _options?.Generation ?? Interlocked.Read(ref _faultedGeneration);
+
+    public CompatibilityCapabilities Capabilities => _capabilityState.Current;
 
     public async Task ApplyAsync(
         VerifiedCdpEndpoint endpoint,
@@ -104,11 +135,26 @@ public sealed class PuppeteerWallpaperSession :
                 _endpoint = endpoint;
             }
 
+            var continuesCurrentGeneration =
+                _options?.Generation == options.Generation &&
+                _endpoint == endpoint;
             _options = options;
-            var applyResult = await ApplyWhenPageIsReadyAsync(cancellationToken).ConfigureAwait(false);
+            Interlocked.Exchange(ref _faultedGeneration, 0);
+            _capabilityState.Begin(
+                endpoint.Profile.Capabilities,
+                continuesCurrentGeneration);
+            var applyResult = await _readinessGate
+                .WaitAsync(ApplyToCurrentPagesAsync, cancellationToken)
+                .ConfigureAwait(false);
             if (applyResult.AppliedCount == 0)
             {
                 ObserveHeartbeatInBackground(await StopCoreAsync().ConfigureAwait(false));
+                if (applyResult.AmbiguousTargetsObserved)
+                {
+                    throw new WallpaperTargetAmbiguityException(
+                        "More than one eligible Codex work page remained available; no page was modified.");
+                }
+
                 if (applyResult.EligibleCount != 0)
                 {
                     throw new WallpaperMediaLoadException(
@@ -157,16 +203,18 @@ public sealed class PuppeteerWallpaperSession :
         {
             ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
             var generation = Generation;
-            if (generation == 0 || _mutatedPages.Count == 0)
+            if (generation == 0 || _pageRegistry.MutatedCount == 0)
             {
                 throw new WallpaperInjectionException("No active wallpaper page can be paused.");
             }
 
             var script = InjectionScriptBuilder.BuildSetPaused(generation, paused);
             var applied = false;
-            foreach (var page in _mutatedPages.Keys.ToArray())
+            foreach (var page in _pageRegistry.GetMutatedPages())
             {
-                applied |= await TryEvaluateAsync(page, script, cancellationToken).ConfigureAwait(false);
+                applied |= await PuppeteerPageScriptExecutor
+                    .TryEvaluateAsync(page, script, cancellationToken)
+                    .ConfigureAwait(false);
             }
 
             if (!applied)
@@ -275,12 +323,25 @@ public sealed class PuppeteerWallpaperSession :
 
                         var applyResult = await ApplyToCurrentPagesAsync(cancellationToken)
                             .ConfigureAwait(false);
+                        if (applyResult.IsAmbiguous)
+                        {
+                            await StopCoreAsync(
+                                    observeHeartbeat: false,
+                                    preservedFaultGeneration: observedGeneration)
+                                .ConfigureAwait(false);
+                            PublishHealthFault(
+                                observedGeneration,
+                                "More than one eligible Codex work page was detected; the wallpaper was removed.");
+                            return;
+                        }
+
                         if (applyResult.AppliedCount != 0)
                         {
                             var heartbeat = InjectionScriptBuilder.BuildHeartbeat(_options.Generation);
-                            foreach (var page in _mutatedPages.Keys.ToArray())
+                            foreach (var page in _pageRegistry.GetMutatedPages())
                             {
-                                var alive = await TryEvaluateAsync(page, heartbeat, cancellationToken)
+                                var alive = await PuppeteerPageScriptExecutor
+                                    .TryEvaluateAsync(page, heartbeat, cancellationToken)
                                     .ConfigureAwait(false);
                                 if (alive)
                                 {
@@ -289,14 +350,17 @@ public sealed class PuppeteerWallpaperSession :
                                 else
                                 {
                                     var cleanupGeneration = observedGeneration;
-                                    if (_mutatedPages.Remove(page, out var mutatedGeneration))
+                                    if (_pageRegistry.RemoveMutation(
+                                            page,
+                                            out var mutatedGeneration))
                                     {
                                         cleanupGeneration = Math.Max(
                                             cleanupGeneration,
                                             mutatedGeneration);
                                     }
 
-                                    await CleanupOrTrackPendingAsync(page, cleanupGeneration)
+                                    await _pageRegistry
+                                        .CleanupOrTrackPendingAsync(page, cleanupGeneration)
                                         .ConfigureAwait(false);
                                 }
                             }
@@ -358,36 +422,6 @@ public sealed class PuppeteerWallpaperSession :
         }
     }
 
-    private async Task<PageApplyResult> ApplyWhenPageIsReadyAsync(
-        CancellationToken cancellationToken)
-    {
-        var elapsed = Stopwatch.StartNew();
-        var greatestEligibleCount = 0;
-        do
-        {
-            var result = await ApplyToCurrentPagesAsync(cancellationToken).ConfigureAwait(false);
-            greatestEligibleCount = Math.Max(greatestEligibleCount, result.EligibleCount);
-            if (result.AppliedCount != 0)
-            {
-                return new PageApplyResult(greatestEligibleCount, result.AppliedCount);
-            }
-
-            var remaining = InitialPageReadinessTimeout - elapsed.Elapsed;
-            if (remaining <= TimeSpan.Zero)
-            {
-                return new PageApplyResult(greatestEligibleCount, AppliedCount: 0);
-            }
-
-            await Task.Delay(
-                    remaining < InitialPageReadinessPollInterval
-                        ? remaining
-                        : InitialPageReadinessPollInterval,
-                    cancellationToken)
-                .ConfigureAwait(false);
-        }
-        while (true);
-    }
-
     private async Task<PageApplyResult> ApplyToCurrentPagesAsync(
         CancellationToken cancellationToken)
     {
@@ -396,76 +430,142 @@ public sealed class PuppeteerWallpaperSession :
             return default;
         }
 
-        var pages = await _browser.PagesAsync(includeAll: true).WaitAsync(cancellationToken)
+        var scan = await _pageSelector.ScanAsync(_browser, _endpoint, cancellationToken)
             .ConfigureAwait(false);
-        var activePages = pages
-            .Where(page => !page.IsClosed)
-            .ToHashSet((IEqualityComparer<IPage>)ReferenceEqualityComparer.Instance);
-        foreach (var oldPage in _mutatedPages.Keys.Where(page => !activePages.Contains(page)).ToArray())
+        _pageRegistry.PruneClosedPages(scan.ActivePages);
+        foreach (var page in scan.ActivePages)
         {
-            _mutatedPages.Remove(oldPage);
-        }
-
-        foreach (var oldPage in _preparedPages.Keys.Where(page => !activePages.Contains(page)).ToArray())
-        {
-            _preparedPages.Remove(oldPage);
-        }
-
-        foreach (var oldPage in _targetIds.Keys.Where(page => !activePages.Contains(page)).ToArray())
-        {
-            _targetIds.Remove(oldPage);
-        }
-
-        var eligible = 0;
-        var applied = 0;
-        foreach (var page in activePages)
-        {
-            if (!await IsEligibleMainPageAsync(page, _endpoint, cancellationToken).ConfigureAwait(false))
+            if (scan.EligiblePages.Contains(page, ReferenceEqualityComparer.Instance))
             {
-                var cleanupGeneration = 0L;
-                if (_preparedPages.Remove(page, out var preparedGeneration))
-                {
-                    cleanupGeneration = preparedGeneration;
-                }
-
-                if (_mutatedPages.Remove(page, out var previousGeneration))
-                {
-                    cleanupGeneration = Math.Max(cleanupGeneration, previousGeneration);
-                }
-
-                if (cleanupGeneration != 0)
-                {
-                    await CleanupOrTrackPendingAsync(page, cleanupGeneration)
-                        .ConfigureAwait(false);
-                }
-
                 continue;
             }
 
-            eligible++;
-            if (!_mutatedPages.TryGetValue(page, out var generation) || generation != _options.Generation)
-            {
-                var installed = await TryInstallMediaAsync(page, _options, cancellationToken)
-                    .ConfigureAwait(false);
-                if (!installed)
-                {
-                    continue;
-                }
+            await _pageRegistry.CleanupTrackedPageAsync(page).ConfigureAwait(false);
+        }
 
-                _mutatedPages[page] = _options.Generation;
-                if (_paused)
+        if (!VerifiedCodexPageSelector.TrySelectSoleEligiblePage(
+                scan.EligiblePages,
+                out var selectedPage))
+        {
+            if (scan.EligiblePages.Count > 1)
+            {
+                foreach (var page in scan.EligiblePages)
                 {
-                    await TryEvaluateAsync(
-                        page,
-                        InjectionScriptBuilder.BuildSetPaused(_options.Generation, paused: true),
-                        cancellationToken).ConfigureAwait(false);
+                    await _pageRegistry.CleanupTrackedPageAsync(page).ConfigureAwait(false);
                 }
             }
 
-            applied++;
+            return new PageApplyResult(
+                scan.EligiblePages.Count,
+                AppliedCount: 0,
+                IsAmbiguous: scan.EligiblePages.Count > 1,
+                AmbiguousTargetsObserved: scan.EligiblePages.Count > 1);
         }
 
-        return new PageApplyResult(eligible, applied);
+        var capabilityTransition = _capabilityState.Observe(
+            await ObserveCapabilitiesAsync(selectedPage, cancellationToken).ConfigureAwait(false));
+        if (!capabilityTransition.Current.Global.IsAvailable)
+        {
+            await _pageRegistry.CleanupTrackedPageAsync(selectedPage).ConfigureAwait(false);
+            PublishCapabilitiesChanged(
+                _options.Generation,
+                capabilityTransition.Previous,
+                capabilityTransition.Current);
+            return new PageApplyResult(
+                EligibleCount: 1,
+                AppliedCount: 0,
+                IsAmbiguous: false,
+            AmbiguousTargetsObserved: false);
+        }
+
+        if (_pageRegistry.IsMutatedForGeneration(selectedPage, _options.Generation) &&
+            InjectionCapabilityState.RequiresOwnedStyleDowngrade(
+                capabilityTransition.Previous,
+                capabilityTransition.Current))
+        {
+            var updated = await PuppeteerPageScriptExecutor.TryEvaluateAsync(
+                    selectedPage,
+                    InjectionScriptBuilder.BuildCapabilityDowngrade(
+                        _options.Generation,
+                        capabilityTransition.Current),
+                    cancellationToken)
+                .ConfigureAwait(false);
+            if (!updated)
+            {
+                await _pageRegistry.CleanupTrackedPageAsync(selectedPage).ConfigureAwait(false);
+                PublishCapabilitiesChanged(
+                    _options.Generation,
+                    capabilityTransition.Previous,
+                    capabilityTransition.Current);
+                return new PageApplyResult(
+                    EligibleCount: 1,
+                    AppliedCount: 0,
+                    IsAmbiguous: false,
+                    AmbiguousTargetsObserved: false);
+            }
+        }
+
+        PublishCapabilitiesChanged(
+            _options.Generation,
+            capabilityTransition.Previous,
+            capabilityTransition.Current);
+
+        if (!_pageRegistry.IsMutatedForGeneration(selectedPage, _options.Generation))
+        {
+            var installed = await TryInstallMediaAsync(selectedPage, _options, cancellationToken)
+                .ConfigureAwait(false);
+            if (!installed)
+            {
+                return new PageApplyResult(
+                    EligibleCount: 1,
+                    AppliedCount: 0,
+                    IsAmbiguous: false,
+                    AmbiguousTargetsObserved: false);
+            }
+
+            _pageRegistry.MarkMutated(selectedPage, _options.Generation);
+            if (_paused)
+            {
+                await PuppeteerPageScriptExecutor.TryEvaluateAsync(
+                    selectedPage,
+                    InjectionScriptBuilder.BuildSetPaused(_options.Generation, paused: true),
+                    cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        return new PageApplyResult(
+            EligibleCount: 1,
+            AppliedCount: 1,
+            IsAmbiguous: false,
+            AmbiguousTargetsObserved: false);
+    }
+
+    internal static bool RequiresOwnedStyleDowngrade(
+        CompatibilityCapabilities previous,
+        CompatibilityCapabilities current) =>
+        InjectionCapabilityState.RequiresOwnedStyleDowngrade(previous, current);
+
+    private async Task<CompatibilityCapabilities> ObserveCapabilitiesAsync(
+        IPage page,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var json = await page.EvaluateExpressionAsync<string>(
+                    CompatibilityProbeScriptBuilder.Build(_endpoint!.Profile))
+                .WaitAsync(cancellationToken).ConfigureAwait(false);
+            return CompatibilityProbeScriptBuilder.ParseObservation(
+                json,
+                _endpoint.Profile.ProbePackageKind);
+        }
+        catch (PuppeteerException)
+        {
+            return CompatibilityProbeScriptBuilder.FailedObservation();
+        }
+        catch (JsonException)
+        {
+            return CompatibilityProbeScriptBuilder.FailedObservation();
+        }
     }
 
     private async Task<bool> TryInstallMediaAsync(
@@ -474,35 +574,32 @@ public sealed class PuppeteerWallpaperSession :
         CancellationToken cancellationToken)
     {
         var activated = false;
-        TrackPendingCleanup(page, options.Generation);
+        _pageRegistry.TrackPendingCleanup(page, options.Generation);
         try
         {
-            var prepared = await TryEvaluateAsync(
-                page,
-                WrapPrepareExpression(InjectionScriptBuilder.BuildInstall(options)),
-                cancellationToken).ConfigureAwait(false);
-            if (!prepared ||
-                !await IsEligibleMainPageAsync(page, _endpoint!, cancellationToken)
-                    .ConfigureAwait(false))
+            await using var preparedHandle = await page
+                .EvaluateExpressionHandleAsync(
+                    InjectionScriptBuilder.BuildInstall(options, _capabilityState.Current))
+                .WaitAsync(cancellationToken)
+                .ConfigureAwait(false);
+            if (preparedHandle is not IElementHandle fileInput)
             {
                 return false;
             }
 
-            await using var fileInput = await page
-                .QuerySelectorAsync(
-                    $"input[type=\"file\"]#{InjectionScriptBuilder.FileInputElementId}" +
-                    $"[data-codex-wallpaper-owner=\"{InjectionScriptBuilder.Owner}\"]" +
-                    $"[data-codex-wallpaper-generation=\"{options.Generation}\"]")
-                .WaitAsync(cancellationToken)
-                .ConfigureAwait(false);
-            if (fileInput is null)
+            // The install expression returns the exact input it created. Revalidating only after
+            // capturing that handle means a same-URL navigation detaches the authorized element;
+            // the new document is never queried for a predictable lookalike before upload.
+            if (!await _pageSelector
+                    .IsEligibleMainPageAsync(page, _endpoint!, cancellationToken)
+                    .ConfigureAwait(false))
             {
                 return false;
             }
 
             await fileInput.UploadFileAsync(resolveFilePaths: false, [options.LocalMediaPath])
                 .WaitAsync(cancellationToken).ConfigureAwait(false);
-            activated = await TryEvaluateAsync(
+            activated = await PuppeteerPageScriptExecutor.TryEvaluateAsync(
                 page,
                 WrapActivateExpression(
                     InjectionScriptBuilder.BuildActivateMedia(options.Generation)),
@@ -517,212 +614,34 @@ public sealed class PuppeteerWallpaperSession :
         {
             if (activated)
             {
-                RemovePendingCleanupUpTo(page, options.Generation);
+                _pageRegistry.RemovePendingCleanupUpTo(page, options.Generation);
             }
             else
             {
-                var cleaned = await CleanupPageBestEffortAsync(page, options.Generation)
+                var cleaned = await PuppeteerPageScriptExecutor
+                    .CleanupBestEffortAsync(
+                        page,
+                        options.Generation,
+                        TimeSpan.FromSeconds(5))
                     .ConfigureAwait(false);
                 if (cleaned || page.IsClosed)
                 {
-                    RemovePendingCleanupUpTo(page, options.Generation);
+                    _pageRegistry.RemovePendingCleanupUpTo(page, options.Generation);
                 }
                 else
                 {
-                    TrackPendingCleanup(page, options.Generation);
+                    _pageRegistry.TrackPendingCleanup(page, options.Generation);
                 }
             }
         }
     }
-
-    private async Task<bool> CleanupOrTrackPendingAsync(IPage page, long generation)
-    {
-        var cleaned = await CleanupPageBestEffortAsync(page, generation).ConfigureAwait(false);
-        if (cleaned || page.IsClosed)
-        {
-            RemovePendingCleanupUpTo(page, generation);
-        }
-        else
-        {
-            TrackPendingCleanup(page, generation);
-        }
-
-        return cleaned;
-    }
-
-    private void TrackPendingCleanup(IPage page, long generation)
-    {
-        if (_preparedPages.TryGetValue(page, out var existingGeneration))
-        {
-            generation = Math.Max(generation, existingGeneration);
-        }
-
-        _preparedPages[page] = generation;
-    }
-
-    private void RemovePendingCleanupUpTo(IPage page, long generation)
-    {
-        if (_preparedPages.TryGetValue(page, out var pendingGeneration) &&
-            pendingGeneration <= generation)
-        {
-            _preparedPages.Remove(page);
-        }
-    }
-
-    private static async Task<bool> CleanupPageBestEffortAsync(IPage page, long generation)
-    {
-        using var cleanupCancellation = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        try
-        {
-            return await TryEvaluateAsync(
-                page,
-                InjectionScriptBuilder.BuildCleanup(generation),
-                cleanupCancellation.Token).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (cleanupCancellation.IsCancellationRequested)
-        {
-            return false;
-        }
-    }
-
-    private async Task<bool> IsEligibleMainPageAsync(
-        IPage page,
-        VerifiedCdpEndpoint endpoint,
-        CancellationToken cancellationToken)
-    {
-        var targetId = await GetTargetIdAsync(page, cancellationToken).ConfigureAwait(false);
-        if (targetId is null || !IsReviewedTargetDocument(targetId, page.Url, endpoint))
-        {
-            return false;
-        }
-
-        try
-        {
-            var title = await page.GetTitleAsync().WaitAsync(cancellationToken).ConfigureAwait(false);
-            if (!title.Contains("Codex", StringComparison.OrdinalIgnoreCase))
-            {
-                return false;
-            }
-
-            return await page.EvaluateExpressionAsync<bool>(
-                    "Boolean(document.documentElement && document.body && document.querySelector('main'))")
-                .WaitAsync(cancellationToken).ConfigureAwait(false);
-        }
-        catch (PuppeteerException)
-        {
-            return false;
-        }
-    }
-
-    private async Task<string?> GetTargetIdAsync(
-        IPage page,
-        CancellationToken cancellationToken)
-    {
-        if (_targetIds.TryGetValue(page, out var cached))
-        {
-            return cached;
-        }
-
-        ICDPSession? session = null;
-        try
-        {
-            session = await page.CreateCDPSessionAsync().WaitAsync(cancellationToken)
-                .ConfigureAwait(false);
-            var response = await session.SendAsync<JsonElement>("Target.getTargetInfo")
-                .WaitAsync(cancellationToken).ConfigureAwait(false);
-            if (!response.TryGetProperty("targetInfo", out var targetInfo) ||
-                !targetInfo.TryGetProperty("targetId", out var targetIdElement))
-            {
-                return null;
-            }
-
-            var targetId = targetIdElement.GetString();
-            if (string.IsNullOrWhiteSpace(targetId))
-            {
-                return null;
-            }
-
-            _targetIds[page] = targetId;
-            return targetId;
-        }
-        catch (PuppeteerException)
-        {
-            return null;
-        }
-        finally
-        {
-            if (session is not null)
-            {
-                try
-                {
-                    await session.DetachAsync().ConfigureAwait(false);
-                }
-                catch (PuppeteerException)
-                {
-                }
-            }
-        }
-    }
-
-    internal static bool IsReviewedTargetDocument(
-        string targetId,
-        string pageUrl,
-        VerifiedCdpEndpoint endpoint)
-    {
-        if (string.IsNullOrWhiteSpace(targetId) ||
-            !Uri.TryCreate(pageUrl, UriKind.Absolute, out var pageUri))
-        {
-            return false;
-        }
-
-        return endpoint.InjectableTargets.Any(target =>
-            string.Equals(target.Id, targetId, StringComparison.Ordinal) &&
-            IsSameReviewedDocument(pageUri, target.Url));
-    }
-
-    internal static bool IsSameReviewedDocument(Uri pageUri, string reviewedTargetUrl)
-    {
-        if (!Uri.TryCreate(reviewedTargetUrl, UriKind.Absolute, out var reviewedUri))
-        {
-            return false;
-        }
-
-        return Uri.Compare(
-            pageUri,
-            reviewedUri,
-            UriComponents.SchemeAndServer | UriComponents.Path,
-            UriFormat.SafeUnescaped,
-            StringComparison.OrdinalIgnoreCase) == 0;
-    }
-
-    private static string WrapPrepareExpression(string installExpression) =>
-        $"(() => {{ const result = ({installExpression}); return result?.prepared === true; }})()";
 
     private static string WrapActivateExpression(string activateExpression) =>
         $"(async () => {{ const result = await ({activateExpression}); return result?.applied === true; }})()";
 
-    private static async Task<bool> TryEvaluateAsync(
-        IPage page,
-        string expression,
-        CancellationToken cancellationToken)
-    {
-        if (page.IsClosed)
-        {
-            return false;
-        }
-
-        try
-        {
-            return await page.EvaluateExpressionAsync<bool>(expression)
-                .WaitAsync(cancellationToken).ConfigureAwait(false);
-        }
-        catch (PuppeteerException)
-        {
-            return false;
-        }
-    }
-
-    private async Task<Task?> StopCoreAsync()
+    private async Task<Task?> StopCoreAsync(
+        bool observeHeartbeat = true,
+        long preservedFaultGeneration = 0)
     {
         var heartbeatCancellation = _heartbeatCancellation;
         var heartbeatTask = _heartbeatTask;
@@ -730,50 +649,24 @@ public sealed class PuppeteerWallpaperSession :
         _heartbeatTask = null;
         heartbeatCancellation?.Cancel();
         heartbeatCancellation?.Dispose();
-        ObserveHeartbeatInBackground(heartbeatTask);
+        if (observeHeartbeat)
+        {
+            ObserveHeartbeatInBackground(heartbeatTask);
+        }
 
-        var generation = Generation;
         try
         {
-            var pagesToClean = new Dictionary<IPage, long>(ReferenceEqualityComparer.Instance);
-            foreach (var entry in _mutatedPages.Concat(_preparedPages))
-            {
-                pagesToClean[entry.Key] = pagesToClean.TryGetValue(
-                    entry.Key,
-                    out var existingGeneration)
-                    ? Math.Max(existingGeneration, entry.Value)
-                    : entry.Value;
-            }
-
-            if (generation > 0 || pagesToClean.Count != 0)
-            {
-                using var cleanupCancellation = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-                foreach (var entry in pagesToClean)
-                {
-                    try
-                    {
-                        await TryEvaluateAsync(
-                            entry.Key,
-                            InjectionScriptBuilder.BuildCleanup(entry.Value),
-                            cleanupCancellation.Token)
-                            .ConfigureAwait(false);
-                    }
-                    catch (OperationCanceledException)
-                        when (cleanupCancellation.IsCancellationRequested)
-                    {
-                        break;
-                    }
-                }
-            }
+            await _pageRegistry.CleanupAllAsync().ConfigureAwait(false);
         }
         finally
         {
-            _mutatedPages.Clear();
-            _preparedPages.Clear();
-            _targetIds.Clear();
+            _pageRegistry.Reset();
+            _pageSelector.Reset();
             _options = null;
             _endpoint = null;
             _paused = false;
+            _capabilityState.Reset();
+            Interlocked.Exchange(ref _faultedGeneration, preservedFaultGeneration);
             var browser = _browser;
             _browser = null;
             if (browser is not null)
@@ -861,6 +754,40 @@ public sealed class PuppeteerWallpaperSession :
         }
     }
 
+    private void PublishCapabilitiesChanged(
+        long generation,
+        CompatibilityCapabilities previous,
+        CompatibilityCapabilities current)
+    {
+        if (previous == current)
+        {
+            return;
+        }
+
+        var eventArgs = new WallpaperInjectionCapabilitiesChangedEventArgs(
+            generation,
+            previous,
+            current);
+        var handlers = CapabilitiesChanged;
+        if (handlers is null)
+        {
+            return;
+        }
+
+        foreach (EventHandler<WallpaperInjectionCapabilitiesChangedEventArgs> handler in
+                 handlers.GetInvocationList())
+        {
+            try
+            {
+                handler(this, eventArgs);
+            }
+            catch (Exception)
+            {
+                // Capability observers cannot interrupt fail-closed page cleanup.
+            }
+        }
+    }
+
     internal static void ResetHeartbeatFailureWindow(
         long observedGeneration,
         ref long failureGeneration,
@@ -888,7 +815,6 @@ public sealed class PuppeteerWallpaperSession :
         }
     }
 
-    private readonly record struct PageApplyResult(int EligibleCount, int AppliedCount);
 }
 
 public class WallpaperInjectionException : InvalidOperationException
@@ -907,6 +833,14 @@ public class WallpaperInjectionException : InvalidOperationException
 public sealed class WallpaperMediaLoadException : WallpaperInjectionException
 {
     public WallpaperMediaLoadException(string message)
+        : base(message)
+    {
+    }
+}
+
+public sealed class WallpaperTargetAmbiguityException : WallpaperInjectionException
+{
+    public WallpaperTargetAmbiguityException(string message)
         : base(message)
     {
     }

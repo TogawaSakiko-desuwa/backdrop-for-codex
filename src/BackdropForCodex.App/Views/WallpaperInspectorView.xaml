@@ -1,0 +1,196 @@
+<UserControl x:Class="BackdropForCodex.App.Views.WallpaperInspectorView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:localization="clr-namespace:BackdropForCodex.App.Services.Localization"
+             xmlns:settings="clr-namespace:BackdropForCodex.Core.Settings;assembly=BackdropForCodex.Core"
+             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml">
+  <UserControl.Resources>
+    <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+  </UserControl.Resources>
+
+  <ScrollViewer VerticalScrollBarVisibility="Auto"
+                HorizontalScrollBarVisibility="Disabled">
+    <StackPanel>
+      <TextBlock Style="{StaticResource PageHeadingStyle}"
+                 Text="{localization:Loc App_Title, Fallback='Backdrop for Codex'}" />
+      <TextBlock Margin="0,5,0,18"
+                 Style="{StaticResource CaptionTextStyle}"
+                 Text="{localization:Loc App_Description, Fallback='A private, local wallpaper layer for Codex.'}" />
+
+      <ui:Card Margin="0,0,0,12">
+        <StackPanel Margin="16">
+          <Grid>
+            <StackPanel>
+              <TextBlock Style="{StaticResource SectionHeadingStyle}"
+                         Text="{localization:Loc Section_Wallpaper, Fallback=Wallpaper}" />
+              <TextBlock Margin="0,3,105,0"
+                         Style="{StaticResource CaptionTextStyle}"
+                         Text="{localization:Loc Hint_SupportedFormats, Fallback='PNG, JPEG, WebP, MP4, or WebM'}" />
+            </StackPanel>
+            <ui:Button HorizontalAlignment="Right"
+                       VerticalAlignment="Top"
+                       Content="{localization:Loc Action_SelectMedia, Fallback='Choose media'}"
+                       IsEnabled="{Binding CanEdit}"
+                       Click="ChooseMedia_Click" />
+          </Grid>
+          <Border Margin="0,14,0,0"
+                  Padding="11,9"
+                  CornerRadius="8"
+                  Background="{DynamicResource ControlFillColorDefaultBrush}">
+            <Grid>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+              <ui:SymbolIcon Symbol="Document24" />
+              <StackPanel Grid.Column="1" Margin="9,0,0,0">
+                <TextBlock Text="{Binding SelectedMediaName}"
+                           TextTrimming="CharacterEllipsis"
+                           FontWeight="SemiBold"
+                           ToolTip="{Binding SelectedMediaPath}" />
+                <TextBlock Text="{localization:Loc Hint_MissingMedia, Fallback='This file is no longer available.'}"
+                           Style="{StaticResource CaptionTextStyle}"
+                           Visibility="{Binding IsMediaMissing, Converter={StaticResource BooleanToVisibilityConverter}}" />
+              </StackPanel>
+            </Grid>
+          </Border>
+        </StackPanel>
+      </ui:Card>
+
+      <ui:Card Margin="0,0,0,12">
+        <StackPanel Margin="16">
+          <TextBlock Margin="0,0,0,14"
+                     Style="{StaticResource SectionHeadingStyle}"
+                     Text="{localization:Loc Section_Appearance, Fallback=Appearance}" />
+
+          <TextBlock Style="{StaticResource InspectorLabelStyle}"
+                     Text="{localization:Loc Label_Fit, Fallback='Media fit'}" />
+          <ComboBox Margin="0,0,0,16"
+                    SelectedValue="{Binding Fit, Mode=TwoWay}"
+                    SelectedValuePath="Tag"
+                    AutomationProperties.Name="{localization:Loc Label_Fit, Fallback='Media fit'}"
+                    IsEnabled="{Binding CanEdit}">
+            <ComboBoxItem Content="{localization:Loc Fit_Cover, Fallback='Crop to fill'}"
+                          Tag="{x:Static settings:WallpaperFit.Cover}" />
+            <ComboBoxItem Content="{localization:Loc Fit_Contain, Fallback='Show entire media'}"
+                          Tag="{x:Static settings:WallpaperFit.Contain}" />
+            <ComboBoxItem Content="{localization:Loc Fit_Stretch, Fallback='Stretch to fit'}"
+                          Tag="{x:Static settings:WallpaperFit.Stretch}" />
+          </ComboBox>
+
+          <StackPanel Margin="0,0,0,16"
+                      Visibility="{Binding IsCoverFit, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <Grid>
+              <TextBlock Style="{StaticResource InspectorLabelStyle}"
+                         Text="{localization:Loc Label_Focus, Fallback='Crop focus'}" />
+              <StackPanel HorizontalAlignment="Right"
+                          Orientation="Horizontal">
+                <TextBlock Margin="0,0,8,0"
+                           VerticalAlignment="Center"
+                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                           Text="{Binding FocusLabel}" />
+                <ui:Button Padding="8,2"
+                           Appearance="Secondary"
+                           Content="{localization:Loc Action_CenterFocus, Fallback=Center}"
+                           IsEnabled="{Binding CanAdjustFocus}"
+                           AutomationProperties.Name="{localization:Loc Action_CenterFocus, Fallback='Center crop focus'}"
+                           Click="CenterFocus_Click" />
+              </StackPanel>
+            </Grid>
+            <TextBlock Style="{StaticResource CaptionTextStyle}"
+                       Text="{localization:Loc Hint_FocusControl, Fallback='Drag the marker or use the arrow keys. Hold Shift for larger steps.'}" />
+          </StackPanel>
+
+          <Grid>
+            <TextBlock Style="{StaticResource InspectorLabelStyle}"
+                       Text="{localization:Loc Label_PanelOpacity, Fallback='Panel opacity'}" />
+            <TextBlock HorizontalAlignment="Right"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                       Text="{Binding PanelOpacityPercent}" />
+          </Grid>
+          <Slider Minimum="0.60"
+                  Maximum="0.95"
+                  TickFrequency="0.01"
+                  Value="{Binding PanelOpacity, Mode=TwoWay}"
+                  IsEnabled="{Binding CanEdit}"
+                  AutomationProperties.Name="{localization:Loc Label_PanelOpacity, Fallback='Panel opacity'}"
+                  Margin="0,0,0,16" />
+
+          <Grid>
+            <TextBlock Style="{StaticResource InspectorLabelStyle}"
+                       Text="{localization:Loc Label_Blur, Fallback='Background blur'}" />
+            <TextBlock HorizontalAlignment="Right"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                       Text="{Binding BlurLabel}" />
+          </Grid>
+          <Slider Minimum="0"
+                  Maximum="24"
+                  TickFrequency="1"
+                  IsSnapToTickEnabled="True"
+                  Value="{Binding BlurPx, Mode=TwoWay}"
+                  IsEnabled="{Binding CanEdit}"
+                  AutomationProperties.Name="{localization:Loc Label_Blur, Fallback='Background blur'}" />
+
+          <Grid Margin="0,16,0,0">
+            <TextBlock Style="{StaticResource InspectorLabelStyle}"
+                       Text="{localization:Loc Label_DarkOverlay, Fallback='Dark theme overlay'}" />
+            <TextBlock HorizontalAlignment="Right"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                       Text="{Binding DarkOverlayPercent}" />
+          </Grid>
+          <Slider Minimum="0"
+                  Maximum="0.60"
+                  TickFrequency="0.01"
+                  Value="{Binding DarkOverlay, Mode=TwoWay}"
+                  IsEnabled="{Binding CanEdit}"
+                  AutomationProperties.Name="{localization:Loc Label_DarkOverlay, Fallback='Dark theme overlay'}"
+                  Margin="0,0,0,16" />
+
+          <Grid>
+            <TextBlock Style="{StaticResource InspectorLabelStyle}"
+                       Text="{localization:Loc Label_LightOverlay, Fallback='Light theme overlay'}" />
+            <TextBlock HorizontalAlignment="Right"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                       Text="{Binding LightOverlayPercent}" />
+          </Grid>
+          <Slider Minimum="0"
+                  Maximum="0.60"
+                  TickFrequency="0.01"
+                  Value="{Binding LightOverlay, Mode=TwoWay}"
+                  IsEnabled="{Binding CanEdit}"
+                  AutomationProperties.Name="{localization:Loc Label_LightOverlay, Fallback='Light theme overlay'}" />
+        </StackPanel>
+      </ui:Card>
+
+      <ui:Card>
+        <Grid Margin="16">
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="Auto" />
+          </Grid.ColumnDefinitions>
+          <Border Width="34"
+                  Height="34"
+                  CornerRadius="10"
+                  Background="{DynamicResource AccentFillColorSecondaryBrush}">
+            <ui:SymbolIcon Symbol="ShieldLock24"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center" />
+          </Border>
+          <StackPanel Grid.Column="1" Margin="11,0,10,0">
+            <TextBlock Style="{StaticResource SectionHeadingStyle}"
+                       Text="{localization:Loc Section_SafetyPrivacy, Fallback='Safety &amp; privacy'}" />
+            <TextBlock Margin="0,3,0,0"
+                       Style="{StaticResource CaptionTextStyle}"
+                       Text="{localization:Loc Risk_Summary, Fallback='Enhanced launch uses a local Chromium debugging endpoint.'}" />
+          </StackPanel>
+          <ui:Button Grid.Column="2"
+                     VerticalAlignment="Center"
+                     Content="{localization:Loc Action_LearnMore, Fallback='Review'}"
+                     IsEnabled="{Binding CanEdit}"
+                     Click="ReviewRisk_Click" />
+        </Grid>
+      </ui:Card>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

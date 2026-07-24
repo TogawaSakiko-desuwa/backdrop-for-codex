@@ -73,10 +73,14 @@ public sealed class CdpEndpointCandidateSourceTests
         Assert.Equal(new Uri("http://127.0.0.1:9222/"), candidate.BaseUri);
     }
 
-    [Fact]
-    public async Task TcpCandidateSource_UsesExactPackageFullNameForCurrentProfile()
+    [Theory]
+    [InlineData("26.721.3404.0")]
+    [InlineData("26.721.3996.0")]
+    [InlineData("26.721.4000.0")]
+    public async Task TcpCandidateSource_UsesActualPackageFullNameForSelectedProfile(
+        string version)
     {
-        var profile = CodexCompatibilityTests.GetProfile(new Version(26, 721, 3404, 0));
+        var profile = CodexCompatibilityTests.GetProfile(Version.Parse(version));
         var processes = new StubProcessSource(
         [
             Process(

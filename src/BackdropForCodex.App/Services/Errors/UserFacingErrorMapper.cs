@@ -16,6 +16,9 @@ public enum UserFacingErrorCode
     PreferencesWriteFailed,
     PreferencesResetFailed,
     WallpaperSettingsReadFailed,
+    WallpaperSettingsRecoveryRequired,
+    WallpaperSettingsFutureVersion,
+    WallpaperSettingsUnsupportedFeatures,
     WallpaperSettingsWriteFailed,
     WallpaperConfigurationInvalid,
     MediaInvalid,
@@ -149,12 +152,27 @@ public sealed class UserFacingErrorMapper : IUserFacingErrorMapper
             return UserFacingErrorCode.WallpaperConfigurationInvalid;
         }
 
+        if (exception is SettingsRecoveryRequiredException)
+        {
+            return UserFacingErrorCode.WallpaperSettingsRecoveryRequired;
+        }
+
+        if (exception is FutureSettingsVersionException)
+        {
+            return UserFacingErrorCode.WallpaperSettingsFutureVersion;
+        }
+
+        if (exception is SettingsProjectionException)
+        {
+            return UserFacingErrorCode.WallpaperSettingsUnsupportedFeatures;
+        }
+
         if (exception is MediaValidationException)
         {
             return UserFacingErrorCode.MediaInvalid;
         }
 
-        if (exception is WallpaperInjectionException or LoopbackMediaServerException)
+        if (exception is WallpaperInjectionException)
         {
             return UserFacingErrorCode.WallpaperApplyFailed;
         }
@@ -162,13 +180,6 @@ public sealed class UserFacingErrorMapper : IUserFacingErrorMapper
         if (exception is WallpaperNotActiveException)
         {
             return UserFacingErrorCode.WallpaperRestoreFailed;
-        }
-
-        if (exception is SettingsStoreException)
-        {
-            return operation == UserFacingOperation.LoadWallpaperSettings
-                ? UserFacingErrorCode.WallpaperSettingsReadFailed
-                : UserFacingErrorCode.WallpaperSettingsWriteFailed;
         }
 
         if (exception is PlatformNotSupportedException)
@@ -222,6 +233,9 @@ public sealed class UserFacingErrorMapper : IUserFacingErrorMapper
         UserFacingErrorCode.PreferencesWriteFailed => true,
         UserFacingErrorCode.PreferencesResetFailed => true,
         UserFacingErrorCode.WallpaperSettingsReadFailed => true,
+        UserFacingErrorCode.WallpaperSettingsRecoveryRequired => false,
+        UserFacingErrorCode.WallpaperSettingsFutureVersion => false,
+        UserFacingErrorCode.WallpaperSettingsUnsupportedFeatures => false,
         UserFacingErrorCode.WallpaperSettingsWriteFailed => true,
         UserFacingErrorCode.WallpaperConfigurationInvalid => true,
         UserFacingErrorCode.MediaInvalid => true,

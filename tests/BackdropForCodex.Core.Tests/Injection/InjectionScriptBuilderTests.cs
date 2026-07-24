@@ -6,6 +6,18 @@ namespace BackdropForCodex.Core.Tests.Injection;
 public sealed class InjectionScriptBuilderTests
 {
     [Fact]
+    public void BuildInstall_IsNotExposedAsAProbeBypassingPublicApi()
+    {
+        var publicInstallOverloads = typeof(InjectionScriptBuilder)
+            .GetMethods(System.Reflection.BindingFlags.Public |
+                        System.Reflection.BindingFlags.Static)
+            .Where(method => method.Name == nameof(InjectionScriptBuilder.BuildInstall))
+            .ToArray();
+
+        Assert.Empty(publicInstallOverloads);
+    }
+
+    [Fact]
     public void BuildInstall_PreparesOwnedMediaAndFileInput()
     {
         var options = CreateOptions(
@@ -35,7 +47,8 @@ public sealed class InjectionScriptBuilderTests
         Assert.Contains("state.startWatchdog()", script, StringComparison.Ordinal);
         Assert.Contains("style,", script, StringComparison.Ordinal);
         Assert.DoesNotContain("document.querySelectorAll(", script, StringComparison.Ordinal);
-        Assert.Contains("return { prepared: true", script, StringComparison.Ordinal);
+        Assert.Contains("return fileInput;", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("return { prepared: true", script, StringComparison.Ordinal);
         Assert.DoesNotContain("return { applied: true", script, StringComparison.Ordinal);
     }
 
@@ -237,8 +250,9 @@ public sealed class InjectionScriptBuilderTests
             StringComparison.Ordinal);
         Assert.Contains(
             "[class~=\"relative\"][class~=\"rounded-lg\"]" +
-            "[class~=\"bg-token-main-surface-primary\"]:has(.markdown)",
-            script,
+            "[class~=\"bg-token-main-surface-primary\"]" +
+            ":has(:is(.markdown,[class^=\"_markdownContent_\"],[class*=\"_markdownContent_\"]))",
+            compactScript,
             StringComparison.Ordinal);
         Assert.DoesNotContain($"{RightPanelTab} > :is(div, section)", script, StringComparison.Ordinal);
         Assert.DoesNotContain($"{RightPanelTab} *", script, StringComparison.Ordinal);

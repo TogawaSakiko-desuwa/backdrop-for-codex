@@ -1,3 +1,5 @@
+using BackdropForCodex.Core.Codex;
+using BackdropForCodex.Core.Injection;
 using BackdropForCodex.Core.Runtime;
 using BackdropForCodex.Core.Settings;
 using BackdropForCodex.Core.Shortcuts;
@@ -36,10 +38,29 @@ public interface IWallpaperApplicationService : IAsyncDisposable
     DesktopShortcutDeleteResult DeleteOwnedShortcut();
 }
 
+public interface IWallpaperApplicationCapabilitySource
+{
+    event EventHandler<WallpaperInjectionCapabilitiesChangedEventArgs>? CapabilitiesChanged;
+
+    CompatibilityCapabilities Capabilities { get; }
+}
+
+public interface IWallpaperSettingsRecoveryService
+{
+    Task<SettingsV1> RestoreVersion1BackupAsync(
+        CancellationToken cancellationToken = default);
+
+    Task<SettingsV1> ResetWallpaperSettingsAsync(
+        CancellationToken cancellationToken = default);
+}
+
 /// <summary>
 /// Keeps shell integration outside the view model while preserving the coordinator's lifecycle.
 /// </summary>
-public sealed class WallpaperApplicationService : IWallpaperApplicationService
+public sealed class WallpaperApplicationService :
+    IWallpaperApplicationService,
+    IWallpaperApplicationCapabilitySource,
+    IWallpaperSettingsRecoveryService
 {
     private readonly WallpaperCoordinator _coordinator;
     private int _disposeState;
@@ -52,9 +73,17 @@ public sealed class WallpaperApplicationService : IWallpaperApplicationService
 
     public event EventHandler<WallpaperRuntimeStatusChangedEventArgs>? StatusChanged;
 
+    public event EventHandler<WallpaperInjectionCapabilitiesChangedEventArgs>? CapabilitiesChanged
+    {
+        add => _coordinator.CapabilitiesChanged += value;
+        remove => _coordinator.CapabilitiesChanged -= value;
+    }
+
     public bool IsActive => _coordinator.IsActive;
 
     public bool IsPaused => _coordinator.IsPaused;
+
+    public CompatibilityCapabilities Capabilities => _coordinator.Capabilities;
 
     public Task<SettingsV1> LoadSettingsAsync(CancellationToken cancellationToken = default) =>
         _coordinator.LoadSettingsAsync(cancellationToken);
@@ -63,6 +92,14 @@ public sealed class WallpaperApplicationService : IWallpaperApplicationService
         SettingsV1 settings,
         CancellationToken cancellationToken = default) =>
         _coordinator.SaveSettingsAsync(settings, cancellationToken);
+
+    public Task<SettingsV1> ResetWallpaperSettingsAsync(
+        CancellationToken cancellationToken = default) =>
+        _coordinator.ResetSettingsAsync(cancellationToken);
+
+    public Task<SettingsV1> RestoreVersion1BackupAsync(
+        CancellationToken cancellationToken = default) =>
+        _coordinator.RestoreVersion1BackupAsync(cancellationToken);
 
     public async Task<WallpaperApplyResult> ApplyAsync(
         SettingsV1 settings,

@@ -82,11 +82,54 @@ public sealed class CdpEndpointDiscoveryService : ICdpEndpointDiscoveryService
         _discovery.DiscoverAsync(profile, cancellationToken);
 }
 
+public interface IWallpaperRuntime : IAsyncDisposable
+{
+    event EventHandler<WallpaperRuntimeStatusChangedEventArgs>? StatusChanged;
+
+    WallpaperRuntimeStatusChangedEventArgs Status { get; }
+
+    bool IsActive { get; }
+
+    bool IsPaused { get; }
+
+    Task<SettingsV1> LoadSettingsAsync(CancellationToken cancellationToken = default);
+
+    Task<SettingsV1> SaveSettingsAsync(
+        SettingsV1 settings,
+        CancellationToken cancellationToken = default);
+
+    Task<SettingsV1> StartOrUpdateAsync(
+        SettingsV1 requestedSettings,
+        CancellationToken cancellationToken = default);
+
+    Task SetPausedAsync(bool paused, CancellationToken cancellationToken = default);
+
+    Task DisableAsync(CancellationToken cancellationToken = default);
+}
+
+public interface IWallpaperRuntimeCapabilitySource
+{
+    event EventHandler<WallpaperInjectionCapabilitiesChangedEventArgs>? CapabilitiesChanged;
+
+    CompatibilityCapabilities Capabilities { get; }
+}
+
+public interface IWallpaperSettingsRecoveryRuntime
+{
+    Task<SettingsV1> RestoreVersion1BackupAsync(
+        CancellationToken cancellationToken = default);
+
+    Task<SettingsV1> ResetSettingsAsync(CancellationToken cancellationToken = default);
+}
+
 /// <summary>
 /// Owns the complete enhanced-launch lifecycle. It never terminates Codex and never attaches to a
 /// Codex process that predates this coordinator instance.
 /// </summary>
-public sealed class WallpaperCoordinator : IAsyncDisposable
+public sealed class WallpaperCoordinator :
+    IWallpaperRuntime,
+    IWallpaperRuntimeCapabilitySource,
+    IWallpaperSettingsRecoveryRuntime
 {
     public const string RemoteDebuggingArguments =
         "--remote-debugging-address=127.0.0.1 --remote-debugging-port=0";
@@ -95,19 +138,18 @@ public sealed class WallpaperCoordinator : IAsyncDisposable
     private readonly ICodexProcessSnapshotSource _processSource;
     private readonly IApplicationActivationManager _activationManager;
     private readonly ICdpEndpointDiscoveryService _endpointDiscovery;
-    private readonly IMediaFileInspector _mediaInspector;
-    private readonly ILoopbackMediaServer _mediaServer;
+    private readonly IWallpaperSourceProvider _mediaSourceProvider;
+    private readonly IPlaybackPool _playbackPool;
     private readonly IWallpaperInjectionSession _injectionSession;
-    private readonly IWallpaperInjectionHealthSource? _injectionHealthSource;
-    private readonly ISettingsStore _settingsStore;
+    private readonly WallpaperInjectionGenerationMonitor _injectionMonitor;
+    private readonly ISettingsRepository _settingsRepository;
     private readonly WallpaperCoordinatorOptions _options;
     private readonly IDisposable? _ownedTransport;
     private readonly SemaphoreSlim _operationGate = new(1, 1);
-    private readonly object _backgroundTaskSync = new();
-    private Task _injectionFaultTask = Task.CompletedTask;
     private VerifiedCdpEndpoint? _endpoint;
     private uint _activationProcessId;
     private DateTimeOffset? _activationProcessStartTimeUtc;
+    private SettingsV2? _settingsSnapshot;
     private long _generation;
     private bool _launchedByThisCoordinator;
     private bool _paused;
@@ -118,20 +160,20 @@ public sealed class WallpaperCoordinator : IAsyncDisposable
         ICodexProcessSnapshotSource processSource,
         IApplicationActivationManager activationManager,
         ICdpEndpointDiscoveryService endpointDiscovery,
-        IMediaFileInspector mediaInspector,
-        ILoopbackMediaServer mediaServer,
+        IWallpaperSourceProvider mediaSourceProvider,
+        IPlaybackPool playbackPool,
         IWallpaperInjectionSession injectionSession,
-        ISettingsStore settingsStore,
+        ISettingsRepository settingsRepository,
         WallpaperCoordinatorOptions? options = null)
         : this(
             packageLocator,
             processSource,
             activationManager,
             endpointDiscovery,
-            mediaInspector,
-            mediaServer,
+            mediaSourceProvider,
+            playbackPool,
             injectionSession,
-            settingsStore,
+            settingsRepository,
             options,
             ownedTransport: null)
     {
@@ -142,10 +184,10 @@ public sealed class WallpaperCoordinator : IAsyncDisposable
         ICodexProcessSnapshotSource processSource,
         IApplicationActivationManager activationManager,
         ICdpEndpointDiscoveryService endpointDiscovery,
-        IMediaFileInspector mediaInspector,
-        ILoopbackMediaServer mediaServer,
+        IWallpaperSourceProvider mediaSourceProvider,
+        IPlaybackPool playbackPool,
         IWallpaperInjectionSession injectionSession,
-        ISettingsStore settingsStore,
+        ISettingsRepository settingsRepository,
         WallpaperCoordinatorOptions? options,
         IDisposable? ownedTransport)
     {
@@ -153,18 +195,20 @@ public sealed class WallpaperCoordinator : IAsyncDisposable
         _processSource = processSource ?? throw new ArgumentNullException(nameof(processSource));
         _activationManager = activationManager ?? throw new ArgumentNullException(nameof(activationManager));
         _endpointDiscovery = endpointDiscovery ?? throw new ArgumentNullException(nameof(endpointDiscovery));
-        _mediaInspector = mediaInspector ?? throw new ArgumentNullException(nameof(mediaInspector));
-        _mediaServer = mediaServer ?? throw new ArgumentNullException(nameof(mediaServer));
+        _mediaSourceProvider = mediaSourceProvider ??
+            throw new ArgumentNullException(nameof(mediaSourceProvider));
+        _playbackPool = playbackPool ?? throw new ArgumentNullException(nameof(playbackPool));
         _injectionSession = injectionSession ?? throw new ArgumentNullException(nameof(injectionSession));
-        _injectionHealthSource = injectionSession as IWallpaperInjectionHealthSource;
-        _settingsStore = settingsStore ?? throw new ArgumentNullException(nameof(settingsStore));
+        _settingsRepository = settingsRepository ??
+            throw new ArgumentNullException(nameof(settingsRepository));
         _options = options ?? WallpaperCoordinatorOptions.Default;
         _options.Validate();
         _ownedTransport = ownedTransport;
-        if (_injectionHealthSource is not null)
-        {
-            _injectionHealthSource.HealthFaulted += InjectionSession_HealthFaulted;
-        }
+        _injectionMonitor = new WallpaperInjectionGenerationMonitor(
+            injectionSession as IWallpaperInjectionHealthSource,
+            injectionSession as IWallpaperInjectionCapabilitySource,
+            this,
+            HandleInjectionHealthFaultAsync);
 
         Status = new WallpaperRuntimeStatusChangedEventArgs(
             WallpaperRuntimePhase.Idle,
@@ -173,11 +217,21 @@ public sealed class WallpaperCoordinator : IAsyncDisposable
 
     public event EventHandler<WallpaperRuntimeStatusChangedEventArgs>? StatusChanged;
 
+    public event EventHandler<WallpaperInjectionCapabilitiesChangedEventArgs>? CapabilitiesChanged
+    {
+        add => _injectionMonitor.CapabilitiesChanged += value;
+        remove => _injectionMonitor.CapabilitiesChanged -= value;
+    }
+
     public WallpaperRuntimeStatusChangedEventArgs Status { get; private set; }
 
-    public bool IsActive => _injectionSession.IsActive;
+    public bool IsActive =>
+        _injectionSession.IsActive &&
+        _playbackPool.ActiveLease is not null;
 
     public bool IsPaused => _paused;
+
+    public CompatibilityCapabilities Capabilities => _injectionMonitor.Capabilities;
 
     public static WallpaperCoordinator CreateDefault(string settingsPath)
     {
@@ -201,10 +255,10 @@ public sealed class WallpaperCoordinator : IAsyncDisposable
             processes,
             new WindowsApplicationActivationManager(),
             discovery,
-            new MediaFileInspector(),
-            new LoopbackMediaServer(),
+            new LocalFileWallpaperSourceProvider(),
+            new SingleSlotPlaybackPool(),
             new PuppeteerWallpaperSession(),
-            new SettingsStore(settingsPath),
+            new SettingsRepository(settingsPath),
             WallpaperCoordinatorOptions.Default,
             transport);
     }
@@ -216,7 +270,8 @@ public sealed class WallpaperCoordinator : IAsyncDisposable
         try
         {
             ThrowIfDisposed();
-            return await _settingsStore.LoadAsync(cancellationToken).ConfigureAwait(false);
+            var settings = await GetSettingsSnapshotAsync(cancellationToken).ConfigureAwait(false);
+            return ProjectGlobalForLegacyEditor(settings);
         }
         finally
         {
@@ -236,8 +291,62 @@ public sealed class WallpaperCoordinator : IAsyncDisposable
         try
         {
             ThrowIfDisposed();
-            await _settingsStore.SaveAsync(snapshot, cancellationToken).ConfigureAwait(false);
-            return snapshot;
+            var saved = await SaveGlobalSettingsAsync(snapshot, cancellationToken)
+                .ConfigureAwait(false);
+            return ProjectGlobalForLegacyEditor(saved);
+        }
+        finally
+        {
+            _operationGate.Release();
+        }
+    }
+
+    public async Task<SettingsV1> ResetSettingsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        await _operationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            ThrowIfDisposed();
+            _settingsSnapshot = await _settingsRepository
+                .ResetAsync(cancellationToken)
+                .ConfigureAwait(false);
+            _injectionMonitor.ResetCapabilities();
+            return ProjectGlobalForLegacyEditor(_settingsSnapshot);
+        }
+        finally
+        {
+            _operationGate.Release();
+        }
+    }
+
+    public async Task<SettingsV1> RestoreVersion1BackupAsync(
+        CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        await _operationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            ThrowIfDisposed();
+            var loadResult = await _settingsRepository
+                .RestoreVersion1BackupAsync(cancellationToken)
+                .ConfigureAwait(false);
+            _settingsSnapshot = loadResult switch
+            {
+                SettingsLoadResult.Ready ready => ready.Settings,
+                SettingsLoadResult.RecoveryRequired recovery =>
+                    throw new SettingsRecoveryRequiredException(
+                        recovery.Reason,
+                        recovery.HasVersion1Backup),
+                SettingsLoadResult.FutureReadOnly future =>
+                    throw new FutureSettingsVersionException(
+                        future.SchemaVersion,
+                        future.HasVersion1Backup),
+                _ => throw new InvalidOperationException(
+                    "The settings repository returned an unknown recovery state."),
+            };
+            return ProjectGlobalForLegacyEditor(_settingsSnapshot);
         }
         finally
         {
@@ -252,9 +361,11 @@ public sealed class WallpaperCoordinator : IAsyncDisposable
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(requestedSettings);
         await _operationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        IMediaLease? pendingLease = null;
         try
         {
             ThrowIfDisposed();
+            _injectionMonitor.ResetCapabilities();
             Publish(WallpaperRuntimePhase.Validating, "Validating the Codex package and media file.");
 
             if (!requestedSettings.AcceptedCdpRisk)
@@ -268,28 +379,39 @@ public sealed class WallpaperCoordinator : IAsyncDisposable
             }
 
             var mediaPath = Path.GetFullPath(requestedSettings.MediaPath);
-            var metadata = await _mediaInspector
-                .InspectAsync(mediaPath, cancellationToken)
-                .ConfigureAwait(false);
             var installedPackage = _packageLocator.Locate();
             var compatibility = CodexCompatibilityCatalog.Evaluate(
                 installedPackage.Descriptor,
                 CodexRuntimeDescriptor.Current);
+            _injectionMonitor.CaptureCapabilities(compatibility.Capabilities);
             if (!compatibility.IsSupported)
             {
                 throw new UnsupportedCodexVersionException(compatibility);
             }
 
             var profile = compatibility.Profile!;
+            var mediaReference = new MediaReference
+            {
+                MediaId = Guid.CreateVersion7(),
+                SourceKind = MediaSourceKind.LocalFile,
+                SourceIdentifier = mediaPath,
+                LastKnownKind = requestedSettings.MediaKind,
+            }.Snapshot();
+            pendingLease = await _mediaSourceProvider
+                .AcquireLeaseAsync(mediaReference, cancellationToken)
+                .ConfigureAwait(false);
+
             var settings = (requestedSettings with
             {
                 MediaPath = mediaPath,
-                MediaKind = metadata.Kind,
+                MediaKind = pendingLease.Metadata.Kind,
                 LastCompatibilityProfileId = profile.Id,
             })
                 .AddRecentMediaPath(mediaPath)
                 .SnapshotForSave();
-            await _settingsStore.SaveAsync(settings, cancellationToken).ConfigureAwait(false);
+            var persistedSettings = await SaveGlobalSettingsAsync(settings, cancellationToken)
+                .ConfigureAwait(false);
+            settings = ProjectGlobalForLegacyEditor(persistedSettings);
 
             var processes = await _processSource
                 .GetProcessesAsync(cancellationToken)
@@ -326,10 +448,6 @@ public sealed class WallpaperCoordinator : IAsyncDisposable
 
             try
             {
-                var mediaEndpoint = await _mediaServer
-                    .StartAsync(mediaPath, cancellationToken)
-                    .ConfigureAwait(false);
-
                 if (!_launchedByThisCoordinator && !_injectionSession.IsActive)
                 {
                     Publish(WallpaperRuntimePhase.LaunchingCodex, "Launching the reviewed Codex MSIX app.");
@@ -350,15 +468,36 @@ public sealed class WallpaperCoordinator : IAsyncDisposable
                 }
 
                 Publish(WallpaperRuntimePhase.Applying, "Applying the wallpaper to the reviewed Codex page.");
+                var leaseToActivate = pendingLease ??
+                    throw new InvalidOperationException("No validated media lease is available.");
                 var injectionOptions = CreateInjectionOptions(
                     checked(++_generation),
-                    mediaEndpoint,
+                    leaseToActivate,
                     settings);
+                _injectionMonitor.BeginCapabilityObservation(injectionOptions.Generation);
                 await _injectionSession
                     .ApplyAsync(_endpoint, injectionOptions, cancellationToken)
                     .ConfigureAwait(false);
+
+                try
+                {
+                    await _playbackPool
+                        .ActivateAsync(leaseToActivate, cancellationToken)
+                        .ConfigureAwait(false);
+                }
+                finally
+                {
+                    // ActivateAsync transfers ownership when the slot points at the new lease,
+                    // including when disposing the previous slot reports a failure.
+                    if (ReferenceEquals(_playbackPool.ActiveLease, leaseToActivate))
+                    {
+                        pendingLease = null;
+                    }
+                }
+
                 // Pause belongs to one injected media generation. A replacement starts from its
                 // own default playback state and must not inherit a stale pause from the prior video.
+                _injectionMonitor.MarkActive(injectionOptions.Generation);
                 _paused = false;
                 Publish(WallpaperRuntimePhase.Active, "Wallpaper is active.");
                 return settings;
@@ -381,14 +520,34 @@ public sealed class WallpaperCoordinator : IAsyncDisposable
                 throw;
             }
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException exception) when (cancellationToken.IsCancellationRequested)
         {
             Publish(WallpaperRuntimePhase.Faulted, "The wallpaper operation was cancelled.");
+            var disposalFailure = await TryDisposeLeaseAsync(pendingLease).ConfigureAwait(false);
+            pendingLease = null;
+            if (disposalFailure is not null)
+            {
+                throw new AggregateException(
+                    "The wallpaper operation was cancelled and its pending media lease could not be released.",
+                    exception,
+                    disposalFailure);
+            }
+
             throw;
         }
         catch (Exception exception)
         {
             Publish(WallpaperRuntimePhase.Faulted, exception.Message);
+            var disposalFailure = await TryDisposeLeaseAsync(pendingLease).ConfigureAwait(false);
+            pendingLease = null;
+            if (disposalFailure is not null)
+            {
+                throw new AggregateException(
+                    "The wallpaper operation and pending media lease cleanup both failed.",
+                    exception,
+                    disposalFailure);
+            }
+
             throw;
         }
         finally
@@ -403,7 +562,7 @@ public sealed class WallpaperCoordinator : IAsyncDisposable
         await _operationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            if (!_injectionSession.IsActive)
+            if (!IsActive)
             {
                 throw new WallpaperNotActiveException();
             }
@@ -431,6 +590,7 @@ public sealed class WallpaperCoordinator : IAsyncDisposable
         await _operationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            _injectionMonitor.ResetCapabilities();
             Publish(WallpaperRuntimePhase.Stopping, "Removing owned wallpaper content.");
             await StopInjectedContentAndMediaAsync(cancellationToken).ConfigureAwait(false);
             Publish(WallpaperRuntimePhase.Idle, "The official Codex background has been restored.");
@@ -454,16 +614,7 @@ public sealed class WallpaperCoordinator : IAsyncDisposable
             return;
         }
 
-        if (_injectionHealthSource is not null)
-        {
-            _injectionHealthSource.HealthFaulted -= InjectionSession_HealthFaulted;
-        }
-
-        Task injectionFaultTask;
-        lock (_backgroundTaskSync)
-        {
-            injectionFaultTask = _injectionFaultTask;
-        }
+        var injectionFaultTask = _injectionMonitor.StopObserving();
 
         var failures = new List<Exception>();
         try
@@ -499,7 +650,7 @@ public sealed class WallpaperCoordinator : IAsyncDisposable
 
             try
             {
-                await _mediaServer.DisposeAsync().ConfigureAwait(false);
+                await _playbackPool.DisposeAsync().ConfigureAwait(false);
             }
             catch (Exception exception)
             {
@@ -508,7 +659,7 @@ public sealed class WallpaperCoordinator : IAsyncDisposable
 
             try
             {
-                _settingsStore.Dispose();
+                _settingsRepository.Dispose();
             }
             catch (Exception exception)
             {
@@ -539,6 +690,68 @@ public sealed class WallpaperCoordinator : IAsyncDisposable
 
         GC.SuppressFinalize(this);
         ThrowCollectedExceptions("One or more wallpaper resources could not be disposed.", failures);
+    }
+
+    private async Task<SettingsV2> GetSettingsSnapshotAsync(CancellationToken cancellationToken)
+    {
+        var loadResult = await _settingsRepository
+            .LoadAsync(cancellationToken)
+            .ConfigureAwait(false);
+        _settingsSnapshot = loadResult switch
+        {
+            SettingsLoadResult.Ready ready => ready.Settings,
+            SettingsLoadResult.RecoveryRequired recovery =>
+                throw new SettingsRecoveryRequiredException(
+                    recovery.Reason,
+                    recovery.HasVersion1Backup),
+            SettingsLoadResult.FutureReadOnly future =>
+                throw new FutureSettingsVersionException(
+                    future.SchemaVersion,
+                    future.HasVersion1Backup),
+            _ => throw new InvalidOperationException("The settings repository returned an unknown state."),
+        };
+        return _settingsSnapshot;
+    }
+
+    private async Task<SettingsV2> SaveGlobalSettingsAsync(
+        SettingsV1 globalSettings,
+        CancellationToken cancellationToken)
+    {
+        var current = await GetSettingsSnapshotAsync(cancellationToken).ConfigureAwait(false);
+        // The 1.3 editor is intentionally local-file/Global only. Refuse to write through its
+        // lossy V1 facade when the current V2 Global selection cannot be represented.
+        _ = ProjectGlobalForLegacyEditor(current);
+        var updated = SettingsV1Projection.ApplyGlobal(current, globalSettings) with
+        {
+            AcceptedCdpRisk = globalSettings.AcceptedCdpRisk,
+            LastCompatibilityProfileId = globalSettings.LastCompatibilityProfileId,
+        };
+        var saved = await _settingsRepository
+            .SaveAsync(updated, cancellationToken)
+            .ConfigureAwait(false);
+        _settingsSnapshot = saved;
+        return saved;
+    }
+
+    private SettingsV1 ProjectGlobalForLegacyEditor(SettingsV2 settings)
+    {
+        try
+        {
+            return SettingsV1Projection.ProjectGlobal(settings);
+        }
+        catch (SettingsProjectionException exception)
+        {
+            var hasVersion1Backup = _settingsRepository.HasVersion1Backup;
+            if (exception.HasVersion1Backup == hasVersion1Backup)
+            {
+                throw;
+            }
+
+            throw new SettingsProjectionException(
+                exception.Message,
+                hasVersion1Backup,
+                exception);
+        }
     }
 
     private async Task<VerifiedCdpEndpoint> DiscoverSingleEndpointAsync(
@@ -584,6 +797,7 @@ public sealed class WallpaperCoordinator : IAsyncDisposable
     private async Task StopInjectedContentAndMediaAsync(CancellationToken cancellationToken)
     {
         var failures = new List<Exception>();
+        _injectionMonitor.ClearActive();
         _endpoint = null;
         try
         {
@@ -596,8 +810,9 @@ public sealed class WallpaperCoordinator : IAsyncDisposable
 
         try
         {
-            // Once cleanup starts, caller cancellation must not leave the local media server up.
-            await _mediaServer.StopAsync(CancellationToken.None).ConfigureAwait(false);
+            // The page must stop consuming the uploaded file before its pinned read lease is
+            // released. Caller cancellation cannot interrupt the second half of that sequence.
+            await _playbackPool.ReleaseAsync(CancellationToken.None).ConfigureAwait(false);
         }
         catch (Exception exception)
         {
@@ -618,27 +833,6 @@ public sealed class WallpaperCoordinator : IAsyncDisposable
         process.StartTimeUtc != default &&
         process.SessionId == WindowsCodexProcessSnapshotSource.CurrentSessionId;
 
-    private void InjectionSession_HealthFaulted(
-        object? sender,
-        WallpaperInjectionHealthFaultedEventArgs eventArgs)
-    {
-        if (Volatile.Read(ref _disposed) != 0)
-        {
-            return;
-        }
-
-        lock (_backgroundTaskSync)
-        {
-            if (Volatile.Read(ref _disposed) != 0 || !_injectionFaultTask.IsCompleted)
-            {
-                return;
-            }
-
-            _injectionFaultTask = Task.Run(
-                () => HandleInjectionHealthFaultAsync(eventArgs.Generation));
-        }
-    }
-
     private async Task HandleInjectionHealthFaultAsync(long generation)
     {
         var gateAcquired = false;
@@ -647,7 +841,7 @@ public sealed class WallpaperCoordinator : IAsyncDisposable
             await _operationGate.WaitAsync(CancellationToken.None).ConfigureAwait(false);
             gateAcquired = true;
             if (Volatile.Read(ref _disposed) != 0 ||
-                _injectionSession.Generation != generation)
+                !_injectionMonitor.IsActiveGeneration(generation))
             {
                 return;
             }
@@ -688,14 +882,16 @@ public sealed class WallpaperCoordinator : IAsyncDisposable
 
     private static WallpaperInjectionOptions CreateInjectionOptions(
         long generation,
-        LoopbackMediaEndpoint endpoint,
+        IMediaLease mediaLease,
         SettingsV1 settings) => new(
             generation,
-            endpoint.Uri,
-            settings.MediaPath ?? throw new SettingsValidationException(
-                ["A wallpaper media path is required for injection."]),
-            endpoint.ContentLength,
-            endpoint.Kind switch
+            new UriBuilder(Uri.UriSchemeFile, string.Empty)
+            {
+                Path = mediaLease.ResolvedPath,
+            }.Uri,
+            mediaLease.ResolvedPath,
+            mediaLease.Metadata.ContentLength,
+            mediaLease.Metadata.Kind switch
             {
                 MediaKind.Image => WallpaperMediaKind.Image,
                 MediaKind.Video => WallpaperMediaKind.Video,
@@ -721,6 +917,24 @@ public sealed class WallpaperCoordinator : IAsyncDisposable
                 Math.Min(
                     settings.LightOverlay,
                     WallpaperCompositionOptions.MaximumOverlayOpacity)));
+
+    private static async ValueTask<Exception?> TryDisposeLeaseAsync(IMediaLease? lease)
+    {
+        if (lease is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            await lease.DisposeAsync().ConfigureAwait(false);
+            return null;
+        }
+        catch (Exception exception)
+        {
+            return exception;
+        }
+    }
 
     private void Publish(WallpaperRuntimePhase phase, string detail)
     {
@@ -814,4 +1028,36 @@ public sealed class CdpEndpointTimeoutException : TimeoutException
         : base($"Codex did not publish a verified debugging endpoint within {timeout.TotalSeconds:N0} seconds.")
     {
     }
+}
+
+public sealed class SettingsRecoveryRequiredException : InvalidOperationException
+{
+    public SettingsRecoveryRequiredException(
+        SettingsRecoveryReason reason,
+        bool hasVersion1Backup)
+        : base("Wallpaper settings require explicit recovery before they can be changed.")
+    {
+        Reason = reason;
+        HasVersion1Backup = hasVersion1Backup;
+    }
+
+    public SettingsRecoveryReason Reason { get; }
+
+    public bool HasVersion1Backup { get; }
+}
+
+public sealed class FutureSettingsVersionException : InvalidOperationException
+{
+    public FutureSettingsVersionException(
+        int schemaVersion,
+        bool hasVersion1Backup = false)
+        : base($"Settings schema {schemaVersion} is newer than this application can safely edit.")
+    {
+        SchemaVersion = schemaVersion;
+        HasVersion1Backup = hasVersion1Backup;
+    }
+
+    public int SchemaVersion { get; }
+
+    public bool HasVersion1Backup { get; }
 }

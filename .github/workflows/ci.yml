@@ -67,9 +67,16 @@ jobs:
           Write-Output "DCO sign-off verified for $($commits.Count) commit(s)."
 
   build-and-verify:
-    name: Build and verify (.NET 10 / win-x64)
+    name: Build and verify (.NET ${{ matrix.sdk }} / win-x64)
     runs-on: windows-2025
     timeout-minutes: 20
+
+    strategy:
+      fail-fast: false
+      matrix:
+        sdk:
+          - 10.0.301
+          - 10.0.302
 
     defaults:
       run:
@@ -84,7 +91,26 @@ jobs:
       - name: Set up .NET
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
-          global-json-file: global.json
+          dotnet-version: ${{ matrix.sdk }}
+
+      - name: Pin and verify matrix SDK
+        run: |
+          $expectedSdk = "${{ matrix.sdk }}"
+          $configuration = Get-Content -LiteralPath .\global.json -Raw | ConvertFrom-Json
+          if ($configuration.sdk.version -ne "10.0.301" -or
+              $configuration.sdk.rollForward -ne "latestPatch") {
+            throw "Committed global.json must keep the 10.0.301/latestPatch developer policy."
+          }
+
+          $configuration.sdk.version = $expectedSdk
+          $configuration.sdk.rollForward = "disable"
+          $configuration | ConvertTo-Json -Depth 4 |
+            Set-Content -LiteralPath .\global.json -Encoding utf8NoBOM
+
+          $actualSdk = dotnet --version
+          if ($actualSdk -ne $expectedSdk) {
+            throw "Expected .NET SDK $expectedSdk but resolved $actualSdk."
+          }
 
       - name: Restore
         run: dotnet restore .\BackdropForCodex.slnx --locked-mode
@@ -121,7 +147,11 @@ jobs:
             throw "dotnet publish failed."
           }
 
-          $files = @(Get-ChildItem -LiteralPath $publishDir -File)
-          if ($files.Count -ne 1 -or $files[0].Name -ne "BackdropForCodex.exe") {
+          $files = @(Get-ChildItem -LiteralPath $publishDir -File -Recurse)
+          $directories = @(Get-ChildItem -LiteralPath $publishDir -Directory -Recurse)
+          if ($files.Count -ne 1 -or
+              $files[0].Name -ne "BackdropForCodex.exe" -or
+              $files[0].DirectoryName -ne $publishDir -or
+              $directories.Count -ne 0) {
             throw "Expected exactly one BackdropForCodex.exe publish artifact."
           }

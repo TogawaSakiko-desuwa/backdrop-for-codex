@@ -1,4 +1,5 @@
 using System.Text.Json;
+using BackdropForCodex.Core.Codex;
 
 namespace BackdropForCodex.Core.Injection;
 
@@ -8,16 +9,15 @@ namespace BackdropForCodex.Core.Injection;
 /// </summary>
 public static class InjectionScriptBuilder
 {
-    // Stable page-cleanup ABI shared with earlier local builds. These identifiers must not
-    // follow display branding or an older process may leave owned DOM resources behind.
-    public const string Owner = "codex-wallpaper";
-    public const string RootElementId = "codex-wallpaper-owned-root";
-    public const string StyleElementId = "codex-wallpaper-owned-style";
-    public const string FileInputElementId = "codex-wallpaper-owned-file-input";
-    public const string StateProperty = "__codexWallpaperOwnedState_v1";
+    public const string Owner = InjectionOwnershipContract.Owner;
+    public const string RootElementId = InjectionOwnershipContract.RootElementId;
+    public const string StyleElementId = InjectionOwnershipContract.StyleElementId;
+    public const string FileInputElementId = InjectionOwnershipContract.FileInputElementId;
+    public const string StateProperty = InjectionOwnershipContract.StateProperty;
 
-    public static readonly TimeSpan HeartbeatInterval = TimeSpan.FromSeconds(2);
-    public static readonly TimeSpan LeaseTimeout = TimeSpan.FromSeconds(10);
+    public static readonly TimeSpan HeartbeatInterval =
+        InjectionLifecycleScriptModule.HeartbeatInterval;
+    public static readonly TimeSpan LeaseTimeout = InjectionLifecycleScriptModule.LeaseTimeout;
 
     private static readonly TimeSpan MediaLoadTimeout = LeaseTimeout;
 
@@ -26,9 +26,27 @@ public static class InjectionScriptBuilder
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
     };
 
-    public static string BuildInstall(WallpaperInjectionOptions options)
+    internal static string BuildInstall(WallpaperInjectionOptions options) =>
+        BuildInstall(
+            options,
+            CompatibilityCapabilities.FromProbePackage(
+                CompatibilityProbePackageKind.Exact,
+                globalBackground: true,
+                regionRecognition: false,
+                glassStyle: true,
+                audio: false,
+                advancedSurfaces: true,
+                unavailableReasonOverride:
+                    CompatibilityCapabilityReasonCode.NotImplementedInCurrentRelease));
+
+    internal static string BuildInstall(
+        WallpaperInjectionOptions options,
+        CompatibilityCapabilities capabilities)
     {
         ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(capabilities);
+        var styleCapabilities = InjectionStyleScriptModule.Resolve(capabilities);
+
         var payload = JsonSerializer.Serialize(
             new ScriptPayload(
                 Owner,
@@ -39,7 +57,7 @@ public static class InjectionScriptBuilder
                 options.Generation,
                 options.ExpectedContentLength,
                 options.MediaKind == WallpaperMediaKind.Video ? "video" : "image",
-                ToCss(options.ObjectFit),
+                InjectionMediaScriptModule.ToCss(options.ObjectFit),
                 options.MediaOpacity,
                 options.Composition.FocusX,
                 options.Composition.FocusY,
@@ -54,8 +72,16 @@ public static class InjectionScriptBuilder
                 options.Glass.Opacity,
                 Math.Min(options.Glass.Opacity + 0.08, 1),
                 options.Glass.BlurPixels,
-                options.Glass.Saturation),
+                options.Glass.Saturation,
+                styleCapabilities.GlassEnabled,
+                styleCapabilities.AdvancedSurfacesEnabled),
             SerializerOptions);
+        var glassBodySelector = styleCapabilities.GlassEnabled
+            ? "body"
+            : "body[data-codex-wallpaper-glass-disabled]";
+        var advancedBodySelector = styleCapabilities.AdvancedSurfacesEnabled
+            ? "body"
+            : "body[data-codex-wallpaper-advanced-disabled]";
 
         return $$"""
             (() => {
@@ -174,25 +200,28 @@ public static class InjectionScriptBuilder
                     -webkit-backdrop-filter: none !important;
                     backdrop-filter: none !important;
                   }
-                  body [role="main"]:has([data-home-ambient-suggestions])
+                  /* codex-wallpaper-glass:start */
+                  {{glassBodySelector}} [role="main"]:has([data-home-ambient-suggestions])
                     section[class~="group/home-suggestions"]
                     button[type="button"][aria-labelledby] {
                     background-color: color-mix(in srgb, var(--color-token-main-surface-primary) var(--codex-wallpaper-home-suggestion-opacity), transparent) !important;
                     -webkit-backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
                     backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
                   }
-                  body [role="main"]:has([data-home-ambient-suggestions])
+                  {{glassBodySelector}} [role="main"]:has([data-home-ambient-suggestions])
                     section[class~="group/home-suggestions"]
                     button[type="button"][aria-labelledby]:not(:disabled):is(:hover, :focus-visible) {
                     background-color: color-mix(in srgb, var(--color-token-main-surface-primary) var(--codex-wallpaper-home-suggestion-hover-opacity), transparent) !important;
                     -webkit-backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
                     backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
                   }
+                  /* codex-wallpaper-glass:end */
                   /*
                    * The reviewed right-panel shell owns the opaque theme surface. Glass that
                    * shell once so the tab strip and every right-side detail share one layer.
                    */
-                  body aside[data-app-shell-focus-area="right-panel"]
+                  /* codex-wallpaper-glass:start */
+                  {{glassBodySelector}} aside[data-app-shell-focus-area="right-panel"]
                     > div:has([role="tabpanel"][data-app-shell-tab-panel-controller="right"])
                     > div[class~="bg-token-main-surface-primary"] {
                     background-color: var(--codex-wallpaper-glass) !important;
@@ -200,17 +229,21 @@ public static class InjectionScriptBuilder
                     backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
                     border-color: var(--codex-wallpaper-border);
                   }
+                  /* codex-wallpaper-glass:end */
                   /*
                    * Clear only the audited file-layout and Markdown shells. Editor, diff,
                    * code, table, and Popcorn content surfaces keep their theme backgrounds.
                    */
-                  body [role="tabpanel"][data-app-shell-tab-panel-controller="right"]
+                  /* codex-wallpaper-advanced:start */
+                  {{advancedBodySelector}} [role="tabpanel"][data-app-shell-tab-panel-controller="right"]
                     > [class~="bg-token-main-surface-primary"],
-                  body [role="tabpanel"][data-app-shell-tab-panel-controller="right"]
-                    [class~="relative"][class~="rounded-lg"][class~="bg-token-main-surface-primary"]:has(.markdown) {
+                  {{advancedBodySelector}} [role="tabpanel"][data-app-shell-tab-panel-controller="right"]
+                    [class~="relative"][class~="rounded-lg"][class~="bg-token-main-surface-primary"]:has(:is(.markdown, [class^="_markdownContent_"], [class*=" _markdownContent_"])) {
                     background-color: transparent !important;
                   }
-                  body :is(
+                  /* codex-wallpaper-advanced:end */
+                  /* codex-wallpaper-glass:start */
+                  {{glassBodySelector}} :is(
                     aside:not([data-app-shell-focus-area="right-panel"]),
                     .app-header-tint,
                     [role="dialog"],
@@ -220,7 +253,7 @@ public static class InjectionScriptBuilder
                     backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
                     border-color: var(--codex-wallpaper-border);
                   }
-                  body :is(
+                  {{glassBodySelector}} :is(
                     aside:not([data-app-shell-focus-area="right-panel"]),
                     .app-header-tint,
                     [role="dialog"],
@@ -229,8 +262,10 @@ public static class InjectionScriptBuilder
                     -webkit-backdrop-filter: none !important;
                     backdrop-filter: none !important;
                   }
-                  body main [data-response-annotation-conversation][data-response-annotation-target],
-                  body main [data-user-message-bubble="true"] {
+                  /* codex-wallpaper-glass:end */
+                  /* codex-wallpaper-advanced:start */
+                  {{advancedBodySelector}} main [data-response-annotation-conversation][data-response-annotation-target],
+                  {{advancedBodySelector}} main [data-user-message-bubble="true"] {
                     background-color: var(--codex-wallpaper-glass) !important;
                     -webkit-backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
                     backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
@@ -239,16 +274,17 @@ public static class InjectionScriptBuilder
                     box-sizing: border-box;
                     box-shadow: 0 8px 28px rgb(0 0 0 / 0.18);
                   }
-                  body main [data-response-annotation-conversation][data-response-annotation-target] {
+                  {{advancedBodySelector}} main [data-response-annotation-conversation][data-response-annotation-target] {
                     padding: 12px 16px;
                   }
-                  body main [data-local-conversation-item-target-ids] {
+                  {{advancedBodySelector}} main [data-local-conversation-item-target-ids] {
                     background-color: rgba(16, 18, 24, 0.58) !important;
                     border: 1px solid rgb(255 255 255 / 0.06);
                     border-radius: 10px;
                     box-sizing: border-box;
                     padding: 4px 8px;
                   }
+                  /* codex-wallpaper-advanced:end */
                 }
                 @media (forced-colors: active) {
                   #${cfg.rootId} {
@@ -316,6 +352,8 @@ public static class InjectionScriptBuilder
                 style,
                 fileInput,
                 mediaLoadTimeoutMs: cfg.mediaLoadTimeoutMs,
+                glassEnabled: cfg.glassEnabled,
+                advancedSurfacesEnabled: cfg.advancedSurfacesEnabled,
                 motionQuery: globalObject.matchMedia?.("(prefers-reduced-motion: reduce)") || null,
                 onPlaybackPolicyChanged: null,
                 onMediaError: null,
@@ -403,245 +441,27 @@ public static class InjectionScriptBuilder
               globalObject[cfg.stateProperty] = state;
               state.lastHeartbeat = Date.now();
               state.startWatchdog();
-              return { prepared: true, generation: cfg.generation, mediaKind: cfg.mediaKind };
+              return fileInput;
             })()
             """;
     }
 
-    public static string BuildActivateMedia(long generation)
-    {
-        EnsureGeneration(generation);
-        return $$"""
-            (async () => {
-              "use strict";
-              const state = globalThis[{{JsonSerializer.Serialize(StateProperty)}}];
-              if (!state || state.generation !== {{generation}} || state.cleaned) {
-                return { applied: false, reason: "state-missing", generation: {{generation}} };
-              }
-              if (state.mediaReady && state.blobUrl) {
-                return { applied: true, generation: {{generation}}, mediaKind: state.mediaKind };
-              }
+    public static string BuildActivateMedia(long generation) =>
+        InjectionMediaScriptModule.BuildActivateMedia(generation);
 
-              const files = state.fileInput?.files;
-              if (!files || files.length !== 1) {
-                state.cleanup("file-selection-invalid");
-                return { applied: false, reason: "file-selection-invalid", generation: {{generation}} };
-              }
-              const file = files[0];
-              if (file.size !== state.expectedContentLength) {
-                state.cleanup("file-size-mismatch");
-                return { applied: false, reason: "file-size-mismatch", generation: {{generation}} };
-              }
+    public static string BuildCapabilityDowngrade(
+        long generation,
+        CompatibilityCapabilities capabilities) =>
+        InjectionStyleScriptModule.BuildCapabilityDowngrade(generation, capabilities);
 
-              const media = state.media;
-              const activation = ++state.activation;
-              state.mediaReady = false;
-              let blobUrl;
-              try {
-                blobUrl = URL.createObjectURL(file);
-              } catch {
-                state.cleanup("blob-url-error");
-                return { applied: false, reason: "blob-url-error", generation: {{generation}} };
-              }
-              state.blobUrl = blobUrl;
-              state.fileInput.value = "";
-              state.fileInput.remove();
-              state.fileInput = null;
+    public static string BuildHeartbeat(long generation) =>
+        InjectionLifecycleScriptModule.BuildHeartbeat(generation);
 
-              if (state.mediaKind === "video") {
-                media.pause();
-              }
-              media.removeAttribute("src");
-              if (state.mediaKind === "video") {
-                media.load();
-              }
+    public static string BuildSetPaused(long generation, bool paused) =>
+        InjectionLifecycleScriptModule.BuildSetPaused(generation, paused);
 
-              const loadResult = await new Promise(resolve => {
-                let settled = false;
-                let timeout = 0;
-                const ready = () => state.mediaKind === "video"
-                  ? media.readyState >= media.HAVE_CURRENT_DATA &&
-                    media.videoWidth > 0 && media.videoHeight > 0
-                  : media.naturalWidth > 0 && media.naturalHeight > 0;
-                const finish = (ok, reason) => {
-                  if (settled) return;
-                  settled = true;
-                  if (timeout) clearTimeout(timeout);
-                  media.removeEventListener(
-                    state.mediaKind === "video" ? "loadeddata" : "load",
-                    onLoaded);
-                  media.removeEventListener("error", onError);
-                  if (state.cancelActivation === cancelActivation) {
-                    state.cancelActivation = null;
-                  }
-                  resolve({ ok, reason });
-                };
-                const onLoaded = () => finish(ready(), ready() ? null : "media-dimensions-invalid");
-                const onError = () => finish(false, "media-load-error");
-                const cancelActivation = reason => finish(false, reason || "activation-cancelled");
-                state.cancelActivation = cancelActivation;
-                media.addEventListener(
-                  state.mediaKind === "video" ? "loadeddata" : "load",
-                  onLoaded);
-                media.addEventListener("error", onError);
-                timeout = setTimeout(
-                  () => finish(false, "media-load-timeout"),
-                  state.mediaLoadTimeoutMs);
-                media.src = blobUrl;
-                if (state.mediaKind === "video") {
-                  media.load();
-                }
-              });
-
-              if (!loadResult.ok) {
-                if (globalThis[{{JsonSerializer.Serialize(StateProperty)}}] === state &&
-                    state.activation === activation && !state.cleaned) {
-                  state.cleanup(loadResult.reason);
-                }
-                return { applied: false, reason: loadResult.reason, generation: {{generation}} };
-              }
-
-              if (globalThis[{{JsonSerializer.Serialize(StateProperty)}}] !== state ||
-                  state.activation !== activation || state.cleaned || state.blobUrl !== blobUrl) {
-                return { applied: false, reason: "activation-superseded", generation: {{generation}} };
-              }
-
-              state.mediaReady = true;
-              state.lastHeartbeat = Date.now();
-              state.startRuntime();
-              return { applied: true, generation: {{generation}}, mediaKind: state.mediaKind };
-            })()
-            """;
-    }
-
-    public static string BuildHeartbeat(long generation)
-    {
-        EnsureGeneration(generation);
-        return $$"""
-            (() => {
-              "use strict";
-              const state = globalThis[{{JsonSerializer.Serialize(StateProperty)}}];
-              if (!state || state.generation !== {{generation}} || !state.mediaReady ||
-                  !state.root?.isConnected || !state.style?.isConnected ||
-                  !state.media?.isConnected || !state.overlay?.isConnected ||
-                  state.root.id !== {{JsonSerializer.Serialize(RootElementId)}} ||
-                  state.style.id !== {{JsonSerializer.Serialize(StyleElementId)}} ||
-                  document.getElementById({{JsonSerializer.Serialize(RootElementId)}}) !== state.root ||
-                  document.getElementById({{JsonSerializer.Serialize(StyleElementId)}}) !== state.style ||
-                  state.root.dataset.codexWallpaperOwner !== {{JsonSerializer.Serialize(Owner)}} ||
-                  state.root.dataset.codexWallpaperGeneration !== {{JsonSerializer.Serialize(generation.ToString(System.Globalization.CultureInfo.InvariantCulture))}} ||
-                  state.style.dataset.codexWallpaperOwner !== {{JsonSerializer.Serialize(Owner)}} ||
-                  state.style.dataset.codexWallpaperGeneration !== {{JsonSerializer.Serialize(generation.ToString(System.Globalization.CultureInfo.InvariantCulture))}} ||
-                  state.media.dataset.codexWallpaperOwner !== {{JsonSerializer.Serialize(Owner)}} ||
-                  state.media.dataset.codexWallpaperGeneration !== {{JsonSerializer.Serialize(generation.ToString(System.Globalization.CultureInfo.InvariantCulture))}} ||
-                  state.overlay.dataset.codexWallpaperOwner !== {{JsonSerializer.Serialize(Owner)}} ||
-                  state.overlay.dataset.codexWallpaperGeneration !== {{JsonSerializer.Serialize(generation.ToString(System.Globalization.CultureInfo.InvariantCulture))}} ||
-                  state.media.parentElement !== state.root ||
-                  state.overlay.parentElement !== state.root || !state.blobUrl ||
-                  state.media.currentSrc !== state.blobUrl || state.media.error) {
-                return false;
-              }
-              const dimensionsReady = state.mediaKind === "video"
-                ? state.media.readyState >= state.media.HAVE_CURRENT_DATA &&
-                  state.media.videoWidth > 0 && state.media.videoHeight > 0
-                : state.media.naturalWidth > 0 && state.media.naturalHeight > 0;
-              if (!dimensionsReady) {
-                return false;
-              }
-              state.lastHeartbeat = Date.now();
-              return true;
-            })()
-            """;
-    }
-
-    public static string BuildSetPaused(long generation, bool paused)
-    {
-        EnsureGeneration(generation);
-        return $$"""
-            (() => {
-              "use strict";
-              const state = globalThis[{{JsonSerializer.Serialize(StateProperty)}}];
-              if (!state || state.generation !== {{generation}}) {
-                return false;
-              }
-              state.hostPaused = {{(paused ? "true" : "false")}};
-              state.updatePlayback?.();
-              return true;
-            })()
-            """;
-    }
-
-    public static string BuildCleanup(long generation)
-    {
-        EnsureGeneration(generation);
-        return $$"""
-            (() => {
-              "use strict";
-              const key = {{JsonSerializer.Serialize(StateProperty)}};
-              const owner = {{JsonSerializer.Serialize(Owner)}};
-              const generation = {{JsonSerializer.Serialize(generation.ToString(System.Globalization.CultureInfo.InvariantCulture))}};
-              const state = globalThis[key];
-              if (state && state.generation > {{generation}}) {
-                return false;
-              }
-              if (state && typeof state.cleanup === "function") {
-                return state.cleanup("host-cleanup");
-              }
-              const isExactOwned = (node, id, tagName) =>
-                node?.id === id && node.tagName === tagName &&
-                node.dataset.codexWallpaperOwner === owner &&
-                node.dataset.codexWallpaperGeneration === generation;
-              const root = document.getElementById({{JsonSerializer.Serialize(RootElementId)}});
-              const style = document.getElementById({{JsonSerializer.Serialize(StyleElementId)}});
-              const fileInput = document.getElementById({{JsonSerializer.Serialize(FileInputElementId)}});
-              if (isExactOwned(fileInput, {{JsonSerializer.Serialize(FileInputElementId)}}, "INPUT") &&
-                  fileInput.type === "file") {
-                fileInput.value = "";
-                fileInput.remove();
-              }
-              if (isExactOwned(root, {{JsonSerializer.Serialize(RootElementId)}}, "DIV")) {
-                Array.from(root.children).forEach(media => {
-                  const tagName = media.tagName?.toLowerCase();
-                  if ((tagName !== "img" && tagName !== "video") ||
-                      media.parentElement !== root ||
-                      media.dataset.codexWallpaperOwner !== owner ||
-                      media.dataset.codexWallpaperGeneration !== generation) {
-                    return;
-                  }
-                  const sources = new Set([media.currentSrc, media.getAttribute("src")]);
-                  if (tagName === "video") media.pause();
-                  media.removeAttribute("src");
-                  if (tagName === "video") media.load();
-                  sources.forEach(source => {
-                    if (source?.startsWith("blob:")) URL.revokeObjectURL(source);
-                  });
-                });
-                root.remove();
-              }
-              if (isExactOwned(style, {{JsonSerializer.Serialize(StyleElementId)}}, "STYLE")) {
-                style.remove();
-              }
-              if (globalThis[key] === state) delete globalThis[key];
-              return true;
-            })()
-            """;
-    }
-
-    private static string ToCss(WallpaperObjectFit objectFit) => objectFit switch
-    {
-        WallpaperObjectFit.Cover => "cover",
-        WallpaperObjectFit.Contain => "contain",
-        WallpaperObjectFit.Fill => "fill",
-        _ => throw new ArgumentOutOfRangeException(nameof(objectFit)),
-    };
-
-    private static void EnsureGeneration(long generation)
-    {
-        if (generation <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(generation), "Generation must be positive.");
-        }
-    }
+    public static string BuildCleanup(long generation) =>
+        InjectionLifecycleScriptModule.BuildCleanup(generation);
 
     private sealed record ScriptPayload(
         string Owner,
@@ -667,5 +487,7 @@ public static class InjectionScriptBuilder
         double GlassOpacity,
         double HomeSuggestionHoverOpacity,
         double GlassBlurPixels,
-        double GlassSaturation);
+        double GlassSaturation,
+        bool GlassEnabled,
+        bool AdvancedSurfacesEnabled);
 }

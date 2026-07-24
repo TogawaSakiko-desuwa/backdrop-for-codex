@@ -55,13 +55,15 @@ public sealed record VerifiedCdpEndpoint
         CdpEndpointCandidate candidate,
         CdpBrowserVersion browser,
         Uri browserWebSocketUri,
-        IReadOnlyList<ClassifiedCdpTarget> targets)
+        IReadOnlyList<ClassifiedCdpTarget> targets,
+        CodexCompatibilityProfile profile)
     {
         Candidate = candidate ?? throw new ArgumentNullException(nameof(candidate));
         Browser = browser ?? throw new ArgumentNullException(nameof(browser));
         BrowserWebSocketUri = browserWebSocketUri ??
             throw new ArgumentNullException(nameof(browserWebSocketUri));
         Targets = targets ?? throw new ArgumentNullException(nameof(targets));
+        Profile = profile ?? throw new ArgumentNullException(nameof(profile));
         VerifiedAtUtc = DateTimeOffset.UtcNow;
     }
 
@@ -72,6 +74,8 @@ public sealed record VerifiedCdpEndpoint
     public Uri BrowserWebSocketUri { get; }
 
     public IReadOnlyList<ClassifiedCdpTarget> Targets { get; }
+
+    public CodexCompatibilityProfile Profile { get; }
 
     public DateTimeOffset VerifiedAtUtc { get; }
 

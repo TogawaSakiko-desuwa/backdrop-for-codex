@@ -49,12 +49,18 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
                     setTimeout(() => {
                       const main = document.createElement("main");
                       main.textContent = "ready";
-                      document.body.appendChild(main);
+                      document.querySelector("#root").appendChild(main);
                     }, 4000);
                   });
                 </script>
               </head>
-              <body><div id="root"></div></body>
+              <body>
+                <div id="root">
+                  <header class="app-header-tint"></header>
+                  <div data-home-ambient-suggestions></div>
+                  <div data-user-message-bubble="true"></div>
+                </div>
+              </body>
             </html>
             """);
         await WriteTestPngAsync(mediaPath);
@@ -66,7 +72,11 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
             edge = Process.Start(CreateEdgeStartInfo(edgePath, port, testDirectory, pagePath));
             Assert.NotNull(edge);
 
-            var endpoint = await WaitForEndpointAsync(port, pagePath, TimeSpan.FromSeconds(8));
+            var endpoint = await WaitForEndpointAsync(
+                port,
+                pagePath,
+                TimeSpan.FromSeconds(8),
+                new Version(26, 721, 4000, 0));
             var options = new WallpaperInjectionOptions(
                 generation: 1,
                 source: new Uri("http://127.0.0.1:9/wallpaper.png"),
@@ -77,6 +87,11 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
             await session.ApplyAsync(endpoint, options);
 
             Assert.True(session.IsActive);
+            Assert.Equal(
+                CompatibilityProbePackageKind.ReviewedBand,
+                endpoint.Profile.ProbePackageKind);
+            Assert.True(session.Capabilities.Glass.IsAvailable);
+            Assert.True(session.Capabilities.Advanced.IsAvailable);
         }
         finally
         {
@@ -182,8 +197,9 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
             Assert.NotNull(edge);
 
             var endpoint = await WaitForEndpointAsync(port, pagePath, TimeSpan.FromSeconds(8));
-            await using var mediaServer = new LoopbackMediaServer();
-            var mediaEndpoint = await mediaServer.StartAsync(mediaPath);
+            var sourceProvider = new LocalFileWallpaperSourceProvider();
+            await using var mediaLease = await sourceProvider.AcquireLeaseAsync(
+                CreateLocalMediaReference(mediaPath));
             await using var session = new PuppeteerWallpaperSession();
             var glass = new GlassEffectOptions(
                 opacity: 0.78,
@@ -191,9 +207,9 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
                 saturation: 1.2);
             var options = new WallpaperInjectionOptions(
                 generation: 1,
-                source: mediaEndpoint.Uri,
-                localMediaPath: mediaPath,
-                expectedContentLength: mediaEndpoint.ContentLength,
+                source: CreateFileUri(mediaLease.ResolvedPath),
+                localMediaPath: mediaLease.ResolvedPath,
+                expectedContentLength: mediaLease.Metadata.ContentLength,
                 WallpaperMediaKind.Image,
                 glass: glass);
 
@@ -244,13 +260,13 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
             Assert.Equal("none", homeSuggestions.UnrelatedBackdropFilter);
             Assert.Equal("none", homeSuggestions.ListBackdropFilter);
 
-            await using var replacementMediaServer = new LoopbackMediaServer();
-            var replacementEndpoint = await replacementMediaServer.StartAsync(replacementMediaPath);
+            await using var replacementMediaLease = await sourceProvider.AcquireLeaseAsync(
+                CreateLocalMediaReference(replacementMediaPath));
             var replacementOptions = new WallpaperInjectionOptions(
                 generation: 2,
-                source: replacementEndpoint.Uri,
-                localMediaPath: replacementMediaPath,
-                expectedContentLength: replacementEndpoint.ContentLength,
+                source: CreateFileUri(replacementMediaLease.ResolvedPath),
+                localMediaPath: replacementMediaLease.ResolvedPath,
+                expectedContentLength: replacementMediaLease.Metadata.ContentLength,
                 WallpaperMediaKind.Image,
                 glass: glass);
 
@@ -281,6 +297,20 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
             }
         }
     }
+
+    private static MediaReference CreateLocalMediaReference(string mediaPath) => new()
+    {
+        MediaId = Guid.CreateVersion7(),
+        SourceKind = MediaSourceKind.LocalFile,
+        SourceIdentifier = mediaPath,
+        LastKnownKind = MediaKind.Image,
+    };
+
+    private static Uri CreateFileUri(string mediaPath) =>
+        new UriBuilder(Uri.UriSchemeFile, string.Empty)
+        {
+            Path = mediaPath,
+        }.Uri;
 
     private static string FindEdge()
     {
@@ -325,7 +355,7 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
                 candidate =>
                     !candidate.IsClosed &&
                     Uri.TryCreate(candidate.Url, UriKind.Absolute, out var candidateUri) &&
-                    PuppeteerWallpaperSession.IsSameReviewedDocument(
+                    VerifiedCodexPageSelector.IsSameReviewedDocument(
                         candidateUri,
                         reviewedTarget.Url));
             var elapsed = Stopwatch.StartNew();
@@ -576,7 +606,8 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
     private static async Task<VerifiedCdpEndpoint> WaitForEndpointAsync(
         int port,
         string pagePath,
-        TimeSpan timeout)
+        TimeSpan timeout,
+        Version? packageVersion = null)
     {
         using var client = new HttpClient(new SocketsHttpHandler
         {
@@ -630,7 +661,9 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
                         candidate,
                         browser,
                         browserWebSocketUri,
-                        [new ClassifiedCdpTarget(target, CdpTargetClassification.CodexPage)]);
+                        [new ClassifiedCdpTarget(target, CdpTargetClassification.CodexPage)],
+                        BackdropForCodex.Core.Tests.Codex.CodexCompatibilityTests.GetProfile(
+                            packageVersion ?? new Version(26, 721, 3996, 0)));
                 }
             }
             catch (HttpRequestException)

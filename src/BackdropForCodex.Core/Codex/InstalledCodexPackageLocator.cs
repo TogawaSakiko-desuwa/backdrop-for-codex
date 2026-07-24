@@ -129,7 +129,9 @@ public sealed class InstalledCodexPackageLocator : IInstalledCodexPackageLocator
                 familyName,
                 version,
                 CodexPackageArchitecture.X64,
-                applicationId);
+                applicationId,
+                packageFullName,
+                packageRoot);
             package = new InstalledCodexPackage(
                 descriptor,
                 packageFullName,

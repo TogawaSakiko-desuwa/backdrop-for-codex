@@ -12,6 +12,7 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
         "code-surface",
         "diff-surface",
         "editor-surface",
+        "markdown-substring-near-miss",
         "popcorn-surface",
         "table-surface",
     ];
@@ -48,7 +49,7 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
                 CanonicalizeSelector(
                     """
                     body [role="tabpanel"][data-app-shell-tab-panel-controller="right"]
-                      [class~="relative"][class~="rounded-lg"][class~="bg-token-main-surface-primary"]:has(.markdown)
+                      [class~="relative"][class~="rounded-lg"][class~="bg-token-main-surface-primary"]:has(:is(.markdown, [class^="_markdownContent_"], [class*=" _markdownContent_"]))
                     """),
             ],
             clearRule.Selectors);
@@ -60,10 +61,10 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
             ["file-layout-shell"],
             SelectFixtureIds(fixture, [clearRule.Selectors[0]]));
         Assert.Equal(
-            ["markdown-shell"],
+            ["markdown-shell-3996", "markdown-shell-legacy"],
             SelectFixtureIds(fixture, [clearRule.Selectors[1]]));
         Assert.Equal(
-            ["file-layout-shell", "markdown-shell"],
+            ["file-layout-shell", "markdown-shell-3996", "markdown-shell-legacy"],
             SelectFixtureIds(fixture, clearRule.Selectors));
         Assert.Equal(
             ["left-panel-lookalike"],
@@ -134,7 +135,10 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
                 new Uri("https://127.0.0.1:49152/media/wallpaper"),
                 @"C:\Wallpapers\wallpaper.png",
                 1234,
-                WallpaperMediaKind.Image));
+                WallpaperMediaKind.Image),
+            BackdropForCodex.Core.Tests.Codex.CodexCompatibilityTests.GetProfile(
+                    new Version(26, 721, 3996, 0))
+                .Capabilities);
         const string StartMarker = "style.textContent = `";
         var start = script.IndexOf(StartMarker, StringComparison.Ordinal);
         Assert.True(start >= 0);
@@ -360,6 +364,18 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
             {
                 return false;
             }
+
+            if (operation == "*=" &&
+                !attribute.Value.Contains(expected, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            if (operation == "^=" &&
+                !attribute.Value.StartsWith(expected, StringComparison.Ordinal))
+            {
+                return false;
+            }
         }
 
         var selectorWithoutAttributes = CssAttributeRegex().Replace(selector, string.Empty);
@@ -490,7 +506,7 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
     private static partial Regex ChildCombinatorWhitespaceRegex();
 
     [GeneratedRegex(
-        @"\[(?<name>[\w-]+)(?:(?<operation>~=|=)""(?<value>[^""]*)"")?\]",
+        @"\[(?<name>[\w-]+)(?:(?<operation>~=|\*=|\^=|=)""(?<value>[^""]*)"")?\]",
         RegexOptions.CultureInvariant)]
     private static partial Regex CssAttributeRegex();
 
@@ -541,8 +557,15 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
 
                     <section>
                       <div class="relative rounded-lg bg-token-main-surface-primary"
-                           data-fixture-id="markdown-shell">
+                           data-fixture-id="markdown-shell-legacy">
                         <article class="markdown">
+                          <p>Reviewed file details</p>
+                        </article>
+                      </div>
+
+                      <div class="relative rounded-lg bg-token-main-surface-primary"
+                           data-fixture-id="markdown-shell-3996">
+                        <article class="_markdownContent_1dreu_131">
                           <p>Reviewed file details</p>
                         </article>
                       </div>
@@ -550,6 +573,13 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
                       <div class="relative rounded-lg bg-token-main-surface-primary"
                            data-fixture-id="rounded-surface-without-markdown">
                         <article>Not Markdown</article>
+                      </div>
+
+                      <div class="relative rounded-lg bg-token-main-surface-primary"
+                           data-fixture-id="markdown-substring-near-miss">
+                        <article class="prefix_markdownContent_1dreu_131">
+                          Not a reviewed Markdown class token
+                        </article>
                       </div>
                     </section>
                   </div>

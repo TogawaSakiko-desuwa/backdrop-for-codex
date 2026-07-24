@@ -1,24 +1,14 @@
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
-using System.Runtime.InteropServices;
-using System.Security;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Animation;
-using System.Windows.Media.Imaging;
-using System.Windows.Threading;
-using BackdropForCodex.App.Models;
 using BackdropForCodex.App.Services.Appearance;
+using BackdropForCodex.App.Services.Diagnostics;
 using BackdropForCodex.App.Services.Localization;
 using BackdropForCodex.App.ViewModels;
 using BackdropForCodex.App.Views;
-using BackdropForCodex.Core.Media;
-using BackdropForCodex.Core.Settings;
 using Microsoft.Win32;
-using Wpf.Ui.Appearance;
 using Wpf.Ui.Controls;
 using TextBlock = System.Windows.Controls.TextBlock;
 
@@ -34,40 +24,27 @@ public partial class MainWindow : FluentWindow
 
     private readonly MainWindowViewModel _viewModel;
     private readonly IAppTextProvider _text;
+    private readonly IDiagnosticReportService _diagnosticReports;
     private readonly ThemeController _themeController;
-    private readonly DispatcherTimer _focusFadeTimer;
     private bool _allowClose;
     private bool _closeTipInProgress;
-    private bool _isDraggingFocus;
-    private bool _videoPreviewSelected;
-    private bool _previewPlaybackRequested;
-    private bool _previewMediaReady;
-    private bool _reducedMotion;
-    private double _previewMediaWidth;
-    private double _previewMediaHeight;
-    private string? _previewPath;
-    private MediaKind _previewKind;
     private Task? _initializationTask;
 
     public MainWindow(
         MainWindowViewModel viewModel,
-        IAppTextProvider text)
+        IAppTextProvider text,
+        IDiagnosticReportService diagnosticReports)
     {
         _viewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
         _text = text ?? throw new ArgumentNullException(nameof(text));
+        _diagnosticReports =
+            diagnosticReports ?? throw new ArgumentNullException(nameof(diagnosticReports));
         InitializeComponent();
         DataContext = _viewModel;
         _themeController = new ThemeController(this);
-        _focusFadeTimer = new DispatcherTimer(
-            TimeSpan.FromMilliseconds(850),
-            DispatcherPriority.Background,
-            FocusFadeTimer_Tick,
-            Dispatcher);
-        _focusFadeTimer.Stop();
         Loaded += MainWindow_Loaded;
         Closed += MainWindow_Closed;
         _viewModel.PropertyChanged += ViewModel_PropertyChanged;
-        ApplicationThemeManager.Changed += ApplicationThemeManager_Changed;
     }
 
     public Task InitializeAsync() =>
@@ -78,6 +55,11 @@ public partial class MainWindow : FluentWindow
         try
         {
             await InitializeAsync();
+            if (_viewModel.HasProtectedSettings)
+            {
+                return;
+            }
+
             if (!_viewModel.AcceptedCdpRisk &&
                 !await ShowRiskDialogAsync(allowRevoke: false))
             {
@@ -114,12 +96,8 @@ public partial class MainWindow : FluentWindow
     {
         await _viewModel.InitializeAsync();
         _themeController.Apply(_viewModel.ThemeMode);
-        UpdatePreviewThemeOverlay();
         ClampInitialSizeToWorkArea();
         UpdateResponsiveLayout(ActualWidth);
-        UpdatePreview(
-            _viewModel.SelectedMediaPath,
-            _viewModel.SelectedMediaKind);
     }
 
     private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
@@ -137,48 +115,17 @@ public partial class MainWindow : FluentWindow
     private void MainWindow_Closed(object? sender, EventArgs e)
     {
         _viewModel.PropertyChanged -= ViewModel_PropertyChanged;
-        ApplicationThemeManager.Changed -= ApplicationThemeManager_Changed;
-        _focusFadeTimer.Stop();
-        _focusFadeTimer.Tick -= FocusFadeTimer_Tick;
         _viewModel.Dispose();
         _themeController.Dispose();
-        StopAndClearPreview();
+        PreviewView.ReleaseMedia();
     }
 
     private void ViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(MainWindowViewModel.SelectedMediaPath) or
-            nameof(MainWindowViewModel.SelectedMediaKind))
-        {
-            UpdatePreview(
-                _viewModel.SelectedMediaPath,
-                _viewModel.SelectedMediaKind);
-        }
-        else if (e.PropertyName == nameof(MainWindowViewModel.IsPaused))
-        {
-            _previewPlaybackRequested = !_viewModel.IsPaused;
-            SynchronizePreviewPlayback();
-        }
-        else if (e.PropertyName == nameof(MainWindowViewModel.ThemeMode))
+        _ = sender;
+        if (e.PropertyName == nameof(MainWindowViewModel.ThemeMode))
         {
             _themeController.Apply(_viewModel.ThemeMode);
-            UpdatePreviewThemeOverlay();
-        }
-        else if (e.PropertyName is nameof(MainWindowViewModel.Fit) or
-                 nameof(MainWindowViewModel.FocusX) or
-                 nameof(MainWindowViewModel.FocusY))
-        {
-            ApplyPreviewLayout();
-            UpdateFocusIndicatorPosition();
-            if (!_viewModel.CanAdjustFocus)
-            {
-                HideFocusIndicator();
-            }
-        }
-        else if (e.PropertyName is nameof(MainWindowViewModel.DarkOverlay) or
-                 nameof(MainWindowViewModel.LightOverlay))
-        {
-            UpdatePreviewThemeOverlay();
         }
     }
 
@@ -256,7 +203,7 @@ public partial class MainWindow : FluentWindow
             {
                 Text = Text(
                     "Risk_Detail",
-                    "The endpoint is limited to this device and remains available until Codex exits. Backdrop verifies the official package and a reviewed version before connecting."),
+                    "The endpoint is limited to this device and remains available until Codex exits. Backdrop verifies the official package, process, session, endpoint, and target before runtime capability probes decide which visual effects may run."),
                 Margin = new Thickness(0, 10, 0, 0),
                 TextWrapping = TextWrapping.Wrap,
                 Foreground =
@@ -318,6 +265,8 @@ public partial class MainWindow : FluentWindow
     {
         var content = new SettingsDialogContent(_viewModel, _text);
         var resetRequested = false;
+        var diagnosticExportRequested = false;
+        var restoreBackupRequested = false;
         ContentDialog? dialog = null;
 
         content.ThemeChangeRequested += async (_, eventArgs) =>
@@ -348,6 +297,16 @@ public partial class MainWindow : FluentWindow
             resetRequested = true;
             dialog?.Hide(ContentDialogResult.Secondary);
         };
+        content.DiagnosticExportRequested += (_, _) =>
+        {
+            diagnosticExportRequested = true;
+            dialog?.Hide(ContentDialogResult.Secondary);
+        };
+        content.RestoreBackupRequested += (_, _) =>
+        {
+            restoreBackupRequested = true;
+            dialog?.Hide(ContentDialogResult.Secondary);
+        };
 
         dialog = new ContentDialog(DialogHost)
         {
@@ -360,10 +319,84 @@ public partial class MainWindow : FluentWindow
         };
         _ = await dialog.ShowAsync(CancellationToken.None);
 
-        if (resetRequested)
+        if (restoreBackupRequested)
+        {
+            await _viewModel.RestoreVersion1BackupAsync();
+        }
+        else if (resetRequested)
         {
             await ShowResetConfirmationAsync();
         }
+        else if (diagnosticExportRequested)
+        {
+            await ExportDiagnosticReportAsync();
+        }
+    }
+
+    private async Task ExportDiagnosticReportAsync()
+    {
+        var disclosure = new ContentDialog(DialogHost)
+        {
+            Title = Text("Diagnostics_Title", "Export diagnostic report?"),
+            Content = new TextBlock
+            {
+                Text = Text(
+                    "Diagnostics_Disclosure",
+                    "The report contains app, Windows, runtime stage, and capability summaries. It does not include media paths, file names, page titles, URLs, DOM or chat text, settings JSON, or stable identifiers."),
+                MaxWidth = 520,
+                TextWrapping = TextWrapping.Wrap,
+            },
+            PrimaryButtonText = Text("Diagnostics_Export", "Choose save location"),
+            CloseButtonText = Text("Action_Cancel", "Cancel"),
+            PrimaryButtonAppearance = ControlAppearance.Primary,
+            DialogMaxWidth = 600,
+        };
+        if (await disclosure.ShowAsync(CancellationToken.None) != ContentDialogResult.Primary)
+        {
+            return;
+        }
+
+        var picker = new SaveFileDialog
+        {
+            AddExtension = true,
+            CheckPathExists = true,
+            DefaultExt = ".json",
+            FileName = "BackdropForCodex-diagnostic.json",
+            Filter = "JSON diagnostic report (*.json)|*.json",
+            OverwritePrompt = true,
+            Title = Text("Diagnostics_SaveTitle", "Save diagnostic report"),
+        };
+        if (picker.ShowDialog(this) != true)
+        {
+            return;
+        }
+
+        var runtime = _diagnosticReports.CreateRuntimeSnapshot(
+            _viewModel.RuntimePhase,
+            _viewModel.IsActive,
+            _viewModel.IsPaused,
+            _viewModel.CompatibilityCapabilities);
+        var report = _diagnosticReports.CreateReport(runtime);
+        await _diagnosticReports.WriteAsync(
+            picker.FileName,
+            report,
+            CancellationToken.None);
+
+        var complete = new ContentDialog(DialogHost)
+        {
+            Title = Text("Diagnostics_CompleteTitle", "Diagnostic report saved"),
+            Content = new TextBlock
+            {
+                Text = Text(
+                    "Diagnostics_CompleteMessage",
+                    "The allow-listed local report was saved to the location you selected."),
+                MaxWidth = 480,
+                TextWrapping = TextWrapping.Wrap,
+            },
+            CloseButtonText = Text("Action_Close", "Close"),
+            DialogMaxWidth = 560,
+        };
+        _ = await complete.ShowAsync(CancellationToken.None);
     }
 
     private async Task ShowResetConfirmationAsync()
@@ -375,7 +408,7 @@ public partial class MainWindow : FluentWindow
             {
                 Text = Text(
                     "Settings_ResetDescription",
-                    "This restores the official background, clears settings and recent media, revokes acknowledgement, resets UI preferences, and removes only a shortcut verified as owned by this app."),
+                    "This restores the official background; permanently deletes settings, recent media, and any preserved V1 migration backup; revokes acknowledgement; resets UI preferences; and removes only a shortcut verified as owned by this app."),
                 MaxWidth = 520,
                 TextWrapping = TextWrapping.Wrap,
             },
@@ -388,9 +421,6 @@ public partial class MainWindow : FluentWindow
         {
             await _viewModel.ResetEverythingAsync();
             _themeController.Apply(_viewModel.ThemeMode);
-            UpdatePreview(
-                _viewModel.SelectedMediaPath,
-                _viewModel.SelectedMediaKind);
         }
     }
 
@@ -439,16 +469,17 @@ public partial class MainWindow : FluentWindow
 
     private void Window_DragLeave(object sender, DragEventArgs e)
     {
-        DropOverlay.Visibility = Visibility.Collapsed;
+        PreviewView.SetDropTargetVisible(false);
         e.Handled = true;
     }
 
     private void Window_Drop(object sender, DragEventArgs e)
     {
-        DropOverlay.Visibility = Visibility.Collapsed;
+        PreviewView.SetDropTargetVisible(false);
         try
         {
-            if (!TryGetSingleDroppedFile(e.Data, out var path))
+            if (!_viewModel.CanEdit ||
+                !TryGetSingleDroppedFile(e.Data, out var path))
             {
                 e.Effects = DragDropEffects.None;
                 return;
@@ -470,9 +501,11 @@ public partial class MainWindow : FluentWindow
 
     private void UpdateDragState(DragEventArgs e)
     {
-        var valid = TryGetSingleDroppedFile(e.Data, out _);
+        var valid =
+            _viewModel.CanEdit &&
+            TryGetSingleDroppedFile(e.Data, out _);
         e.Effects = valid ? DragDropEffects.Copy : DragDropEffects.None;
-        DropOverlay.Visibility = valid ? Visibility.Visible : Visibility.Collapsed;
+        PreviewView.SetDropTargetVisible(valid);
         e.Handled = true;
     }
 
@@ -481,7 +514,8 @@ public partial class MainWindow : FluentWindow
         path = string.Empty;
         if (!data.GetDataPresent(DataFormats.FileDrop) ||
             data.GetData(DataFormats.FileDrop) is not string[] { Length: 1 } paths ||
-            !File.Exists(paths[0]))
+            string.IsNullOrWhiteSpace(paths[0]) ||
+            !Path.IsPathFullyQualified(paths[0]))
         {
             return false;
         }
@@ -496,433 +530,25 @@ public partial class MainWindow : FluentWindow
                extension.Equals(".webm", StringComparison.OrdinalIgnoreCase);
     }
 
-    private void MediaViewport_SizeChanged(object sender, SizeChangedEventArgs e)
+    private void PreviewView_FocusChangeRequested(
+        object? sender,
+        WallpaperFocusChangeRequestedEventArgs e)
     {
-        if (!_previewMediaReady &&
-            _videoPreviewSelected &&
-            VideoPreview.Source is not null)
-        {
-            SetPreviewFallbackBounds(VideoPreview);
-        }
-
-        ApplyPreviewLayout();
-        UpdateFocusIndicatorPosition();
-    }
-
-    private void FocusInteractionSurface_MouseLeftButtonDown(
-        object sender,
-        MouseButtonEventArgs e)
-    {
-        if (!_viewModel.CanAdjustFocus)
-        {
-            return;
-        }
-
-        _isDraggingFocus = true;
-        _ = FocusInteractionSurface.Focus();
-        _ = FocusInteractionSurface.CaptureMouse();
-        SetFocusFromPointer(e.GetPosition(FocusInteractionSurface));
-        ShowFocusIndicator(scheduleFade: false);
-        e.Handled = true;
-    }
-
-    private void FocusInteractionSurface_MouseMove(object sender, MouseEventArgs e)
-    {
-        if (!_isDraggingFocus)
-        {
-            return;
-        }
-
-        if (e.LeftButton != MouseButtonState.Pressed)
-        {
-            EndFocusDrag();
-            return;
-        }
-
-        SetFocusFromPointer(e.GetPosition(FocusInteractionSurface));
-        ShowFocusIndicator(scheduleFade: false);
-        e.Handled = true;
-    }
-
-    private void FocusInteractionSurface_MouseLeftButtonUp(
-        object sender,
-        MouseButtonEventArgs e)
-    {
-        if (!_isDraggingFocus)
-        {
-            return;
-        }
-
-        SetFocusFromPointer(e.GetPosition(FocusInteractionSurface));
-        EndFocusDrag();
-        e.Handled = true;
-    }
-
-    private void FocusInteractionSurface_LostMouseCapture(
-        object sender,
-        MouseEventArgs e)
-    {
-        if (!_isDraggingFocus)
-        {
-            return;
-        }
-
-        _isDraggingFocus = false;
-        ShowFocusIndicator(scheduleFade: true);
-    }
-
-    private void FocusInteractionSurface_KeyDown(object sender, KeyEventArgs e)
-    {
-        if (!_viewModel.CanAdjustFocus)
-        {
-            return;
-        }
-
-        if (!MediaFocusInput.TryGetKeyboardDelta(
-                e.Key,
-                Keyboard.Modifiers,
-                out var delta))
-        {
-            return;
-        }
-
-        _viewModel.NudgeFocus(delta.Horizontal, delta.Vertical);
-        ShowFocusIndicator(scheduleFade: true);
-        e.Handled = true;
+        _ = sender;
+        _viewModel.SetFocus(e.FocusX, e.FocusY);
     }
 
     private void CenterFocus_Click(object sender, RoutedEventArgs e)
     {
+        _ = sender;
+        _ = e;
         if (!_viewModel.CanAdjustFocus)
         {
             return;
         }
 
         _viewModel.ResetFocus();
-        _ = FocusInteractionSurface.Focus();
-        ShowFocusIndicator(scheduleFade: true);
-    }
-
-    private void SetFocusFromPointer(Point point)
-    {
-        if (!MediaFocusInput.TryNormalizePointer(
-                point.X,
-                point.Y,
-                FocusInteractionSurface.ActualWidth,
-                FocusInteractionSurface.ActualHeight,
-                out var focus))
-        {
-            return;
-        }
-
-        _viewModel.SetFocus(focus.X, focus.Y);
-    }
-
-    private void EndFocusDrag()
-    {
-        _isDraggingFocus = false;
-        if (FocusInteractionSurface.IsMouseCaptured)
-        {
-            FocusInteractionSurface.ReleaseMouseCapture();
-        }
-
-        ShowFocusIndicator(scheduleFade: true);
-    }
-
-    private void ShowFocusIndicator(bool scheduleFade)
-    {
-        if (!_viewModel.CanAdjustFocus)
-        {
-            HideFocusIndicator();
-            return;
-        }
-
-        _focusFadeTimer.Stop();
-        FocusIndicator.BeginAnimation(OpacityProperty, null);
-        FocusIndicator.Opacity = 1;
-        UpdateFocusIndicatorPosition();
-        if (scheduleFade && !_isDraggingFocus)
-        {
-            _focusFadeTimer.Start();
-        }
-    }
-
-    private void HideFocusIndicator()
-    {
-        _focusFadeTimer.Stop();
-        FocusIndicator.BeginAnimation(OpacityProperty, null);
-        FocusIndicator.Opacity = 0;
-    }
-
-    private void FocusFadeTimer_Tick(object? sender, EventArgs e)
-    {
-        _focusFadeTimer.Stop();
-        if (!SystemParameters.ClientAreaAnimation)
-        {
-            HideFocusIndicator();
-            return;
-        }
-
-        FocusIndicator.BeginAnimation(
-            OpacityProperty,
-            new DoubleAnimation(
-                fromValue: FocusIndicator.Opacity,
-                toValue: 0,
-                duration: TimeSpan.FromMilliseconds(260))
-            {
-                EasingFunction = new QuadraticEase
-                {
-                    EasingMode = EasingMode.EaseOut,
-                },
-            });
-    }
-
-    private void UpdateFocusIndicatorPosition()
-    {
-        if (FocusInteractionSurface.ActualWidth <= 0 ||
-            FocusInteractionSurface.ActualHeight <= 0)
-        {
-            return;
-        }
-
-        Canvas.SetLeft(
-            FocusIndicator,
-            (_viewModel.FocusX * FocusInteractionSurface.ActualWidth) -
-            (FocusIndicator.Width / 2));
-        Canvas.SetTop(
-            FocusIndicator,
-            (_viewModel.FocusY * FocusInteractionSurface.ActualHeight) -
-            (FocusIndicator.Height / 2));
-    }
-
-    private void UpdatePreview(string? path, MediaKind kind)
-    {
-        if (string.Equals(_previewPath, path, StringComparison.OrdinalIgnoreCase) &&
-            _previewKind == kind)
-        {
-            return;
-        }
-
-        _previewPath = path;
-        _previewKind = kind;
-        StopAndClearPreview();
-        if (path is null || !File.Exists(path))
-        {
-            EmptyPreview.Visibility = Visibility.Visible;
-            return;
-        }
-
-        try
-        {
-            if (kind == MediaKind.Video)
-            {
-                VideoPreview.Source = new Uri(path, UriKind.Absolute);
-                VideoPreview.Position = TimeSpan.Zero;
-                VideoPreview.Visibility = Visibility.Visible;
-                EmptyPreview.Visibility = Visibility.Collapsed;
-                PreviewThemeOverlay.Visibility = Visibility.Visible;
-                _videoPreviewSelected = true;
-                _previewPlaybackRequested = !_viewModel.IsPaused;
-                SetPreviewFallbackBounds(VideoPreview);
-                UpdatePreviewThemeOverlay();
-                SynchronizePreviewPlayback();
-                return;
-            }
-
-            var bitmap = new BitmapImage();
-            bitmap.BeginInit();
-            bitmap.CacheOption = BitmapCacheOption.OnLoad;
-            bitmap.DecodePixelWidth = 1600;
-            bitmap.UriSource = new Uri(path, UriKind.Absolute);
-            bitmap.EndInit();
-            bitmap.Freeze();
-            ImagePreview.Source = bitmap;
-            ImagePreview.Visibility = Visibility.Visible;
-            EmptyPreview.Visibility = Visibility.Collapsed;
-            PreviewThemeOverlay.Visibility = Visibility.Visible;
-            _previewMediaWidth = bitmap.PixelWidth;
-            _previewMediaHeight = bitmap.PixelHeight;
-            _previewMediaReady = true;
-            ApplyPreviewLayout();
-            UpdatePreviewThemeOverlay();
-        }
-        catch (Exception exception) when (IsControlledPreviewException(exception))
-        {
-            ShowPreviewFailure();
-        }
-    }
-
-    private void VideoPreview_MediaOpened(object sender, RoutedEventArgs e)
-    {
-        _previewMediaWidth = VideoPreview.NaturalVideoWidth;
-        _previewMediaHeight = VideoPreview.NaturalVideoHeight;
-        _previewMediaReady =
-            _previewMediaWidth > 0 &&
-            _previewMediaHeight > 0;
-        if (_previewMediaReady)
-        {
-            ApplyPreviewLayout();
-        }
-
-        if (_reducedMotion)
-        {
-            try
-            {
-                VideoPreview.Pause();
-            }
-            catch (InvalidOperationException)
-            {
-                // The media graph closed between MediaOpened and the reduced-motion pause.
-            }
-        }
-    }
-
-    private void VideoPreview_MediaEnded(object sender, RoutedEventArgs e)
-    {
-        try
-        {
-            VideoPreview.Position = TimeSpan.Zero;
-            SynchronizePreviewPlayback();
-        }
-        catch (Exception exception) when (IsControlledPreviewException(exception))
-        {
-            ShowPreviewFailure();
-        }
-    }
-
-    private void VideoPreview_MediaFailed(object sender, ExceptionRoutedEventArgs e) =>
-        ShowPreviewFailure();
-
-    private void ApplyPreviewLayout()
-    {
-        if (!_previewMediaReady)
-        {
-            return;
-        }
-
-        var plan = MediaPreviewLayout.CalculateForMedia(
-            _previewKind,
-            MediaViewport.ActualWidth,
-            MediaViewport.ActualHeight,
-            _previewMediaWidth,
-            _previewMediaHeight,
-            _viewModel.Fit,
-            _viewModel.FocusX,
-            _viewModel.FocusY);
-        if (plan.IsEmpty)
-        {
-            return;
-        }
-
-        FrameworkElement previewElement = plan.MediaKind == MediaKind.Video
-            ? VideoPreview
-            : ImagePreview;
-        var placement = plan.Placement;
-        previewElement.Width = placement.Width;
-        previewElement.Height = placement.Height;
-        Canvas.SetLeft(previewElement, placement.OffsetX);
-        Canvas.SetTop(previewElement, placement.OffsetY);
-    }
-
-    private void SetPreviewFallbackBounds(FrameworkElement previewElement)
-    {
-        previewElement.Width = Math.Max(0, MediaViewport.ActualWidth);
-        previewElement.Height = Math.Max(0, MediaViewport.ActualHeight);
-        Canvas.SetLeft(previewElement, 0);
-        Canvas.SetTop(previewElement, 0);
-    }
-
-    private void ApplicationThemeManager_Changed(
-        ApplicationTheme currentApplicationTheme,
-        Color systemAccent)
-    {
-        _ = currentApplicationTheme;
-        _ = systemAccent;
-        if (Dispatcher.CheckAccess())
-        {
-            UpdatePreviewThemeOverlay();
-            return;
-        }
-
-        _ = Dispatcher.BeginInvoke(UpdatePreviewThemeOverlay);
-    }
-
-    private void UpdatePreviewThemeOverlay()
-    {
-        var applicationTheme = ApplicationThemeManager.GetAppTheme();
-        var systemTheme = ApplicationThemeManager.GetSystemTheme();
-        var overlay = PreviewThemeOverlayResolver.Resolve(
-            applicationTheme,
-            systemTheme,
-            _viewModel.DarkOverlay,
-            _viewModel.LightOverlay);
-        PreviewThemeOverlay.Background =
-            overlay.IsLight ? Brushes.White : Brushes.Black;
-        PreviewThemeOverlay.Opacity = overlay.Opacity;
-    }
-
-    private void Window_IsVisibleChanged(
-        object sender,
-        DependencyPropertyChangedEventArgs e) =>
-        SynchronizePreviewPlayback();
-
-    private void SynchronizePreviewPlayback()
-    {
-        if (!_videoPreviewSelected || VideoPreview.Source is null)
-        {
-            return;
-        }
-
-        _reducedMotion = !SystemParameters.ClientAreaAnimation;
-        try
-        {
-            if (IsVisible && _previewPlaybackRequested && !_reducedMotion)
-            {
-                VideoPreview.Play();
-            }
-            else
-            {
-                VideoPreview.Pause();
-            }
-        }
-        catch (Exception exception) when (IsControlledPreviewException(exception))
-        {
-            ShowPreviewFailure();
-        }
-    }
-
-    private void StopAndClearPreview()
-    {
-        try
-        {
-            VideoPreview.Stop();
-            VideoPreview.Source = null;
-        }
-        catch (Exception) when (!IsLoaded)
-        {
-            // The media graph may already be torn down while the final window closes.
-        }
-
-        ImagePreview.Source = null;
-        ImagePreview.Visibility = Visibility.Collapsed;
-        VideoPreview.Visibility = Visibility.Collapsed;
-        PreviewThemeOverlay.Visibility = Visibility.Collapsed;
-        EmptyPreview.Visibility = Visibility.Visible;
-        _previewMediaWidth = 0;
-        _previewMediaHeight = 0;
-        _previewMediaReady = false;
-        _videoPreviewSelected = false;
-        _previewPlaybackRequested = false;
-        _isDraggingFocus = false;
-        HideFocusIndicator();
-    }
-
-    private void ShowPreviewFailure()
-    {
-        StopAndClearPreview();
-        _previewPath = null;
-        _previewKind = MediaKind.None;
-        EmptyPreview.Visibility = Visibility.Visible;
+        PreviewView.ShowCurrentFocus();
     }
 
     private async void Window_Closing(object? sender, CancelEventArgs e)
@@ -998,10 +624,10 @@ public partial class MainWindow : FluentWindow
             MainBottomRow.Height = new GridLength(0);
             Grid.SetRow(PreviewPane, 0);
             Grid.SetColumn(PreviewPane, 0);
-            Grid.SetRow(InspectorScroller, 0);
-            Grid.SetColumn(InspectorScroller, 2);
+            Grid.SetRow(InspectorPane, 0);
+            Grid.SetColumn(InspectorPane, 2);
             PreviewPane.MaxHeight = double.PositiveInfinity;
-            PreviewSurface.MinHeight = 220;
+            PreviewView.SurfaceMinimumHeight = 220;
             RecentMediaCard.Visibility = Visibility.Visible;
             return;
         }
@@ -1015,10 +641,10 @@ public partial class MainWindow : FluentWindow
         MainBottomRow.Height = new GridLength(1.15, GridUnitType.Star);
         Grid.SetRow(PreviewPane, 0);
         Grid.SetColumn(PreviewPane, 0);
-        Grid.SetRow(InspectorScroller, 2);
-        Grid.SetColumn(InspectorScroller, 0);
+        Grid.SetRow(InspectorPane, 2);
+        Grid.SetColumn(InspectorPane, 0);
         PreviewPane.MaxHeight = double.PositiveInfinity;
-        PreviewSurface.MinHeight = 120;
+        PreviewView.SurfaceMinimumHeight = 120;
         RecentMediaCard.Visibility = Visibility.Collapsed;
     }
 
@@ -1038,14 +664,4 @@ public partial class MainWindow : FluentWindow
             ? fallback
             : value;
     }
-
-    private static bool IsControlledPreviewException(Exception exception) => exception is
-        IOException or
-        UnauthorizedAccessException or
-        NotSupportedException or
-        FormatException or
-        ArgumentException or
-        InvalidOperationException or
-        ExternalException or
-        SecurityException;
 }

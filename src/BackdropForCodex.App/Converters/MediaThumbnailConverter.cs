@@ -4,7 +4,8 @@ using System.Runtime.InteropServices;
 using System.Security;
 using System.Windows.Data;
 using System.Windows.Media;
-using System.Windows.Media.Imaging;
+using BackdropForCodex.App.Services.Media;
+using BackdropForCodex.Core.Media;
 
 namespace BackdropForCodex.App.Converters;
 
@@ -14,9 +15,21 @@ namespace BackdropForCodex.App.Converters;
 public sealed class MediaThumbnailConverter : IValueConverter
 {
     private const int MaximumCachedThumbnails = 32;
+    private readonly ISafeMediaPreviewService _previewMedia;
     private readonly object _cacheLock = new();
     private readonly Dictionary<string, ImageSource> _cache =
         new(StringComparer.OrdinalIgnoreCase);
+
+    public MediaThumbnailConverter()
+        : this(SafeMediaPreviewService.Shared)
+    {
+    }
+
+    public MediaThumbnailConverter(ISafeMediaPreviewService previewMedia)
+    {
+        _previewMedia =
+            previewMedia ?? throw new ArgumentNullException(nameof(previewMedia));
+    }
 
     public object? Convert(
         object value,
@@ -24,7 +37,7 @@ public sealed class MediaThumbnailConverter : IValueConverter
         object parameter,
         CultureInfo culture)
     {
-        if (value is not string path || !IsImage(path) || !File.Exists(path))
+        if (value is not string path || !IsImage(path))
         {
             return null;
         }
@@ -39,13 +52,8 @@ public sealed class MediaThumbnailConverter : IValueConverter
 
         try
         {
-            var thumbnail = new BitmapImage();
-            thumbnail.BeginInit();
-            thumbnail.CacheOption = BitmapCacheOption.OnLoad;
-            thumbnail.DecodePixelWidth = 112;
-            thumbnail.UriSource = new Uri(path, UriKind.Absolute);
-            thumbnail.EndInit();
-            thumbnail.Freeze();
+            using var lease = _previewMedia.Acquire(path);
+            var thumbnail = lease.LoadBitmap(decodePixelWidth: 112);
 
             lock (_cacheLock)
             {
@@ -64,6 +72,7 @@ public sealed class MediaThumbnailConverter : IValueConverter
             UnauthorizedAccessException or
             NotSupportedException or
             ArgumentException or
+            MediaReferenceValidationException or
             FormatException or
             ExternalException or
             SecurityException)

@@ -290,7 +290,7 @@ public static class CdpEndpointIdentityVerifier
         return new CdpEndpointIdentityResult(
             CdpEndpointRejection.None,
             "The endpoint is owned by the reviewed Codex package and exposes a Codex page.",
-            new VerifiedCdpEndpoint(candidate, browser, browserSocket!, classified));
+            new VerifiedCdpEndpoint(candidate, browser, browserSocket!, classified, profile));
     }
 
     internal static bool IsStrictIpv4LoopbackHttp(Uri uri, bool requireRootPath) =>

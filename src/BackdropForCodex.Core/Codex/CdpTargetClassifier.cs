@@ -70,13 +70,6 @@ public static class CdpTargetClassifier
                    IsMainApplicationPath(uri.AbsolutePath);
         }
 
-        if (string.Equals(uri.Host, "127.0.0.1", StringComparison.Ordinal) &&
-            (string.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) ||
-             string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)))
-        {
-            return IsMainApplicationPath(uri.AbsolutePath);
-        }
-
         if (!string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
         {
             return false;
@@ -87,29 +80,109 @@ public static class CdpTargetClassifier
             return false;
         }
 
-        return !string.Equals(uri.IdnHost, "chatgpt.com", StringComparison.OrdinalIgnoreCase) ||
-               uri.AbsolutePath.StartsWith("/codex", StringComparison.OrdinalIgnoreCase);
+        return IsReviewedRemoteWorkspacePage(uri);
+    }
+
+    private static bool IsReviewedRemoteWorkspacePage(Uri uri)
+    {
+        if (!TryNormalizeRemotePath(uri.AbsolutePath, out var path) ||
+            ContainsNonWorkspacePathSegment(path))
+        {
+            return false;
+        }
+
+        if (string.Equals(uri.IdnHost, "chatgpt.com", StringComparison.OrdinalIgnoreCase))
+        {
+            return IsWithinRouteBoundary(path, "/codex");
+        }
+
+        if (string.Equals(uri.IdnHost, "codex.openai.com", StringComparison.OrdinalIgnoreCase))
+        {
+            return string.Equals(path, "/", StringComparison.Ordinal) ||
+                   IsWithinRouteBoundary(path, "/codex");
+        }
+
+        return false;
+    }
+
+    private static bool TryNormalizeRemotePath(string path, out string normalizedPath)
+    {
+        normalizedPath = path;
+
+        try
+        {
+            for (var pass = 0; pass < 4; pass++)
+            {
+                var decodedPath = Uri.UnescapeDataString(normalizedPath);
+                if (string.Equals(decodedPath, normalizedPath, StringComparison.Ordinal))
+                {
+                    return !normalizedPath.Contains('\\');
+                }
+
+                normalizedPath = decodedPath;
+            }
+
+            return string.Equals(
+                       Uri.UnescapeDataString(normalizedPath),
+                       normalizedPath,
+                       StringComparison.Ordinal) &&
+                   !normalizedPath.Contains('\\');
+        }
+        catch (UriFormatException)
+        {
+            normalizedPath = string.Empty;
+            return false;
+        }
+    }
+
+    private static bool IsWithinRouteBoundary(string path, string boundary) =>
+        string.Equals(path, boundary, StringComparison.OrdinalIgnoreCase) ||
+        path.StartsWith($"{boundary}/", StringComparison.OrdinalIgnoreCase);
+
+    private static bool ContainsNonWorkspacePathSegment(string path)
+    {
+        foreach (var segment in path.Split('/', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (string.Equals(segment, ".", StringComparison.Ordinal) ||
+                string.Equals(segment, "..", StringComparison.Ordinal) ||
+                string.Equals(segment, "auth", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(segment, "login", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(segment, "oauth", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static bool IsReviewedPackagedFilePage(
         Uri uri,
         CodexCompatibilityProfile profile)
     {
-        var publisherIdSeparator = profile.PackageFamilyName.LastIndexOf('_');
-        if (publisherIdSeparator < 0 || publisherIdSeparator == profile.PackageFamilyName.Length - 1)
+        if (profile.PackageRoot is null || uri.IsUnc)
         {
             return false;
         }
 
-        var publisherId = profile.PackageFamilyName[(publisherIdSeparator + 1)..];
-        var packageDirectory =
-            $"{profile.PackageName}_{profile.PackageVersion}_x64__{publisherId}";
-        var normalizedPath = Uri.UnescapeDataString(uri.AbsolutePath).Replace('\\', '/');
-        var expectedMarker = $"/Program Files/WindowsApps/{packageDirectory}/app/";
-        return normalizedPath.Contains(expectedMarker, StringComparison.OrdinalIgnoreCase) &&
-               IsMainApplicationPath(normalizedPath[(normalizedPath.IndexOf(
-                   expectedMarker,
-                   StringComparison.OrdinalIgnoreCase) + expectedMarker.Length - 1)..]);
+        try
+        {
+            var candidatePath = Path.GetFullPath(uri.LocalPath);
+            var expectedPath = Path.GetFullPath(
+                Path.Combine(profile.PackageRoot, "app", "index.html"));
+            return string.Equals(
+                candidatePath,
+                expectedPath,
+                StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception exception) when (
+            exception is ArgumentException or
+            NotSupportedException or
+            PathTooLongException or
+            UriFormatException)
+        {
+            return false;
+        }
     }
 
     private static bool IsMainApplicationPath(string path)

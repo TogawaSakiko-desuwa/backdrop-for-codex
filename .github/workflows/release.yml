@@ -56,7 +56,23 @@ jobs:
       - name: Set up .NET
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
-          global-json-file: global.json
+          # The locked SBOM tool targets net8.0; 10.0.302 remains the exact build SDK.
+          dotnet-version: |
+            8.0.x
+            10.0.302
+
+      - name: Pin and verify release SDK
+        run: |
+          $configuration = Get-Content -LiteralPath .\global.json -Raw | ConvertFrom-Json
+          $configuration.sdk.version = "10.0.302"
+          $configuration.sdk.rollForward = "disable"
+          $configuration | ConvertTo-Json -Depth 4 |
+            Set-Content -LiteralPath .\global.json -Encoding utf8NoBOM
+
+          $actualSdk = dotnet --version
+          if ($actualSdk -ne "10.0.302") {
+            throw "Release requires .NET SDK 10.0.302 but resolved $actualSdk."
+          }
 
       - name: Restore
         run: |
@@ -69,6 +85,17 @@ jobs:
           --configuration Release
           --no-restore
           -p:ContinuousIntegrationBuild=true
+
+      - name: Verify formatting
+        run: dotnet format .\BackdropForCodex.slnx --verify-no-changes --no-restore
+
+      - name: Run non-integration tests
+        run: >-
+          dotnet test .\BackdropForCodex.slnx
+          --configuration Release
+          --no-build
+          --no-restore
+          --filter "Category!=Integration"
 
       - name: Publish self-contained single-file app
         run: |
@@ -97,9 +124,17 @@ jobs:
             throw "dotnet publish failed."
           }
 
-          $exe = Join-Path $publishDir "BackdropForCodex.exe"
-          if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) {
-            throw "Expected single-file executable was not produced: $exe"
+          $publishedFiles = @(
+            Get-ChildItem -LiteralPath $publishDir -File -Recurse
+          )
+          $publishedDirectories = @(
+            Get-ChildItem -LiteralPath $publishDir -Directory -Recurse
+          )
+          if ($publishedFiles.Count -ne 1 -or
+              $publishedFiles[0].Name -ne "BackdropForCodex.exe" -or
+              $publishedFiles[0].DirectoryName -ne $publishDir -or
+              $publishedDirectories.Count -ne 0) {
+            throw "Expected exactly one BackdropForCodex.exe publish artifact."
           }
 
           Copy-Item -LiteralPath @(
@@ -121,17 +156,17 @@ jobs:
           }
 
           $noticeFiles = @(
-            @{ Package = "microsoft.netcore.app.runtime.win-x64"; Source = "LICENSE.TXT"; Destination = "dotnet-runtime-LICENSE.txt" },
-            @{ Package = "microsoft.netcore.app.runtime.win-x64"; Source = "THIRD-PARTY-NOTICES.TXT"; Destination = "dotnet-runtime-THIRD-PARTY-NOTICES.txt" },
-            @{ Package = "microsoft.windowsdesktop.app.runtime.win-x64"; Source = "LICENSE"; Destination = "windowsdesktop-LICENSE.txt" },
-            @{ Package = "microsoft.aspnetcore.app.runtime.win-x64"; Source = "LICENSE.txt"; Destination = "aspnetcore-LICENSE.txt" },
-            @{ Package = "microsoft.aspnetcore.app.runtime.win-x64"; Source = "THIRD-PARTY-NOTICES.TXT"; Destination = "aspnetcore-THIRD-PARTY-NOTICES.txt" },
+            @{ Package = "microsoft.netcore.app.runtime.win-x64"; Version = "10.0.10"; Source = "LICENSE.TXT"; Destination = "dotnet-runtime-LICENSE.txt" },
+            @{ Package = "microsoft.netcore.app.runtime.win-x64"; Version = "10.0.10"; Source = "THIRD-PARTY-NOTICES.TXT"; Destination = "dotnet-runtime-THIRD-PARTY-NOTICES.txt" },
+            @{ Package = "microsoft.windowsdesktop.app.runtime.win-x64"; Version = "10.0.10"; Source = "LICENSE"; Destination = "windowsdesktop-LICENSE.txt" },
             @{ Package = "wpf-ui"; Version = "4.3.0"; Source = "LICENSE.md"; Destination = "wpf-ui-LICENSE.md" },
             @{ Package = "wpf-ui"; Version = "4.3.0"; Source = "ThirdPartyNotices.txt"; Destination = "wpf-ui-THIRD-PARTY-NOTICES.txt" },
             @{ Package = "wpf-ui.tray"; Version = "4.3.0"; Source = "LICENSE.md"; Destination = "wpf-ui-tray-LICENSE.md" },
             @{ Package = "wpf-ui.tray"; Version = "4.3.0"; Source = "ThirdPartyNotices.txt"; Destination = "wpf-ui-tray-THIRD-PARTY-NOTICES.txt" },
             @{ Package = "communitytoolkit.mvvm"; Version = "8.4.2"; Source = "License.md"; Destination = "communitytoolkit-mvvm-LICENSE.md" },
-            @{ Package = "communitytoolkit.mvvm"; Version = "8.4.2"; Source = "ThirdPartyNotices.txt"; Destination = "communitytoolkit-mvvm-THIRD-PARTY-NOTICES.txt" }
+            @{ Package = "communitytoolkit.mvvm"; Version = "8.4.2"; Source = "ThirdPartyNotices.txt"; Destination = "communitytoolkit-mvvm-THIRD-PARTY-NOTICES.txt" },
+            @{ Package = "microsoft.extensions.logging.abstractions"; Version = "8.0.0"; Source = "LICENSE.TXT"; Destination = "microsoft-extensions-logging-abstractions-LICENSE.txt" },
+            @{ Package = "microsoft.extensions.logging.abstractions"; Version = "8.0.0"; Source = "THIRD-PARTY-NOTICES.TXT"; Destination = "microsoft-extensions-logging-abstractions-THIRD-PARTY-NOTICES.txt" }
           )
 
           foreach ($notice in $noticeFiles) {
@@ -154,6 +189,19 @@ jobs:
             }
 
             Copy-Item -LiteralPath (Join-Path $versionDirectory.FullName $notice.Source) -Destination (Join-Path $licenseDir $notice.Destination)
+          }
+
+          $vendoredNoticeFiles = @(
+            @{ Source = "third_party\licenses\PuppeteerSharp-25.3.4-LICENSE.txt"; Destination = "puppeteersharp-LICENSE.txt" },
+            @{ Source = "third_party\licenses\WebDriverBiDi-0.0.54-LICENSE.txt"; Destination = "webdriverbidi-LICENSE.txt" },
+            @{ Source = "third_party\licenses\Microsoft.IO.RecyclableMemoryStream-3.0.1-LICENSE.txt"; Destination = "microsoft-io-recyclablememorystream-LICENSE.txt" }
+          )
+          foreach ($notice in $vendoredNoticeFiles) {
+            if (-not (Test-Path -LiteralPath $notice.Source -PathType Leaf)) {
+              throw "Required vendored upstream license is missing: $($notice.Source)"
+            }
+
+            Copy-Item -LiteralPath $notice.Source -Destination (Join-Path $licenseDir $notice.Destination)
           }
 
       - name: Generate and validate SPDX 2.2 SBOM
@@ -195,19 +243,37 @@ jobs:
           }
 
           $sbom = Get-Content -LiteralPath $generatedSbom -Raw -Encoding utf8 | ConvertFrom-Json
-          $packageNames = @($sbom.packages | ForEach-Object name)
-          $requiredPackages = @(
-            "CommunityToolkit.Mvvm",
-            "PuppeteerSharp",
-            "WPF-UI",
-            "WPF-UI.Tray",
-            "Microsoft.NETCore.App.Runtime.win-x64",
-            "Microsoft.WindowsDesktop.App.Runtime.win-x64",
-            "Microsoft.AspNetCore.App.Runtime.win-x64"
-          )
-          foreach ($requiredPackage in $requiredPackages) {
-            if ($packageNames -notcontains $requiredPackage) {
-              throw "SBOM is missing required component: $requiredPackage"
+          $lock = Get-Content -LiteralPath "src\BackdropForCodex.App\packages.lock.json" -Raw -Encoding utf8 | ConvertFrom-Json
+          $framework = $lock.dependencies.PSObject.Properties |
+            Where-Object { $_.Name -notmatch '/' } |
+            Select-Object -First 1
+          if ($null -eq $framework) {
+            throw "The app lock file does not contain a framework dependency group."
+          }
+
+          $requiredPackages = [ordered]@{}
+          foreach ($dependency in $framework.Value.PSObject.Properties) {
+            if ($dependency.Value.type -eq "Project" -or
+                [string]::IsNullOrWhiteSpace($dependency.Value.resolved)) {
+              continue
+            }
+
+            $requiredPackages[$dependency.Name] = [string]$dependency.Value.resolved
+          }
+          $requiredPackages["Microsoft.NETCore.App.Runtime.win-x64"] = "10.0.10"
+          $requiredPackages["Microsoft.WindowsDesktop.App.Runtime.win-x64"] = "10.0.10"
+
+          foreach ($requiredPackage in $requiredPackages.GetEnumerator()) {
+            $matches = @(
+              $sbom.packages |
+                Where-Object { $_.name -ieq $requiredPackage.Key }
+            )
+            if ($matches.Count -eq 0) {
+              throw "SBOM is missing required component: $($requiredPackage.Key)"
+            }
+            if ($matches.Count -ne 1 -or
+                $matches[0].versionInfo -ne $requiredPackage.Value) {
+              throw "SBOM has no $($requiredPackage.Key) version $($requiredPackage.Value)."
             }
           }
 
@@ -245,12 +311,22 @@ jobs:
         run: |
           $tag = $env:GITHUB_REF_NAME
           $assets = @(
-            Get-ChildItem -LiteralPath "artifacts" -File |
-              Sort-Object Name |
-              ForEach-Object FullName
+            Join-Path $env:GITHUB_WORKSPACE "artifacts\$($env:ARTIFACT_STEM).zip"
+            Join-Path $env:GITHUB_WORKSPACE "artifacts\$($env:ARTIFACT_STEM).spdx.json"
+            Join-Path $env:GITHUB_WORKSPACE "artifacts\BackdropForCodex-$($env:GITHUB_REF_NAME)-SHA256SUMS.txt"
           )
-          if ($assets.Count -lt 3) {
-            throw "Expected ZIP, SBOM, and checksum assets."
+          foreach ($asset in $assets) {
+            if (-not (Test-Path -LiteralPath $asset -PathType Leaf)) {
+              throw "Expected release asset is missing: $([IO.Path]::GetFileName($asset))"
+            }
+          }
+
+          $unexpectedAssets = @(
+            Get-ChildItem -LiteralPath "artifacts" -File |
+              Where-Object FullName -NotIn $assets
+          )
+          if ($unexpectedAssets.Count -ne 0) {
+            throw "Unexpected top-level release assets are present: $($unexpectedAssets.Name -join ', ')"
           }
 
           $ErrorActionPreference = "SilentlyContinue"
