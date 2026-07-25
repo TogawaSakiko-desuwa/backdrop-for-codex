@@ -63,7 +63,7 @@ public sealed record WallpaperCoordinatorOptions
 public interface ICdpEndpointDiscoveryService
 {
     ValueTask<CdpDiscoveryResult> DiscoverAsync(
-        CodexCompatibilityProfile profile,
+        VerifiedCodexIdentity identity,
         CancellationToken cancellationToken = default);
 }
 
@@ -77,9 +77,9 @@ public sealed class CdpEndpointDiscoveryService : ICdpEndpointDiscoveryService
     }
 
     public ValueTask<CdpDiscoveryResult> DiscoverAsync(
-        CodexCompatibilityProfile profile,
+        VerifiedCodexIdentity identity,
         CancellationToken cancellationToken = default) =>
-        _discovery.DiscoverAsync(profile, cancellationToken);
+        _discovery.DiscoverAsync(identity, cancellationToken);
 }
 
 public interface IWallpaperRuntime : IAsyncDisposable
@@ -112,6 +112,8 @@ public interface IWallpaperRuntimeCapabilitySource
     event EventHandler<WallpaperInjectionCapabilitiesChangedEventArgs>? CapabilitiesChanged;
 
     CompatibilityCapabilities Capabilities { get; }
+
+    WallpaperCompatibilitySnapshot Compatibility { get; }
 }
 
 public interface IWallpaperSettingsRecoveryRuntime
@@ -233,6 +235,9 @@ public sealed class WallpaperCoordinator :
 
     public CompatibilityCapabilities Capabilities => _injectionMonitor.Capabilities;
 
+    public WallpaperCompatibilitySnapshot Compatibility =>
+        _injectionMonitor.Compatibility;
+
     public static WallpaperCoordinator CreateDefault(string settingsPath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(settingsPath);
@@ -312,7 +317,6 @@ public sealed class WallpaperCoordinator :
             _settingsSnapshot = await _settingsRepository
                 .ResetAsync(cancellationToken)
                 .ConfigureAwait(false);
-            _injectionMonitor.ResetCapabilities();
             return ProjectGlobalForLegacyEditor(_settingsSnapshot);
         }
         finally
@@ -362,10 +366,11 @@ public sealed class WallpaperCoordinator :
         ArgumentNullException.ThrowIfNull(requestedSettings);
         await _operationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         IMediaLease? pendingLease = null;
+        var safetyCleanupAttempted = false;
         try
         {
             ThrowIfDisposed();
-            _injectionMonitor.ResetCapabilities();
+            _injectionMonitor.BeginAttempt();
             Publish(WallpaperRuntimePhase.Validating, "Validating the Codex package and media file.");
 
             if (!requestedSettings.AcceptedCdpRisk)
@@ -379,17 +384,34 @@ public sealed class WallpaperCoordinator :
             }
 
             var mediaPath = Path.GetFullPath(requestedSettings.MediaPath);
-            var installedPackage = _packageLocator.Locate();
-            var compatibility = CodexCompatibilityCatalog.Evaluate(
-                installedPackage.Descriptor,
-                CodexRuntimeDescriptor.Current);
-            _injectionMonitor.CaptureCapabilities(compatibility.Capabilities);
-            if (!compatibility.IsSupported)
+            InstalledCodexPackage installedPackage;
+            try
             {
-                throw new UnsupportedCodexVersionException(compatibility);
+                installedPackage = _packageLocator.Locate();
+            }
+            catch (CodexPackageDiscoveryException exception)
+            {
+                var discoveryFailure = CodexSecurityResult.Rejected(
+                    CodexSecurityStage.PackageIdentity,
+                    CodexSecurityFailureCode.PackageDiscoveryFailed,
+                    "The reviewed official Codex package could not be discovered.");
+                _injectionMonitor.CaptureSecurity(discoveryFailure);
+                throw new CodexSecurityValidationException(
+                    discoveryFailure,
+                    exception);
             }
 
-            var profile = compatibility.Profile!;
+            _injectionMonitor.CaptureCodexVersion(installedPackage.Descriptor.Version);
+            var security = CodexSecurityValidator.Validate(
+                installedPackage.Descriptor,
+                CodexRuntimeDescriptor.Current);
+            _injectionMonitor.CaptureSecurity(security);
+            if (!security.IsVerified)
+            {
+                throw new CodexSecurityValidationException(security);
+            }
+
+            var identity = security.Identity!;
             var mediaReference = new MediaReference
             {
                 MediaId = Guid.CreateVersion7(),
@@ -405,7 +427,6 @@ public sealed class WallpaperCoordinator :
             {
                 MediaPath = mediaPath,
                 MediaKind = pendingLease.Metadata.Kind,
-                LastCompatibilityProfileId = profile.Id,
             })
                 .AddRecentMediaPath(mediaPath)
                 .SnapshotForSave();
@@ -413,11 +434,15 @@ public sealed class WallpaperCoordinator :
                 .ConfigureAwait(false);
             settings = ProjectGlobalForLegacyEditor(persistedSettings);
 
+            _injectionMonitor.CaptureSecurity(CodexSecurityResult.InProgress(
+                CodexSecurityStage.ProcessIdentity,
+                "Validating the activated Codex process.",
+                identity));
             var processes = await _processSource
                 .GetProcessesAsync(cancellationToken)
                 .ConfigureAwait(false);
             var reviewedProcesses = processes
-                .Where(process => IsReviewedCodexProcess(process, profile))
+                .Where(process => IsReviewedCodexProcess(process, identity))
                 .ToArray();
             var activationProcessIsRunning = _launchedByThisCoordinator &&
                 _activationProcessId != 0 &&
@@ -443,6 +468,11 @@ public sealed class WallpaperCoordinator :
 
             if (!_launchedByThisCoordinator && reviewedProcesses.Length != 0)
             {
+                _injectionMonitor.CaptureSecurity(CodexSecurityResult.Rejected(
+                    CodexSecurityStage.ProcessIdentity,
+                    CodexSecurityFailureCode.ProcessIdentityMismatch,
+                    "A verified Codex process exists but was not launched by this runtime.",
+                    identity));
                 throw new CodexAlreadyRunningException();
             }
 
@@ -451,7 +481,7 @@ public sealed class WallpaperCoordinator :
                 if (!_launchedByThisCoordinator && !_injectionSession.IsActive)
                 {
                     Publish(WallpaperRuntimePhase.LaunchingCodex, "Launching the reviewed Codex MSIX app.");
-                    var activation = _activationManager.Activate(profile, RemoteDebuggingArguments);
+                    var activation = _activationManager.Activate(identity, RemoteDebuggingArguments);
                     _activationProcessId = activation.ProcessId;
                     _activationProcessStartTimeUtc = null;
                     _launchedByThisCoordinator = true;
@@ -459,14 +489,22 @@ public sealed class WallpaperCoordinator :
 
                 if (_endpoint is null || !_injectionSession.IsActive)
                 {
+                    _injectionMonitor.CaptureSecurity(CodexSecurityResult.InProgress(
+                        CodexSecurityStage.LoopbackEndpoint,
+                        "Validating the Codex loopback debugging endpoint.",
+                        identity));
                     Publish(
                         WallpaperRuntimePhase.DiscoveringEndpoint,
                         "Waiting for Codex to publish its loopback debugging endpoint.");
-                    _endpoint = await DiscoverSingleEndpointAsync(profile, cancellationToken)
+                    _endpoint = await DiscoverSingleEndpointAsync(identity, cancellationToken)
                         .ConfigureAwait(false);
                     _activationProcessStartTimeUtc = _endpoint.Candidate.StartTimeUtc;
                 }
 
+                _injectionMonitor.CaptureSecurity(CodexSecurityResult.InProgress(
+                    CodexSecurityStage.TargetValidation,
+                    "Validating the unique Codex work-page target.",
+                    identity));
                 Publish(WallpaperRuntimePhase.Applying, "Applying the wallpaper to the reviewed Codex page.");
                 var leaseToActivate = pendingLease ??
                     throw new InvalidOperationException("No validated media lease is available.");
@@ -478,6 +516,10 @@ public sealed class WallpaperCoordinator :
                 await _injectionSession
                     .ApplyAsync(_endpoint, injectionOptions, cancellationToken)
                     .ConfigureAwait(false);
+                _injectionMonitor.CaptureSecurity(CodexSecurityResult.Verified(
+                    identity,
+                    CodexSecurityStage.TargetValidation,
+                    "The package, process, endpoint and unique Codex target passed security validation."));
 
                 try
                 {
@@ -504,6 +546,8 @@ public sealed class WallpaperCoordinator :
             }
             catch (Exception operationException)
             {
+                CaptureTerminalSecurityResult(operationException, identity);
+                safetyCleanupAttempted = true;
                 try
                 {
                     await StopInjectedContentAndMediaAsync(CancellationToken.None)
@@ -522,30 +566,58 @@ public sealed class WallpaperCoordinator :
         }
         catch (OperationCanceledException exception) when (cancellationToken.IsCancellationRequested)
         {
+            CaptureTerminalSecurityResult(exception);
+            var safetyCleanupFailure = await TryStopAfterSecurityRejectionAsync(
+                    safetyCleanupAttempted)
+                .ConfigureAwait(false);
             Publish(WallpaperRuntimePhase.Faulted, "The wallpaper operation was cancelled.");
             var disposalFailure = await TryDisposeLeaseAsync(pendingLease).ConfigureAwait(false);
             pendingLease = null;
-            if (disposalFailure is not null)
+            if (safetyCleanupFailure is not null || disposalFailure is not null)
             {
+                var failures = new List<Exception> { exception };
+                if (safetyCleanupFailure is not null)
+                {
+                    failures.Add(safetyCleanupFailure);
+                }
+
+                if (disposalFailure is not null)
+                {
+                    failures.Add(disposalFailure);
+                }
+
                 throw new AggregateException(
-                    "The wallpaper operation was cancelled and its pending media lease could not be released.",
-                    exception,
-                    disposalFailure);
+                    "The wallpaper operation was cancelled and one or more safety cleanup steps failed.",
+                    failures);
             }
 
             throw;
         }
         catch (Exception exception)
         {
+            CaptureTerminalSecurityResult(exception);
+            var safetyCleanupFailure = await TryStopAfterSecurityRejectionAsync(
+                    safetyCleanupAttempted)
+                .ConfigureAwait(false);
             Publish(WallpaperRuntimePhase.Faulted, exception.Message);
             var disposalFailure = await TryDisposeLeaseAsync(pendingLease).ConfigureAwait(false);
             pendingLease = null;
-            if (disposalFailure is not null)
+            if (safetyCleanupFailure is not null || disposalFailure is not null)
             {
+                var failures = new List<Exception> { exception };
+                if (safetyCleanupFailure is not null)
+                {
+                    failures.Add(safetyCleanupFailure);
+                }
+
+                if (disposalFailure is not null)
+                {
+                    failures.Add(disposalFailure);
+                }
+
                 throw new AggregateException(
-                    "The wallpaper operation and pending media lease cleanup both failed.",
-                    exception,
-                    disposalFailure);
+                    "The wallpaper operation and one or more safety cleanup steps failed.",
+                    failures);
             }
 
             throw;
@@ -590,7 +662,6 @@ public sealed class WallpaperCoordinator :
         await _operationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            _injectionMonitor.ResetCapabilities();
             Publish(WallpaperRuntimePhase.Stopping, "Removing owned wallpaper content.");
             await StopInjectedContentAndMediaAsync(cancellationToken).ConfigureAwait(false);
             Publish(WallpaperRuntimePhase.Idle, "The official Codex background has been restored.");
@@ -724,7 +795,6 @@ public sealed class WallpaperCoordinator :
         var updated = SettingsV1Projection.ApplyGlobal(current, globalSettings) with
         {
             AcceptedCdpRisk = globalSettings.AcceptedCdpRisk,
-            LastCompatibilityProfileId = globalSettings.LastCompatibilityProfileId,
         };
         var saved = await _settingsRepository
             .SaveAsync(updated, cancellationToken)
@@ -755,19 +825,28 @@ public sealed class WallpaperCoordinator :
     }
 
     private async Task<VerifiedCdpEndpoint> DiscoverSingleEndpointAsync(
-        CodexCompatibilityProfile profile,
+        VerifiedCodexIdentity identity,
         CancellationToken cancellationToken)
     {
         using var timeoutCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeoutCancellation.CancelAfter(_options.DiscoveryTimeout);
+        (CodexSecurityStage Stage, CodexSecurityFailureCode FailureCode)?
+            lastDeterministicRejection = null;
 
         try
         {
             while (true)
             {
                 var result = await _endpointDiscovery
-                    .DiscoverAsync(profile, timeoutCancellation.Token)
+                    .DiscoverAsync(identity, timeoutCancellation.Token)
                     .ConfigureAwait(false);
+                var deterministicRejection = SelectDeterministicDiscoveryRejection(
+                    result.Rejections);
+                if (deterministicRejection is not null)
+                {
+                    lastDeterministicRejection = deterministicRejection;
+                }
+
                 var activatedMatches = result.Endpoints
                     .Where(endpoint =>
                         endpoint.Candidate.ProcessId == _activationProcessId &&
@@ -790,9 +869,67 @@ public sealed class WallpaperCoordinator :
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            throw new CdpEndpointTimeoutException(_options.DiscoveryTimeout);
+            throw lastDeterministicRejection is { } rejection
+                ? new CdpEndpointTimeoutException(
+                    _options.DiscoveryTimeout,
+                    rejection.Stage,
+                    rejection.FailureCode)
+                : new CdpEndpointTimeoutException(_options.DiscoveryTimeout);
         }
     }
+
+    private (CodexSecurityStage Stage, CodexSecurityFailureCode FailureCode)?
+        SelectDeterministicDiscoveryRejection(
+            IReadOnlyList<CdpEndpointProbe> rejections)
+    {
+        ArgumentNullException.ThrowIfNull(rejections);
+        // Prefer the rejection that reached the furthest security boundary. The secondary
+        // typed-code ordering keeps the result deterministic when several ports fail at the
+        // same boundary; free-form probe details never participate or leave the process.
+        var mapped = rejections
+            .Where(probe =>
+                probe is not null &&
+                probe.Candidate.ProcessId == _activationProcessId &&
+                (_activationProcessStartTimeUtc is null ||
+                 probe.Candidate.StartTimeUtc == _activationProcessStartTimeUtc))
+            .Select(probe => MapDiscoveryRejection(probe.Rejection))
+            .Where(rejection => rejection is not null)
+            .Select(rejection => rejection!.Value)
+            .OrderByDescending(rejection => rejection.Stage)
+            .ThenByDescending(rejection => rejection.FailureCode)
+            .ToArray();
+        return mapped.Length == 0 ? null : mapped[0];
+    }
+
+    private static (CodexSecurityStage Stage, CodexSecurityFailureCode FailureCode)?
+        MapDiscoveryRejection(CdpEndpointRejection rejection) => rejection switch
+        {
+            CdpEndpointRejection.NonLoopbackEndpoint => (
+                CodexSecurityStage.LoopbackEndpoint,
+                CodexSecurityFailureCode.NonLoopbackEndpoint),
+            CdpEndpointRejection.ProcessIdentityMismatch => (
+                CodexSecurityStage.ProcessIdentity,
+                CodexSecurityFailureCode.ProcessIdentityMismatch),
+            CdpEndpointRejection.Unreachable => (
+                CodexSecurityStage.LoopbackEndpoint,
+                CodexSecurityFailureCode.EndpointUnreachable),
+            CdpEndpointRejection.MalformedResponse => (
+                CodexSecurityStage.BrowserHandshake,
+                CodexSecurityFailureCode.MalformedCdpResponse),
+            CdpEndpointRejection.UnexpectedBrowser => (
+                CodexSecurityStage.BrowserHandshake,
+                CodexSecurityFailureCode.UnexpectedBrowser),
+            CdpEndpointRejection.BrowserSocketMismatch => (
+                CodexSecurityStage.BrowserHandshake,
+                CodexSecurityFailureCode.BrowserSocketMismatch),
+            CdpEndpointRejection.NoCodexTarget => (
+                CodexSecurityStage.TargetValidation,
+                CodexSecurityFailureCode.NoCodexTarget),
+            CdpEndpointRejection.TargetSocketMismatch => (
+                CodexSecurityStage.TargetValidation,
+                CodexSecurityFailureCode.TargetSocketMismatch),
+            _ => null,
+        };
 
     private async Task StopInjectedContentAndMediaAsync(CancellationToken cancellationToken)
     {
@@ -823,13 +960,35 @@ public sealed class WallpaperCoordinator :
         ThrowCollectedExceptions("Wallpaper cleanup failed.", failures);
     }
 
+    private async Task<Exception?> TryStopAfterSecurityRejectionAsync(
+        bool cleanupAlreadyAttempted)
+    {
+        if (cleanupAlreadyAttempted ||
+            _injectionMonitor.Compatibility.Security.Status !=
+                CodexSecurityStatus.Rejected)
+        {
+            return null;
+        }
+
+        try
+        {
+            await StopInjectedContentAndMediaAsync(CancellationToken.None)
+                .ConfigureAwait(false);
+            return null;
+        }
+        catch (Exception exception)
+        {
+            return exception;
+        }
+    }
+
     private static bool IsReviewedCodexProcess(
         CodexProcessSnapshot process,
-        CodexCompatibilityProfile profile) =>
+        VerifiedCodexIdentity identity) =>
         process.ProcessId > 0 &&
-        profile.IsKnownExecutable(process.ExecutableName) &&
-        string.Equals(process.PackageFamilyName, profile.PackageFamilyName, StringComparison.Ordinal) &&
-        string.Equals(process.PackageFullName, profile.PackageFullName, StringComparison.Ordinal) &&
+        identity.IsKnownExecutable(process.ExecutableName) &&
+        string.Equals(process.PackageFamilyName, identity.PackageFamilyName, StringComparison.Ordinal) &&
+        string.Equals(process.PackageFullName, identity.PackageFullName, StringComparison.Ordinal) &&
         process.StartTimeUtc != default &&
         process.SessionId == WindowsCodexProcessSnapshotSource.CurrentSessionId;
 
@@ -844,6 +1003,16 @@ public sealed class WallpaperCoordinator :
                 !_injectionMonitor.IsActiveGeneration(generation))
             {
                 return;
+            }
+
+            var security = _injectionMonitor.Compatibility.Security;
+            if (security.Identity is { } identity)
+            {
+                _injectionMonitor.CaptureSecurity(CodexSecurityResult.Rejected(
+                    CodexSecurityStage.TargetValidation,
+                    CodexSecurityFailureCode.TargetRevalidationFailed,
+                    "The active Codex target or debugging connection failed revalidation.",
+                    identity));
             }
 
             try
@@ -936,6 +1105,100 @@ public sealed class WallpaperCoordinator :
         }
     }
 
+    private void CaptureTerminalSecurityResult(
+        Exception exception,
+        VerifiedCodexIdentity? identity = null)
+    {
+        ArgumentNullException.ThrowIfNull(exception);
+
+        var currentSecurity = _injectionMonitor.Compatibility.Security;
+        // Already-terminal results are retained. This also prevents failures after target
+        // validation (for example, transferring the validated lease into the playback pool)
+        // from rewriting successful security evidence.
+        if (currentSecurity.Status != CodexSecurityStatus.InProgress)
+        {
+            return;
+        }
+
+        identity ??= currentSecurity.Identity;
+        if (identity is null)
+        {
+            return;
+        }
+
+        var result = exception switch
+        {
+            OperationCanceledException => CodexSecurityResult.Rejected(
+                currentSecurity.Stage,
+                CodexSecurityFailureCode.ValidationCanceled,
+                "Security validation was canceled before the current stage completed.",
+                identity),
+            AmbiguousCdpEndpointException => CodexSecurityResult.Rejected(
+                CodexSecurityStage.LoopbackEndpoint,
+                CodexSecurityFailureCode.AmbiguousEndpoint,
+                "More than one verified Codex loopback endpoint was discovered.",
+                identity),
+            CdpEndpointTimeoutException timeoutException => CodexSecurityResult.Rejected(
+                timeoutException.SecurityStage,
+                timeoutException.FailureCode,
+                timeoutException.FailureCode ==
+                    CodexSecurityFailureCode.EndpointDiscoveryTimedOut
+                    ? "Codex did not publish one verified loopback endpoint before the timeout."
+                    : "Codex endpoint discovery ended with a typed security rejection.",
+                identity),
+            WallpaperBrowserHandshakeException => CodexSecurityResult.Rejected(
+                CodexSecurityStage.BrowserHandshake,
+                CodexSecurityFailureCode.EndpointUnreachable,
+                "The verified Codex browser WebSocket could not be connected.",
+                identity),
+            WallpaperTargetAmbiguityException => CodexSecurityResult.Rejected(
+                CodexSecurityStage.TargetValidation,
+                CodexSecurityFailureCode.AmbiguousTarget,
+                "More than one verified Codex work-page target was present.",
+                identity),
+            FinalPageApplyTimeoutException or
+            WallpaperPresentationContractException or
+            WallpaperMediaLoadException =>
+                CodexSecurityResult.Verified(
+                    identity,
+                    CodexSecurityStage.TargetValidation,
+                    "The unique Codex target passed security validation."),
+            WallpaperInjectionException => CodexSecurityResult.Rejected(
+                CodexSecurityStage.TargetValidation,
+                CodexSecurityFailureCode.NoVerifiedTarget,
+                "The verified endpoint did not expose one usable Codex work-page target.",
+                identity),
+            _ => RejectAtCurrentSecurityStage(identity),
+        };
+
+        _injectionMonitor.CaptureSecurity(result);
+    }
+
+    private CodexSecurityResult RejectAtCurrentSecurityStage(
+        VerifiedCodexIdentity identity)
+    {
+        var stage = _injectionMonitor.Compatibility.Security.Stage;
+        return stage switch
+        {
+            CodexSecurityStage.LoopbackEndpoint or CodexSecurityStage.BrowserHandshake =>
+                CodexSecurityResult.Rejected(
+                    stage,
+                    CodexSecurityFailureCode.EndpointUnreachable,
+                    "The verified Codex debugging endpoint could not be used.",
+                    identity),
+            CodexSecurityStage.TargetValidation => CodexSecurityResult.Rejected(
+                stage,
+                CodexSecurityFailureCode.TargetRevalidationFailed,
+                "The Codex target could not be revalidated.",
+                identity),
+            _ => CodexSecurityResult.Rejected(
+                CodexSecurityStage.ProcessIdentity,
+                CodexSecurityFailureCode.NoVerifiedProcess,
+                "The activated Codex process could not be verified.",
+                identity),
+        };
+    }
+
     private void Publish(WallpaperRuntimePhase phase, string detail)
     {
         var status = new WallpaperRuntimeStatusChangedEventArgs(phase, detail);
@@ -1003,15 +1266,17 @@ public sealed class CodexAlreadyRunningException : InvalidOperationException
     }
 }
 
-public sealed class UnsupportedCodexVersionException : InvalidOperationException
+public sealed class CodexSecurityValidationException : InvalidOperationException
 {
-    public UnsupportedCodexVersionException(CodexCompatibilityResult result)
-        : base(result?.Reason)
+    public CodexSecurityValidationException(
+        CodexSecurityResult result,
+        Exception? innerException = null)
+        : base(result?.Reason, innerException)
     {
         Result = result ?? throw new ArgumentNullException(nameof(result));
     }
 
-    public CodexCompatibilityResult Result { get; }
+    public CodexSecurityResult Result { get; }
 }
 
 public sealed class AmbiguousCdpEndpointException : InvalidOperationException
@@ -1025,9 +1290,38 @@ public sealed class AmbiguousCdpEndpointException : InvalidOperationException
 public sealed class CdpEndpointTimeoutException : TimeoutException
 {
     public CdpEndpointTimeoutException(TimeSpan timeout)
-        : base($"Codex did not publish a verified debugging endpoint within {timeout.TotalSeconds:N0} seconds.")
+        : this(
+            timeout,
+            CodexSecurityStage.LoopbackEndpoint,
+            CodexSecurityFailureCode.EndpointDiscoveryTimedOut)
     {
     }
+
+    public CdpEndpointTimeoutException(
+        TimeSpan timeout,
+        CodexSecurityStage securityStage,
+        CodexSecurityFailureCode failureCode)
+        : base($"Codex did not publish a verified debugging endpoint within {timeout.TotalSeconds:N0} seconds.")
+    {
+        if (!Enum.IsDefined(securityStage) ||
+            securityStage == CodexSecurityStage.None)
+        {
+            throw new ArgumentOutOfRangeException(nameof(securityStage));
+        }
+
+        if (!Enum.IsDefined(failureCode) ||
+            failureCode == CodexSecurityFailureCode.None)
+        {
+            throw new ArgumentOutOfRangeException(nameof(failureCode));
+        }
+
+        SecurityStage = securityStage;
+        FailureCode = failureCode;
+    }
+
+    public CodexSecurityStage SecurityStage { get; }
+
+    public CodexSecurityFailureCode FailureCode { get; }
 }
 
 public sealed class SettingsRecoveryRequiredException : InvalidOperationException

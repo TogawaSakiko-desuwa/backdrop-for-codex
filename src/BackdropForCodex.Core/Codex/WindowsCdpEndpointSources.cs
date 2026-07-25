@@ -32,22 +32,22 @@ public sealed class LoopbackTcpCdpEndpointCandidateSource : ICdpEndpointCandidat
     }
 
     public async ValueTask<IReadOnlyList<CdpEndpointCandidate>> GetCandidatesAsync(
-        CodexCompatibilityProfile profile,
+        VerifiedCodexIdentity identity,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(profile);
+        ArgumentNullException.ThrowIfNull(identity);
         var processes = await _processes.GetProcessesAsync(cancellationToken).ConfigureAwait(false);
         var trustedProcesses = processes
             .Where(process =>
                 process.ProcessId > 0 &&
-                profile.IsKnownExecutable(process.ExecutableName) &&
+                identity.IsKnownExecutable(process.ExecutableName) &&
                 string.Equals(
                     process.PackageFamilyName,
-                    profile.PackageFamilyName,
+                    identity.PackageFamilyName,
                     StringComparison.Ordinal) &&
                 string.Equals(
                     process.PackageFullName,
-                    profile.PackageFullName,
+                    identity.PackageFullName,
                     StringComparison.Ordinal) &&
                 process.StartTimeUtc != default &&
                 process.SessionId == WindowsCodexProcessSnapshotSource.CurrentSessionId)

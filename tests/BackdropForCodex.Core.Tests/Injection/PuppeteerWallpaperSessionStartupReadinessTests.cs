@@ -12,6 +12,12 @@ using Xunit;
 
 namespace BackdropForCodex.Core.Tests.Injection;
 
+[CollectionDefinition("Puppeteer Edge integration", DisableParallelization = true)]
+public sealed class PuppeteerEdgeIntegrationGroup
+{
+}
+
+[Collection("Puppeteer Edge integration")]
 public sealed class PuppeteerWallpaperSessionStartupReadinessTests
 {
     private const string OptInVariable = "BACKDROP_FOR_CODEX_RUN_STARTUP_RACE_TESTS";
@@ -37,6 +43,19 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
               <head>
                 <meta charset="utf-8">
                 <title>Codex</title>
+                <style>
+                  #initial-main-content-frame {
+                    border-top: 0.5px solid rgb(90 91 92);
+                  }
+                  #initial-main-content-top-fade {
+                    width: 64px;
+                    height: 16px;
+                    background-image: linear-gradient(
+                      to bottom,
+                      rgb(24 24 24),
+                      rgba(24, 24, 24, 0));
+                  }
+                </style>
                 <script>
                   addEventListener("DOMContentLoaded", () => {
                     const rejectWallpaperInputsUntil = performance.now() + 5500;
@@ -49,6 +68,17 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
                     setTimeout(() => {
                       const main = document.createElement("main");
                       main.textContent = "ready";
+                      const viewport = document.createElement("div");
+                      viewport.className = "app-shell-main-content-viewport";
+                      viewport.dataset.appShellMainContentLayout = "default";
+                      const frame = document.createElement("div");
+                      frame.id = "initial-main-content-frame";
+                      const topFade = document.createElement("div");
+                      topFade.id = "initial-main-content-top-fade";
+                      topFade.className = "app-shell-main-content-top-fade";
+                      topFade.dataset.appShellMainContentTopFade = "visible";
+                      frame.append(topFade);
+                      main.append(viewport, frame);
                       document.querySelector("#root").appendChild(main);
                     }, 4000);
                   });
@@ -57,6 +87,8 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
               <body>
                 <div id="root">
                   <header class="app-header-tint"></header>
+                  <div class="app-header-tint"
+                       data-app-shell-header-edge-scroll="false"></div>
                   <div data-home-ambient-suggestions></div>
                 </div>
               </body>
@@ -87,10 +119,25 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
 
             Assert.True(session.IsActive);
             Assert.Equal(
-                CompatibilityProbePackageKind.ReviewedBand,
-                endpoint.Profile.ProbePackageKind);
+                PresentationContractCatalog.CodexShellId,
+                session.PresentationContract.ActiveContractId);
+            Assert.Equal(
+                ContractMatchState.Matched,
+                session.PresentationContract.MatchState);
+            Assert.Equal(new Version(26, 721, 4000, 0), endpoint.Identity.PackageVersion);
             Assert.True(session.Capabilities.Glass.IsAvailable);
             Assert.True(session.Capabilities.Advanced.IsAvailable);
+
+            var evidenceScenarios = await ReadPresentationEvidenceScenariosAsync(endpoint);
+
+            Assert.Equal(
+                [
+                    true, false, // root/main/aside only
+                    true, false, // reviewed header only
+                    true, false, // reviewed main viewport only
+                    true, true,  // both reviewed shell anchors
+                ],
+                evidenceScenarios);
 
             var conversation = await AddConversationAndReadRenderingAsync(endpoint);
 
@@ -148,6 +195,19 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
             Assert.Equal("rgb(52, 53, 54)", headers.RightSlotBackground);
             Assert.Equal("rgb(71, 72, 73)", headers.CloseButtonBackground);
             Assert.Equal("auto", headers.CloseButtonPointerEvents);
+
+            var mainContent = shellSurfaces.MainContent;
+            Assert.Equal("none", mainContent.ColdStartVisibleBackgroundImage);
+            Assert.Equal("none", mainContent.VisibleBackgroundImage);
+            Assert.Equal("none", mainContent.FullBleedBackgroundImage);
+            Assert.Equal("none", mainContent.HiddenBackgroundImage);
+            Assert.Equal("none", mainContent.RebuiltBackgroundImage);
+            Assert.Contains(
+                "linear-gradient(",
+                mainContent.UnrelatedGradientBackgroundImage,
+                StringComparison.Ordinal);
+            Assert.Equal("0.5px", mainContent.FrameBorderTopWidthDeclaration);
+            Assert.NotEqual("0px", mainContent.FrameComputedBorderTopWidth);
             Assert.True(shellSurfaces.StyleElementPreserved);
         }
         finally
@@ -162,7 +222,107 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
             edge?.Dispose();
             if (Directory.Exists(testDirectory))
             {
-                Directory.Delete(testDirectory, recursive: true);
+                await DeleteDirectoryWithRetryAsync(testDirectory);
+            }
+        }
+    }
+
+    [IntegrationFact(OptInVariable)]
+    [Trait("Category", "Integration")]
+    public async Task ApplyAsync_SameEvidenceSelectsSameContractAcrossPackageVersions_WhenOptedIn()
+    {
+        var edgePath = FindEdge();
+        var port = ReserveLoopbackPort();
+        var testDirectory = Path.Combine(
+            Path.GetTempPath(),
+            "BackdropForCodex.VersionIndependentContracts",
+            Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(testDirectory);
+        var pagePath = Path.Combine(testDirectory, "index.html");
+        var mediaPath = Path.Combine(testDirectory, "wallpaper.png");
+        await File.WriteAllTextAsync(
+            pagePath,
+            """
+            <!doctype html>
+            <html>
+              <head>
+                <meta charset="utf-8">
+                <title>Codex</title>
+              </head>
+              <body>
+                <div id="root">
+                  <div class="app-header-tint"
+                       data-app-shell-header-edge-scroll="false"></div>
+                  <main>
+                    <div class="app-shell-main-content-viewport"
+                         data-app-shell-main-content-layout="default"></div>
+                  </main>
+                </div>
+              </body>
+            </html>
+            """);
+        await WriteTestPngAsync(mediaPath);
+
+        Process? edge = null;
+        await using var knownSession = new PuppeteerWallpaperSession();
+        await using var futureSession = new PuppeteerWallpaperSession();
+        try
+        {
+            edge = Process.Start(CreateEdgeStartInfo(edgePath, port, testDirectory, pagePath));
+            Assert.NotNull(edge);
+
+            var knownEndpoint = await WaitForEndpointAsync(
+                port,
+                pagePath,
+                TimeSpan.FromSeconds(8),
+                new Version(26, 721, 3996, 0));
+            var knownOptions = new WallpaperInjectionOptions(
+                generation: 1,
+                source: new Uri("http://127.0.0.1:9/known-wallpaper.png"),
+                localMediaPath: mediaPath,
+                expectedContentLength: new FileInfo(mediaPath).Length,
+                WallpaperMediaKind.Image);
+            await knownSession.ApplyAsync(knownEndpoint, knownOptions);
+            var knownContract = knownSession.PresentationContract;
+            var knownCapabilities = knownSession.Capabilities;
+            await knownSession.StopAsync();
+
+            var futureEndpoint = await WaitForEndpointAsync(
+                port,
+                pagePath,
+                TimeSpan.FromSeconds(8),
+                new Version(999, 4, 5, 6));
+            var futureOptions = new WallpaperInjectionOptions(
+                generation: 2,
+                source: new Uri("http://127.0.0.1:9/future-wallpaper.png"),
+                localMediaPath: mediaPath,
+                expectedContentLength: new FileInfo(mediaPath).Length,
+                WallpaperMediaKind.Image);
+            await futureSession.ApplyAsync(futureEndpoint, futureOptions);
+
+            Assert.NotEqual(
+                knownEndpoint.Identity.PackageVersion,
+                futureEndpoint.Identity.PackageVersion);
+            Assert.Equal(knownContract, futureSession.PresentationContract);
+            Assert.Equal(knownCapabilities, futureSession.Capabilities);
+            Assert.Equal(
+                PresentationContractCatalog.CodexShellId,
+                futureSession.PresentationContract.ActiveContractId);
+        }
+        finally
+        {
+            await knownSession.StopAsync();
+            await futureSession.StopAsync();
+            if (edge is { HasExited: false })
+            {
+                edge.Kill(entireProcessTree: true);
+                await edge.WaitForExitAsync();
+            }
+
+            edge?.Dispose();
+            if (Directory.Exists(testDirectory))
+            {
+                await DeleteDirectoryWithRetryAsync(testDirectory);
             }
         }
     }
@@ -209,9 +369,13 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
               </head>
               <body>
                 <div id="root">
+                  <div class="app-header-tint"
+                       data-app-shell-header-edge-scroll="false"></div>
                   <aside><nav>sidebar</nav></aside>
                   <main role="main"
                         style="--color-token-main-surface-primary: rgb(24 24 24)">
+                    <div class="app-shell-main-content-viewport"
+                         data-app-shell-main-content-layout="default"></div>
                     <div data-response-annotation-conversation="conversation"
                          data-response-annotation-target="message">assistant</div>
                     <div data-user-message-bubble="true">user</div>
@@ -271,6 +435,9 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
                 glass: glass);
 
             await session.ApplyAsync(endpoint, options);
+            Assert.Equal(
+                PresentationContractCatalog.CodexShellId,
+                session.PresentationContract.ActiveContractId);
 
             var rendered = await ReadOwnedImageFromIndependentConnectionAsync(
                 endpoint,
@@ -350,7 +517,7 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
             edge?.Dispose();
             if (Directory.Exists(testDirectory))
             {
-                Directory.Delete(testDirectory, recursive: true);
+                await DeleteDirectoryWithRetryAsync(testDirectory);
             }
         }
     }
@@ -525,6 +692,79 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
         }
     }
 
+    private static async Task<bool[]> ReadPresentationEvidenceScenariosAsync(
+        VerifiedCdpEndpoint endpoint)
+    {
+        var browser = await Puppeteer.ConnectAsync(new ConnectOptions
+        {
+            BrowserWSEndpoint = endpoint.BrowserWebSocketUri.AbsoluteUri,
+            DefaultViewport = null,
+            ProtocolTimeout = 5_000,
+            AcceptInsecureCerts = false,
+            NetworkEnabled = false,
+        });
+        try
+        {
+            var reviewedTarget = Assert.Single(endpoint.InjectableTargets);
+            var pages = await browser.PagesAsync(includeAll: true);
+            var page = Assert.Single(
+                pages,
+                candidate =>
+                    !candidate.IsClosed &&
+                    Uri.TryCreate(candidate.Url, UriKind.Absolute, out var candidateUri) &&
+                    VerifiedCodexPageSelector.IsSameReviewedDocument(
+                        candidateUri,
+                        reviewedTarget.Url));
+            var probe = PresentationEvidenceScriptBuilder.Build();
+
+            return await page.EvaluateExpressionAsync<bool[]>(
+                $$"""
+                (() => {
+                  const root = document.querySelector("#root");
+                  const header = root?.querySelector(
+                    ".app-header-tint[data-app-shell-header-edge-scroll]"
+                  );
+                  const main = root?.querySelector("main");
+                  const viewport =
+                    main?.querySelector(".app-shell-main-content-viewport");
+                  if (!root || !header || !main || !viewport) {
+                    throw new Error("Missing presentation evidence fixture anchors.");
+                  }
+
+                  const aside = document.createElement("aside");
+                  root.append(aside);
+                  const read = () => {
+                    const evidence = JSON.parse({{probe}});
+                    return [evidence.globalStructure, evidence.shellStructure];
+                  };
+                  const results = [];
+
+                  header.removeAttribute("data-app-shell-header-edge-scroll");
+                  viewport.classList.remove("app-shell-main-content-viewport");
+                  viewport.removeAttribute("data-app-shell-main-content-layout");
+                  results.push(...read());
+
+                  header.dataset.appShellHeaderEdgeScroll = "false";
+                  results.push(...read());
+
+                  header.removeAttribute("data-app-shell-header-edge-scroll");
+                  viewport.classList.add("app-shell-main-content-viewport");
+                  viewport.dataset.appShellMainContentLayout = "default";
+                  results.push(...read());
+
+                  header.dataset.appShellHeaderEdgeScroll = "false";
+                  results.push(...read());
+                  aside.remove();
+                  return results;
+                })()
+                """);
+        }
+        finally
+        {
+            browser.Disconnect();
+        }
+    }
+
     private static async Task<ShellSurfaceTransitionRendering>
         AddShellSurfacesAndReadRenderingAsync(VerifiedCdpEndpoint endpoint)
     {
@@ -580,6 +820,18 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
                       background-color: rgb(71 72 73);
                       pointer-events: auto;
                     }
+                    #main-content-frame {
+                      border-top: 0.5px solid rgb(90 91 92);
+                    }
+                    #main-content-top-fade,
+                    #unrelated-main-gradient {
+                      width: 64px;
+                      height: 16px;
+                      background-image: linear-gradient(
+                        to bottom,
+                        rgb(24 24 24),
+                        rgba(24, 24, 24, 0));
+                    }
                   `;
                   document.head.append(nativeStyles);
 
@@ -604,6 +856,21 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
                   rightHeaderCloseButton.textContent = "Close";
                   rightHeaderSlot.append(rightHeaderCloseButton);
                   edgeHeader.append(headerContext, rightHeaderSlot);
+
+                  const main = document.querySelector("main");
+                  if (!main) throw new Error("Missing fixture main element.");
+                  const mainContentFrame = document.createElement("div");
+                  mainContentFrame.id = "main-content-frame";
+                  const mainContentTopFade = document.createElement("div");
+                  mainContentTopFade.id = "main-content-top-fade";
+                  mainContentTopFade.className = "app-shell-main-content-top-fade";
+                  mainContentTopFade.dataset.appShellMainContentTopFade = "visible";
+                  const unrelatedMainGradient = document.createElement("div");
+                  unrelatedMainGradient.id = "unrelated-main-gradient";
+                  unrelatedMainGradient.className =
+                    "bg-gradient-to-b from-token-main-surface-primary";
+                  mainContentFrame.append(mainContentTopFade, unrelatedMainGradient);
+                  main.append(mainContentFrame);
 
                   const rightAside = document.createElement("aside");
                   rightAside.dataset.appShellFocusArea = "right-panel";
@@ -714,6 +981,44 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
                     closeButtonBackground: background(rightHeaderCloseButton),
                     closeButtonPointerEvents: style(rightHeaderCloseButton).pointerEvents
                   };
+                  const coldStartTopFade = document.querySelector(
+                    "#initial-main-content-top-fade"
+                  );
+                  if (!coldStartTopFade) {
+                    throw new Error("Missing cold-start top fade fixture.");
+                  }
+                  const coldStartVisibleBackgroundImage =
+                    style(coldStartTopFade).backgroundImage;
+                  const visibleBackgroundImage =
+                    style(mainContentTopFade).backgroundImage;
+                  mainContentTopFade.dataset.appShellMainContentTopFade = "full-bleed";
+                  await new Promise(resolve => requestAnimationFrame(resolve));
+                  const fullBleedBackgroundImage =
+                    style(mainContentTopFade).backgroundImage;
+                  mainContentTopFade.dataset.appShellMainContentTopFade = "hidden";
+                  await new Promise(resolve => requestAnimationFrame(resolve));
+                  const hiddenBackgroundImage =
+                    style(mainContentTopFade).backgroundImage;
+                  const rebuiltTopFade = mainContentTopFade.cloneNode(true);
+                  rebuiltTopFade.dataset.appShellMainContentTopFade = "visible";
+                  mainContentTopFade.replaceWith(rebuiltTopFade);
+                  await new Promise(resolve => requestAnimationFrame(resolve));
+                  const rebuiltBackgroundImage =
+                    style(rebuiltTopFade).backgroundImage;
+                  const mainContent = {
+                    coldStartVisibleBackgroundImage,
+                    visibleBackgroundImage,
+                    fullBleedBackgroundImage,
+                    hiddenBackgroundImage,
+                    rebuiltBackgroundImage,
+                    unrelatedGradientBackgroundImage:
+                      style(unrelatedMainGradient).backgroundImage,
+                    frameBorderTopWidthDeclaration: Array.from(nativeStyles.sheet.cssRules)
+                      .find(rule => rule.selectorText === "#main-content-frame")
+                      ?.style.borderTopWidth ?? "",
+                    frameComputedBorderTopWidth:
+                      style(mainContentFrame).borderTopWidth
+                  };
 
                   launcherContent.remove();
                   const tabpanel = document.createElement("div");
@@ -752,6 +1057,7 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
                     emptyLauncher,
                     populatedPanel,
                     headers,
+                    mainContent,
                     styleElementPreserved:
                       ownedStyle !== null &&
                       document.querySelector(
@@ -928,6 +1234,7 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
         EmptyLauncherRendering EmptyLauncher,
         PopulatedRightPanelRendering PopulatedPanel,
         HeaderSurfaceRendering Headers,
+        MainContentTopFadeRendering MainContent,
         bool StyleElementPreserved);
 
     private sealed record EmptyLauncherRendering(
@@ -971,6 +1278,16 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
         string CloseButtonBackground,
         string CloseButtonPointerEvents);
 
+    private sealed record MainContentTopFadeRendering(
+        string ColdStartVisibleBackgroundImage,
+        string VisibleBackgroundImage,
+        string FullBleedBackgroundImage,
+        string HiddenBackgroundImage,
+        string RebuiltBackgroundImage,
+        string UnrelatedGradientBackgroundImage,
+        string FrameBorderTopWidthDeclaration,
+        string FrameComputedBorderTopWidth);
+
     private static int ReserveLoopbackPort()
     {
         var listener = new TcpListener(IPAddress.Loopback, 0);
@@ -982,6 +1299,31 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
         finally
         {
             listener.Stop();
+        }
+    }
+
+    private static async Task DeleteDirectoryWithRetryAsync(string directory)
+    {
+        const int maximumAttempts = 100;
+        for (var attempt = 1; attempt <= maximumAttempts; attempt++)
+        {
+            try
+            {
+                Directory.Delete(directory, recursive: true);
+                return;
+            }
+            catch (IOException) when (attempt < maximumAttempts)
+            {
+                await Task.Delay(
+                    TimeSpan.FromMilliseconds(100),
+                    CancellationToken.None);
+            }
+            catch (UnauthorizedAccessException) when (attempt < maximumAttempts)
+            {
+                await Task.Delay(
+                    TimeSpan.FromMilliseconds(100),
+                    CancellationToken.None);
+            }
         }
     }
 
@@ -1073,8 +1415,9 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
                         browser,
                         browserWebSocketUri,
                         [new ClassifiedCdpTarget(target, CdpTargetClassification.CodexPage)],
-                        BackdropForCodex.Core.Tests.Codex.CodexCompatibilityTests.GetProfile(
-                            packageVersion ?? new Version(26, 721, 3996, 0)));
+                        BackdropForCodex.Core.Tests.Codex.CodexSecurityValidatorTests
+                            .GetIdentity(
+                                packageVersion ?? new Version(26, 721, 3996, 0)));
                 }
             }
             catch (HttpRequestException)

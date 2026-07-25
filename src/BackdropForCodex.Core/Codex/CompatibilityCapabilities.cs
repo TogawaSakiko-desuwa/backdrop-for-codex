@@ -7,15 +7,14 @@ namespace BackdropForCodex.Core.Codex;
 public enum CompatibilityCapabilityReasonCode
 {
     None = 0,
-    AvailableFromExactProbePackage,
-    AvailableFromGenericProbePackage,
-    DisabledByExactProbePackage,
+    AvailableFromGlobalBaseline,
+    AvailableFromPresentationContract,
     NotImplementedInCurrentRelease,
+    NoMatchingPresentationContract,
+    AmbiguousPresentationContract,
     StructuralProbeFailed,
     SecurityRejected,
     DisabledForGeneration,
-    AvailableFromReviewedBandProbePackage,
-    UnavailableForGenericProbePackage,
 }
 
 public sealed record CompatibilityCapability
@@ -41,33 +40,26 @@ public sealed record CompatibilityCapability
 
     public CompatibilityCapabilityReasonCode ReasonCode { get; }
 
-    internal static CompatibilityCapability Available(
-        CompatibilityProbePackageKind packageKind) => new(
-            true,
-            packageKind switch
-            {
-                CompatibilityProbePackageKind.Exact =>
-                    CompatibilityCapabilityReasonCode.AvailableFromExactProbePackage,
-                CompatibilityProbePackageKind.ReviewedBand =>
-                    CompatibilityCapabilityReasonCode.AvailableFromReviewedBandProbePackage,
-                CompatibilityProbePackageKind.Generic =>
-                    CompatibilityCapabilityReasonCode.AvailableFromGenericProbePackage,
-                _ => throw new ArgumentOutOfRangeException(nameof(packageKind)),
-            });
+    internal static CompatibilityCapability AvailableFromGlobalBaseline() => new(
+        true,
+        CompatibilityCapabilityReasonCode.AvailableFromGlobalBaseline);
+
+    internal static CompatibilityCapability AvailableFromPresentationContract() => new(
+        true,
+        CompatibilityCapabilityReasonCode.AvailableFromPresentationContract);
 
     internal static CompatibilityCapability Disabled(
         CompatibilityCapabilityReasonCode reasonCode) => new(false, reasonCode);
 
     private static bool IsAvailabilityReason(
         CompatibilityCapabilityReasonCode reasonCode) => reasonCode is
-        CompatibilityCapabilityReasonCode.AvailableFromExactProbePackage or
-        CompatibilityCapabilityReasonCode.AvailableFromReviewedBandProbePackage or
-        CompatibilityCapabilityReasonCode.AvailableFromGenericProbePackage;
+        CompatibilityCapabilityReasonCode.AvailableFromGlobalBaseline or
+        CompatibilityCapabilityReasonCode.AvailableFromPresentationContract;
 }
 
 /// <summary>
 /// Independently degradable presentation capabilities. Security acceptance is represented by
-/// <see cref="SecurityVerdict"/> and is deliberately not a capability.
+/// <see cref="CodexSecurityResult"/> and is deliberately not a capability.
 /// </summary>
 public sealed record CompatibilityCapabilities
 {
@@ -110,34 +102,6 @@ public sealed record CompatibilityCapabilities
 
     public bool CanInjectGlobalWallpaper => GlobalBackground.IsAvailable;
 
-    internal static CompatibilityCapabilities FromProbePackage(
-        CompatibilityProbePackageKind packageKind,
-        bool globalBackground,
-        bool regionRecognition,
-        bool glassStyle,
-        bool audio,
-        bool advancedSurfaces,
-        CompatibilityCapabilityReasonCode? unavailableReasonOverride = null)
-    {
-        var unavailableReason = unavailableReasonOverride ?? packageKind switch
-        {
-            CompatibilityProbePackageKind.Exact =>
-                CompatibilityCapabilityReasonCode.DisabledByExactProbePackage,
-            CompatibilityProbePackageKind.ReviewedBand =>
-                CompatibilityCapabilityReasonCode.StructuralProbeFailed,
-            CompatibilityProbePackageKind.Generic =>
-                CompatibilityCapabilityReasonCode.UnavailableForGenericProbePackage,
-            _ => throw new ArgumentOutOfRangeException(nameof(packageKind)),
-        };
-
-        return new CompatibilityCapabilities(
-            Create(globalBackground, packageKind, unavailableReason),
-            Create(regionRecognition, packageKind, unavailableReason),
-            Create(glassStyle, packageKind, unavailableReason),
-            Create(audio, packageKind, unavailableReason),
-            Create(advancedSurfaces, packageKind, unavailableReason));
-    }
-
     internal static CompatibilityCapabilities SecurityRejected() =>
         AllUnavailable(CompatibilityCapabilityReasonCode.SecurityRejected);
 
@@ -163,14 +127,6 @@ public sealed record CompatibilityCapabilities
             Downgrade(AdvancedSurfaces, observation.AdvancedSurfaces));
     }
 
-    private static CompatibilityCapability Create(
-        bool enabled,
-        CompatibilityProbePackageKind packageKind,
-        CompatibilityCapabilityReasonCode unavailableReason) =>
-        enabled
-            ? CompatibilityCapability.Available(packageKind)
-            : CompatibilityCapability.Disabled(unavailableReason);
-
     private static CompatibilityCapability Downgrade(
         CompatibilityCapability current,
         CompatibilityCapability observation)
@@ -187,11 +143,4 @@ public sealed record CompatibilityCapabilities
                     ? CompatibilityCapabilityReasonCode.DisabledForGeneration
                     : observation.ReasonCode);
     }
-}
-
-public enum CompatibilityProbePackageKind
-{
-    Exact = 0,
-    Generic,
-    ReviewedBand,
 }

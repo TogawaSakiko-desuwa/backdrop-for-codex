@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
+using BackdropForCodex.Core.Codex;
 using BackdropForCodex.Core.Injection;
 using Xunit;
 
@@ -275,6 +276,30 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
             SelectFixtureIds(fixture, composerFadeRule.Selectors));
     }
 
+    [Fact]
+    public void ReviewedMainContentSelectors_ClearOnlyTheNativeTopFade()
+    {
+        var styleSheet = ExtractGeneratedStyleSheet();
+        var forcedColorsNone = ExtractBlock(styleSheet, "@media (forced-colors: none)");
+        var rules = ParseLeafRules(forcedColorsNone);
+        var fixture = XDocument.Parse(CurrentMainContentTopFadeFixture);
+
+        var topFadeRule = Assert.Single(rules, IsReviewedMainContentTopFadeClearRule);
+
+        Assert.Equal(
+            [
+                CanonicalizeSelector(
+                    """
+                    body main
+                      .app-shell-main-content-top-fade[data-app-shell-main-content-top-fade]
+                    """),
+            ],
+            topFadeRule.Selectors);
+        Assert.Equal(
+            ["main-content-top-fade"],
+            SelectFixtureIds(fixture, topFadeRule.Selectors));
+    }
+
     private static bool IsReviewedRightPanelGlassRule(CssRule rule) =>
         rule.Declarations.Contains(
             "background-color: var(--codex-wallpaper-glass) !important",
@@ -381,6 +406,18 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
                     "[class~=\"via-token-main-surface-primary\"]",
                     StringComparison.Ordinal));
 
+    private static bool IsReviewedMainContentTopFadeClearRule(CssRule rule) =>
+        CanonicalizeWhitespace(rule.Declarations) ==
+        "background-image: none !important;" &&
+        rule.Selectors.Any(
+            selector =>
+                selector.Contains(
+                    ".app-shell-main-content-top-fade",
+                    StringComparison.Ordinal) &&
+                selector.Contains(
+                    "[data-app-shell-main-content-top-fade]",
+                    StringComparison.Ordinal));
+
     private static bool IsGeneralGlassRule(CssRule rule) =>
         rule.Declarations.Contains(
             "background-color: var(--codex-wallpaper-glass) !important",
@@ -399,9 +436,7 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
                 @"C:\Wallpapers\wallpaper.png",
                 1234,
                 WallpaperMediaKind.Image),
-            BackdropForCodex.Core.Tests.Codex.CodexCompatibilityTests.GetProfile(
-                    new Version(26, 721, 3996, 0))
-                .Capabilities);
+            PresentationContractCatalog.CreateFullySupportedCapabilities());
         const string StartMarker = "style.textContent = `";
         var start = script.IndexOf(StartMarker, StringComparison.Ordinal);
         Assert.True(start >= 0);
@@ -1125,6 +1160,28 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
                      data-fixture-id="outside-main" />
               </div>
             </aside>
+          </body>
+        </html>
+        """;
+
+    private const string CurrentMainContentTopFadeFixture =
+        """
+        <html class="electron-dark">
+          <body>
+            <main>
+              <div class="app-shell-main-content-top-fade"
+                   data-app-shell-main-content-top-fade="visible"
+                   data-fixture-id="main-content-top-fade" />
+              <div class="app-shell-main-content-top-fade"
+                   data-fixture-id="top-fade-without-state-attribute" />
+              <div data-app-shell-main-content-top-fade="visible"
+                   data-fixture-id="top-fade-without-class" />
+              <div class="bg-gradient-to-b from-token-main-surface-primary"
+                   data-fixture-id="unrelated-main-gradient" />
+            </main>
+            <div class="app-shell-main-content-top-fade"
+                 data-app-shell-main-content-top-fade="visible"
+                 data-fixture-id="outside-main-top-fade" />
           </body>
         </html>
         """;

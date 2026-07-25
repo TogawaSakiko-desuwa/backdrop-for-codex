@@ -19,7 +19,7 @@ public sealed class CdpEndpointDiscoveryTests
             new StubCandidateSource([candidate]),
             transport);
 
-        var result = await discovery.DiscoverAsync(CodexCompatibilityTests.GetProfile());
+        var result = await discovery.DiscoverAsync(CodexSecurityValidatorTests.GetIdentity());
 
         var endpoint = Assert.Single(result.Endpoints);
         Assert.Empty(result.Rejections);
@@ -28,14 +28,86 @@ public sealed class CdpEndpointDiscoveryTests
     }
 
     [Fact]
-    public async Task DiscoverAsync_VerifiesCurrentReviewedProfileEndToEnd()
+    public async Task DiscoverAsync_ExcludesAvatarOverlayFromInjectableTargets()
+    {
+        var candidate = Candidate("http://127.0.0.1:9222/");
+        var transport = new StubTransport(new Dictionary<string, string>
+        {
+            ["/json/version"] = VersionJson(9222),
+            ["/json/list"] = """
+                [
+                  {
+                    "id":"avatar-overlay",
+                    "type":"page",
+                    "title":"Codex",
+                    "url":"app://-/index.html?initialRoute=%2Favatar-overlay",
+                    "webSocketDebuggerUrl":"ws://127.0.0.1:9222/devtools/page/avatar-overlay"
+                  },
+                  {
+                    "id":"codex-page",
+                    "type":"page",
+                    "title":"Codex",
+                    "url":"app://-/index.html",
+                    "webSocketDebuggerUrl":"ws://127.0.0.1:9222/devtools/page/codex-page"
+                  }
+                ]
+                """,
+        });
+        var discovery = new CdpEndpointDiscovery(
+            new StubCandidateSource([candidate]),
+            transport);
+
+        var result = await discovery.DiscoverAsync(CodexSecurityValidatorTests.GetIdentity());
+
+        var endpoint = Assert.Single(result.Endpoints);
+        Assert.Empty(result.Rejections);
+        var injectable = Assert.Single(endpoint.InjectableTargets);
+        Assert.Equal("codex-page", injectable.Id);
+        Assert.Equal(
+            CdpTargetClassification.OtherPage,
+            Assert.Single(
+                endpoint.Targets,
+                target => target.Target.Id == "avatar-overlay").Classification);
+    }
+
+    [Fact]
+    public async Task DiscoverAsync_RejectsAvatarOverlayOnlyEndpoint()
+    {
+        var candidate = Candidate("http://127.0.0.1:9222/");
+        var transport = new StubTransport(new Dictionary<string, string>
+        {
+            ["/json/version"] = VersionJson(9222),
+            ["/json/list"] = """
+                [{
+                  "id":"avatar-overlay",
+                  "type":"page",
+                  "title":"Codex",
+                  "url":"app://-/index.html?initialRoute=%2Favatar-overlay",
+                  "webSocketDebuggerUrl":"ws://127.0.0.1:9222/devtools/page/avatar-overlay"
+                }]
+                """,
+        });
+        var discovery = new CdpEndpointDiscovery(
+            new StubCandidateSource([candidate]),
+            transport);
+
+        var result = await discovery.DiscoverAsync(CodexSecurityValidatorTests.GetIdentity());
+
+        Assert.Empty(result.Endpoints);
+        Assert.Equal(
+            CdpEndpointRejection.NoCodexTarget,
+            Assert.Single(result.Rejections).Rejection);
+    }
+
+    [Fact]
+    public async Task DiscoverAsync_VerifiesCurrentOfficialIdentityEndToEnd()
     {
         const string packageFullName =
             "OpenAI.Codex_26.721.3404.0_x64__2p2nqsd0c76g0";
         const string pageUrl =
             "file:///C:/Program%20Files/WindowsApps/" +
             "OpenAI.Codex_26.721.3404.0_x64__2p2nqsd0c76g0/app/index.html";
-        var profile = CodexCompatibilityTests.GetProfile(new Version(26, 721, 3404, 0));
+        var identity = CodexSecurityValidatorTests.GetIdentity(new Version(26, 721, 3404, 0));
         var candidate = Candidate("http://127.0.0.1:9222/", packageFullName);
         var transport = new StubTransport(new Dictionary<string, string>
         {
@@ -46,7 +118,7 @@ public sealed class CdpEndpointDiscoveryTests
             new StubCandidateSource([candidate]),
             transport);
 
-        var result = await discovery.DiscoverAsync(profile);
+        var result = await discovery.DiscoverAsync(identity);
 
         var endpoint = Assert.Single(result.Endpoints);
         Assert.Empty(result.Rejections);
@@ -62,7 +134,7 @@ public sealed class CdpEndpointDiscoveryTests
             new StubCandidateSource([Candidate("http://192.0.2.10:9222/")]),
             transport);
 
-        var result = await discovery.DiscoverAsync(CodexCompatibilityTests.GetProfile());
+        var result = await discovery.DiscoverAsync(CodexSecurityValidatorTests.GetIdentity());
 
         Assert.Empty(result.Endpoints);
         Assert.Equal(CdpEndpointRejection.NonLoopbackEndpoint, Assert.Single(result.Rejections).Rejection);
@@ -82,7 +154,7 @@ public sealed class CdpEndpointDiscoveryTests
             new StubCandidateSource([candidate]),
             transport);
 
-        var result = await discovery.DiscoverAsync(CodexCompatibilityTests.GetProfile());
+        var result = await discovery.DiscoverAsync(CodexSecurityValidatorTests.GetIdentity());
 
         Assert.Empty(result.Endpoints);
         Assert.Equal(CdpEndpointRejection.TargetSocketMismatch, Assert.Single(result.Rejections).Rejection);
@@ -109,7 +181,7 @@ public sealed class CdpEndpointDiscoveryTests
             new StubCandidateSource([candidate]),
             transport);
 
-        var result = await discovery.DiscoverAsync(CodexCompatibilityTests.GetProfile());
+        var result = await discovery.DiscoverAsync(CodexSecurityValidatorTests.GetIdentity());
 
         Assert.Empty(result.Endpoints);
         Assert.Equal(CdpEndpointRejection.NoCodexTarget, Assert.Single(result.Rejections).Rejection);
@@ -131,7 +203,7 @@ public sealed class CdpEndpointDiscoveryTests
             new StubCandidateSource([candidate]),
             transport);
 
-        var result = await discovery.DiscoverAsync(CodexCompatibilityTests.GetProfile());
+        var result = await discovery.DiscoverAsync(CodexSecurityValidatorTests.GetIdentity());
 
         Assert.Empty(result.Endpoints);
         Assert.Equal(CdpEndpointRejection.BrowserSocketMismatch, Assert.Single(result.Rejections).Rejection);
@@ -153,7 +225,7 @@ public sealed class CdpEndpointDiscoveryTests
             new StubCandidateSource([candidate]),
             transport);
 
-        var result = await discovery.DiscoverAsync(CodexCompatibilityTests.GetProfile());
+        var result = await discovery.DiscoverAsync(CodexSecurityValidatorTests.GetIdentity());
 
         Assert.Empty(result.Endpoints);
         Assert.Equal(CdpEndpointRejection.UnexpectedBrowser, Assert.Single(result.Rejections).Rejection);
@@ -175,7 +247,7 @@ public sealed class CdpEndpointDiscoveryTests
             new StubCandidateSource([candidate]),
             transport);
 
-        var result = await discovery.DiscoverAsync(CodexCompatibilityTests.GetProfile());
+        var result = await discovery.DiscoverAsync(CodexSecurityValidatorTests.GetIdentity());
 
         Assert.Empty(result.Endpoints);
         Assert.Equal(CdpEndpointRejection.TargetSocketMismatch, Assert.Single(result.Rejections).Rejection);
@@ -194,7 +266,7 @@ public sealed class CdpEndpointDiscoveryTests
             new StubCandidateSource([candidate]),
             transport);
 
-        var result = await discovery.DiscoverAsync(CodexCompatibilityTests.GetProfile());
+        var result = await discovery.DiscoverAsync(CodexSecurityValidatorTests.GetIdentity());
 
         Assert.Empty(result.Endpoints);
         Assert.Equal(CdpEndpointRejection.MalformedResponse, Assert.Single(result.Rejections).Rejection);
@@ -213,7 +285,7 @@ public sealed class CdpEndpointDiscoveryTests
             new RotatingCandidateSource([candidate], []),
             transport);
 
-        var result = await discovery.DiscoverAsync(CodexCompatibilityTests.GetProfile());
+        var result = await discovery.DiscoverAsync(CodexSecurityValidatorTests.GetIdentity());
 
         Assert.Empty(result.Endpoints);
         Assert.Equal(CdpEndpointRejection.ProcessIdentityMismatch, Assert.Single(result.Rejections).Rejection);
@@ -233,7 +305,7 @@ public sealed class CdpEndpointDiscoveryTests
             new RotatingCandidateSource([candidate], [replacement]),
             transport);
 
-        var result = await discovery.DiscoverAsync(CodexCompatibilityTests.GetProfile());
+        var result = await discovery.DiscoverAsync(CodexSecurityValidatorTests.GetIdentity());
 
         Assert.Empty(result.Endpoints);
         Assert.Equal(CdpEndpointRejection.ProcessIdentityMismatch, Assert.Single(result.Rejections).Rejection);
@@ -252,7 +324,7 @@ public sealed class CdpEndpointDiscoveryTests
             new StubCandidateSource([candidate]),
             transport);
 
-        var result = await discovery.DiscoverAsync(CodexCompatibilityTests.GetProfile());
+        var result = await discovery.DiscoverAsync(CodexSecurityValidatorTests.GetIdentity());
 
         Assert.Equal(CdpEndpointRejection.MalformedResponse, Assert.Single(result.Rejections).Rejection);
     }
@@ -262,8 +334,9 @@ public sealed class CdpEndpointDiscoveryTests
         string? packageFullName = null) => new(
         1234,
         "ChatGPT.exe",
-        CodexCompatibilityCatalog.OfficialPackageFamilyName,
-        packageFullName ?? CodexCompatibilityCatalog.SupportedPackageFullName,
+        CodexSecurityValidator.OfficialPackageFamilyName,
+        packageFullName ?? CodexSecurityValidatorTests.ExpectedPackageFullName(
+            CodexSecurityValidatorTests.ReferencePackageVersion),
         new DateTimeOffset(2026, 7, 22, 0, 0, 0, TimeSpan.Zero),
         WindowsCodexProcessSnapshotSource.CurrentSessionId,
         new Uri(baseUri));
@@ -292,10 +365,10 @@ public sealed class CdpEndpointDiscoveryTests
         : ICdpEndpointCandidateSource
     {
         public ValueTask<IReadOnlyList<CdpEndpointCandidate>> GetCandidatesAsync(
-            CodexCompatibilityProfile profile,
+            VerifiedCodexIdentity identity,
             CancellationToken cancellationToken = default)
         {
-            ArgumentNullException.ThrowIfNull(profile);
+            ArgumentNullException.ThrowIfNull(identity);
             cancellationToken.ThrowIfCancellationRequested();
             return ValueTask.FromResult(candidates);
         }
@@ -309,10 +382,10 @@ public sealed class CdpEndpointDiscoveryTests
         private int _callCount;
 
         public ValueTask<IReadOnlyList<CdpEndpointCandidate>> GetCandidatesAsync(
-            CodexCompatibilityProfile profile,
+            VerifiedCodexIdentity identity,
             CancellationToken cancellationToken = default)
         {
-            ArgumentNullException.ThrowIfNull(profile);
+            ArgumentNullException.ThrowIfNull(identity);
             cancellationToken.ThrowIfCancellationRequested();
             return ValueTask.FromResult(
                 Interlocked.Increment(ref _callCount) == 1 ? first : subsequent);

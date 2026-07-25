@@ -4,6 +4,8 @@ using BackdropForCodex.App.Services.Preferences;
 using BackdropForCodex.App.Services.Wallpaper;
 using BackdropForCodex.App.ViewModels;
 using BackdropForCodex.App.Models;
+using BackdropForCodex.Core.Codex;
+using BackdropForCodex.Core.Injection;
 using BackdropForCodex.Core.Media;
 using BackdropForCodex.Core.Runtime;
 using BackdropForCodex.Core.Settings;
@@ -14,6 +16,23 @@ namespace BackdropForCodex.Core.Tests.AppSupport;
 
 public sealed class MainWindowViewModelTests
 {
+    [Fact]
+    public void WallpaperCompatibility_ExposesCapabilitySourceSnapshot()
+    {
+        var compatibility = WallpaperCompatibilitySnapshot.NotEvaluated with
+        {
+            CodexVersion = new Version(26, 805, 14, 3),
+        };
+        var wallpaper = new FakeCapabilityWallpaperApplicationService(
+            SettingsV1.CreateDefault(),
+            compatibility);
+        using var viewModel = CreateViewModel(
+            wallpaper,
+            new FakeAppPreferencesStore());
+
+        Assert.Same(compatibility, viewModel.WallpaperCompatibility);
+    }
+
     [Fact]
     public async Task ComposedSettingsStateOwnsConfigurationPreferencesAndRecents()
     {
@@ -522,7 +541,7 @@ public sealed class MainWindowViewModelTests
         return path;
     }
 
-    private sealed class FakeWallpaperApplicationService :
+    private class FakeWallpaperApplicationService :
         IWallpaperApplicationService,
         IWallpaperSettingsRecoveryService
     {
@@ -656,6 +675,30 @@ public sealed class MainWindowViewModelTests
             throw new NotSupportedException();
 
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+
+    private sealed class FakeCapabilityWallpaperApplicationService :
+        FakeWallpaperApplicationService,
+        IWallpaperApplicationCapabilitySource
+    {
+        public FakeCapabilityWallpaperApplicationService(
+            SettingsV1 persistedSettings,
+            WallpaperCompatibilitySnapshot compatibility)
+            : base(persistedSettings)
+        {
+            Compatibility = compatibility;
+        }
+
+        public event EventHandler<WallpaperInjectionCapabilitiesChangedEventArgs>?
+            CapabilitiesChanged
+        {
+            add { }
+            remove { }
+        }
+
+        public CompatibilityCapabilities Capabilities => Compatibility.Capabilities;
+
+        public WallpaperCompatibilitySnapshot Compatibility { get; }
     }
 
     private sealed class FakeAppPreferencesStore : IAppPreferencesStore

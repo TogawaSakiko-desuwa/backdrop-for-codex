@@ -79,7 +79,9 @@ internal static class SettingsV1Migrator
                     [SemanticRegion.Global] = profile.ProfileId,
                 }),
             AcceptedCdpRisk = version1.AcceptedCdpRisk,
+#pragma warning disable CS0618 // Preserve the deprecated persisted value during V1 migration.
             LastCompatibilityProfileId = version1.LastCompatibilityProfileId,
+#pragma warning restore CS0618
         }.Snapshot();
     }
 }

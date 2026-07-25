@@ -25,7 +25,7 @@ public enum UserFacingErrorCode
     RiskAcknowledgementRequired,
     CodexAlreadyRunning,
     CodexUnavailable,
-    CodexVersionUnsupported,
+    CodexSecurityRejected,
     EndpointAmbiguous,
     EndpointTimedOut,
     MediaLoadFailed,
@@ -122,9 +122,9 @@ public sealed class UserFacingErrorMapper : IUserFacingErrorMapper
             return UserFacingErrorCode.CodexAlreadyRunning;
         }
 
-        if (exception is UnsupportedCodexVersionException)
+        if (exception is CodexSecurityValidationException)
         {
-            return UserFacingErrorCode.CodexVersionUnsupported;
+            return UserFacingErrorCode.CodexSecurityRejected;
         }
 
         if (exception is CodexPackageDiscoveryException)
@@ -242,7 +242,7 @@ public sealed class UserFacingErrorMapper : IUserFacingErrorMapper
         UserFacingErrorCode.RiskAcknowledgementRequired => true,
         UserFacingErrorCode.CodexAlreadyRunning => true,
         UserFacingErrorCode.CodexUnavailable => true,
-        UserFacingErrorCode.CodexVersionUnsupported => false,
+        UserFacingErrorCode.CodexSecurityRejected => false,
         UserFacingErrorCode.EndpointAmbiguous => true,
         UserFacingErrorCode.EndpointTimedOut => true,
         UserFacingErrorCode.MediaLoadFailed => true,

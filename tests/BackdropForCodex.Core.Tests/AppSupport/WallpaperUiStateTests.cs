@@ -85,7 +85,6 @@ public sealed class WallpaperUiStateTests
         var saved = active with
         {
             AcceptedCdpRisk = false,
-            LastCompatibilityProfileId = "updated-profile",
             RecentMediaPaths = [mediaPath],
         };
 
@@ -96,6 +95,28 @@ public sealed class WallpaperUiStateTests
                 .FromPersisted(saved)
                 .WithActive(active)
                 .IsSavedButNotActive);
+    }
+
+    [Fact]
+    public void ConfigurationComparisonIgnoresDeprecatedCompatibilityProfileMetadata()
+    {
+        var persisted = SettingsV1.CreateDefault();
+#pragma warning disable CS0618 // Exercise the deprecated persistence field's UI semantics.
+        var legacyMetadataChanged = persisted with
+        {
+            LastCompatibilityProfileId = "legacy-profile",
+        };
+#pragma warning restore CS0618
+
+        Assert.True(
+            WallpaperConfigurationState.AreEquivalent(
+                persisted,
+                legacyMetadataChanged));
+        Assert.False(
+            WallpaperConfigurationState
+                .FromPersisted(persisted)
+                .WithDraft(legacyMetadataChanged)
+                .HasUnsavedChanges);
     }
 
     [Fact]

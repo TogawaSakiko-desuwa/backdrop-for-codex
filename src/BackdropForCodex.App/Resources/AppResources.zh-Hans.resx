@@ -178,8 +178,8 @@
   <data name="Error_CodexAlreadyRunning_Recovery" xml:space="preserve"><value>请完全退出 Codex，然后再次应用壁纸。</value></data>
   <data name="Error_CodexUnavailable_Message" xml:space="preserve"><value>找不到经过审核的官方 Codex 安装。</value></data>
   <data name="Error_CodexUnavailable_Recovery" xml:space="preserve"><value>请安装或修复官方 Codex 应用后重试。</value></data>
-  <data name="Error_CodexVersionUnsupported_Message" xml:space="preserve"><value>Codex 包或运行环境未通过安全验证。</value></data>
-  <data name="Error_CodexVersionUnsupported_Recovery" xml:space="preserve"><value>请安装或修复可信的 Store/MSIX Codex 包，并确认正在使用 Windows 11 x64。</value></data>
+  <data name="Error_CodexSecurityRejected_Message" xml:space="preserve"><value>Codex 包或运行环境未通过安全验证。</value></data>
+  <data name="Error_CodexSecurityRejected_Recovery" xml:space="preserve"><value>请安装或修复可信的 Store/MSIX Codex 包，并确认正在使用 Windows 11 x64。</value></data>
   <data name="Error_EndpointAmbiguous_Message" xml:space="preserve"><value>发现了多个已验证的 Codex 本机调试端点。</value></data>
   <data name="Error_EndpointAmbiguous_Recovery" xml:space="preserve"><value>请退出所有 Codex 进程，然后只重试一次。</value></data>
   <data name="Error_EndpointTimedOut_Message" xml:space="preserve"><value>Codex 未能及时提供经过验证的本机窗口。</value></data>
@@ -200,7 +200,7 @@
   <data name="Error_AccessDenied_Recovery" xml:space="preserve"><value>请检查文件权限后重试。</value></data>
   <data name="Diagnostics_Title" xml:space="preserve"><value>诊断报告</value></data>
   <data name="Diagnostics_Description" xml:space="preserve"><value>创建仅含允许字段的本地报告，用于排查兼容性与运行故障。</value></data>
-  <data name="Diagnostics_Disclosure" xml:space="preserve"><value>报告仅包含应用、Windows、运行阶段和能力摘要；不包含媒体路径、文件名、页面标题、完整 URL、DOM 或聊天文本、设置 JSON 和稳定标识。</value></data>
+  <data name="Diagnostics_Disclosure" xml:space="preserve"><value>schema 2 报告仅包含允许的环境、运行与兼容摘要：Codex 版本、类型化安全结果、活动表现契约、匹配状态和逐项能力原因；不包含媒体路径或文件名、包身份、Publisher、进程/会话/端口、页面标题或 URL、DOM 或选择器、聊天或设置内容、原始异常、CDP Detail 和稳定标识。</value></data>
   <data name="Diagnostics_Export" xml:space="preserve"><value>导出诊断报告</value></data>
   <data name="Diagnostics_SaveTitle" xml:space="preserve"><value>保存诊断报告</value></data>
   <data name="Diagnostics_CompleteTitle" xml:space="preserve"><value>诊断报告已保存</value></data>

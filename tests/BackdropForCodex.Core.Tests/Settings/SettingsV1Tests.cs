@@ -32,7 +32,9 @@ public sealed class SettingsV1Tests
         Assert.Equal(0.60, SettingsV1.MaximumEffectiveOverlay);
         Assert.Empty(settings.RecentMediaPaths);
         Assert.False(settings.AcceptedCdpRisk);
+#pragma warning disable CS0618 // Verify the deprecated persistence field's default.
         Assert.Null(settings.LastCompatibilityProfileId);
+#pragma warning restore CS0618
         settings.Validate();
     }
 

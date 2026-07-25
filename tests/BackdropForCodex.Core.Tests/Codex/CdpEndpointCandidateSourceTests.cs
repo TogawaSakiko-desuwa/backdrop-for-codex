@@ -9,7 +9,7 @@ public sealed class CdpEndpointCandidateSourceTests
     [Fact]
     public async Task GetCandidatesAsync_UsesOnlyOfficialProcessesWithExplicitLoopbackPort()
     {
-        var profile = CodexCompatibilityTests.GetProfile();
+        var identity = CodexSecurityValidatorTests.GetIdentity();
         var processSource = new StubProcessSource(
         [
             Process(31, "ChatGPT.exe", "--remote-debugging-port=9222 --remote-debugging-address=127.0.0.1"),
@@ -21,7 +21,7 @@ public sealed class CdpEndpointCandidateSourceTests
         ]);
         var source = new CommandLineCdpEndpointCandidateSource(processSource);
 
-        var candidates = await source.GetCandidatesAsync(profile);
+        var candidates = await source.GetCandidatesAsync(identity);
 
         Assert.Collection(
             candidates,
@@ -48,7 +48,7 @@ public sealed class CdpEndpointCandidateSourceTests
         var source = new CommandLineCdpEndpointCandidateSource(
             new StubProcessSource([Process(42, "ChatGPT.exe", commandLine)]));
 
-        var candidates = await source.GetCandidatesAsync(CodexCompatibilityTests.GetProfile());
+        var candidates = await source.GetCandidatesAsync(CodexSecurityValidatorTests.GetIdentity());
 
         Assert.Empty(candidates);
     }
@@ -68,7 +68,7 @@ public sealed class CdpEndpointCandidateSourceTests
         var source = new LoopbackTcpCdpEndpointCandidateSource(processes, listeners);
 
         var candidate = Assert.Single(
-            await source.GetCandidatesAsync(CodexCompatibilityTests.GetProfile()));
+            await source.GetCandidatesAsync(CodexSecurityValidatorTests.GetIdentity()));
 
         Assert.Equal(new Uri("http://127.0.0.1:9222/"), candidate.BaseUri);
     }
@@ -77,22 +77,23 @@ public sealed class CdpEndpointCandidateSourceTests
     [InlineData("26.721.3404.0")]
     [InlineData("26.721.3996.0")]
     [InlineData("26.721.4000.0")]
-    public async Task TcpCandidateSource_UsesActualPackageFullNameForSelectedProfile(
+    public async Task TcpCandidateSource_UsesActualPackageFullNameForVerifiedIdentity(
         string version)
     {
-        var profile = CodexCompatibilityTests.GetProfile(Version.Parse(version));
+        var identity = CodexSecurityValidatorTests.GetIdentity(Version.Parse(version));
         var processes = new StubProcessSource(
         [
             Process(
                 51,
                 "ChatGPT.exe",
                 string.Empty,
-                packageFullName: CodexCompatibilityCatalog.SupportedPackageFullName),
+                packageFullName: CodexSecurityValidatorTests.ExpectedPackageFullName(
+                    CodexSecurityValidatorTests.ReferencePackageVersion)),
             Process(
                 52,
                 "ChatGPT.exe",
                 string.Empty,
-                packageFullName: profile.PackageFullName),
+                packageFullName: identity.PackageFullName),
         ]);
         var listeners = new StubListenerSource(
         [
@@ -101,7 +102,7 @@ public sealed class CdpEndpointCandidateSourceTests
         ]);
         var source = new LoopbackTcpCdpEndpointCandidateSource(processes, listeners);
 
-        var candidate = Assert.Single(await source.GetCandidatesAsync(profile));
+        var candidate = Assert.Single(await source.GetCandidatesAsync(identity));
 
         Assert.Equal(52, candidate.ProcessId);
         Assert.Equal(new Uri("http://127.0.0.1:9333/"), candidate.BaseUri);
@@ -120,7 +121,7 @@ public sealed class CdpEndpointCandidateSourceTests
                 "ChatGPT.exe",
                 $"{commandLine} --remote-debugging-address=127.0.0.1")]));
 
-        var candidates = await source.GetCandidatesAsync(CodexCompatibilityTests.GetProfile());
+        var candidates = await source.GetCandidatesAsync(CodexSecurityValidatorTests.GetIdentity());
 
         Assert.Empty(candidates);
     }
@@ -133,8 +134,9 @@ public sealed class CdpEndpointCandidateSourceTests
         string? packageFullName = null) => new(
         processId,
         executable,
-        family ?? CodexCompatibilityCatalog.OfficialPackageFamilyName,
-        packageFullName ?? CodexCompatibilityCatalog.SupportedPackageFullName,
+            family ?? CodexSecurityValidator.OfficialPackageFamilyName,
+            packageFullName ?? CodexSecurityValidatorTests.ExpectedPackageFullName(
+                CodexSecurityValidatorTests.ReferencePackageVersion),
         new DateTimeOffset(2026, 7, 22, 0, 0, 0, TimeSpan.Zero),
         WindowsCodexProcessSnapshotSource.CurrentSessionId,
         commandLine);

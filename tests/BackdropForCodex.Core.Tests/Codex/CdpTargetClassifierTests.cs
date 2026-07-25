@@ -5,7 +5,7 @@ namespace BackdropForCodex.Core.Tests.Codex;
 
 public sealed class CdpTargetClassifierTests
 {
-    private readonly CodexCompatibilityProfile _profile = CodexCompatibilityTests.GetProfile();
+    private readonly VerifiedCodexIdentity _identity = CodexSecurityValidatorTests.GetIdentity();
 
     [Theory]
     [InlineData("file:///C:/Program%20Files/WindowsApps/OpenAI.Codex_26.715.10079.0_x64__2p2nqsd0c76g0/app/index.html")]
@@ -24,11 +24,13 @@ public sealed class CdpTargetClassifierTests
     {
         var target = Target("page", "Codex", url);
 
-        Assert.Equal(CdpTargetClassification.CodexPage, CdpTargetClassifier.Classify(target, _profile));
+        Assert.Equal(
+            CdpTargetClassification.CodexPage,
+            CdpTargetClassifier.Classify(target, _identity));
     }
 
     [Fact]
-    public void Classify_AcceptsOnlyPackagedFilePageForMatchingReviewedProfile()
+    public void Classify_AcceptsOnlyPackagedFilePageForMatchingVerifiedIdentity()
     {
         const string legacyUrl =
             "file:///C:/Program%20Files/WindowsApps/" +
@@ -36,29 +38,34 @@ public sealed class CdpTargetClassifierTests
         const string currentUrl =
             "file:///C:/Program%20Files/WindowsApps/" +
             "OpenAI.Codex_26.721.3404.0_x64__2p2nqsd0c76g0/app/index.html";
-        var currentProfile = CodexCompatibilityTests.GetProfile(new Version(26, 721, 3404, 0));
+        var currentIdentity =
+            CodexSecurityValidatorTests.GetIdentity(new Version(26, 721, 3404, 0));
 
         Assert.Equal(
             CdpTargetClassification.CodexPage,
-            CdpTargetClassifier.Classify(Target("page", "Codex", legacyUrl), _profile));
+            CdpTargetClassifier.Classify(Target("page", "Codex", legacyUrl), _identity));
         Assert.Equal(
             CdpTargetClassification.OtherPage,
-            CdpTargetClassifier.Classify(Target("page", "Codex", currentUrl), _profile));
+            CdpTargetClassifier.Classify(Target("page", "Codex", currentUrl), _identity));
         Assert.Equal(
             CdpTargetClassification.CodexPage,
-            CdpTargetClassifier.Classify(Target("page", "Codex", currentUrl), currentProfile));
+            CdpTargetClassifier.Classify(
+                Target("page", "Codex", currentUrl),
+                currentIdentity));
         Assert.Equal(
             CdpTargetClassification.OtherPage,
-            CdpTargetClassifier.Classify(Target("page", "Codex", legacyUrl), currentProfile));
+            CdpTargetClassifier.Classify(
+                Target("page", "Codex", legacyUrl),
+                currentIdentity));
     }
 
     [Theory]
     [InlineData("26.721.3996.0")]
     [InlineData("26.721.4000.0")]
-    public void Classify_UsesActualPackageRootForExactAndReviewedBandProfiles(string version)
+    public void Classify_UsesActualPackageRootForAnyVerifiedVersion(string version)
     {
         var parsedVersion = Version.Parse(version);
-        var profile = CodexCompatibilityTests.GetProfile(parsedVersion);
+        var identity = CodexSecurityValidatorTests.GetIdentity(parsedVersion);
         var matchingUrl =
             $"file:///C:/Program%20Files/WindowsApps/" +
             $"OpenAI.Codex_{parsedVersion}_x64__2p2nqsd0c76g0/app/index.html";
@@ -70,32 +77,32 @@ public sealed class CdpTargetClassifierTests
             CdpTargetClassification.CodexPage,
             CdpTargetClassifier.Classify(
                 Target("page", "Codex", matchingUrl),
-                profile));
+                identity));
         Assert.Equal(
             CdpTargetClassification.OtherPage,
             CdpTargetClassifier.Classify(
                 Target("page", "Codex", olderPackageUrl),
-                profile));
+                identity));
     }
 
     [Fact]
     public void Classify_RejectsPackagedFilePageWithoutObservedPackageRoot()
     {
-        var version = CodexCompatibilityCatalog.SupportedPackageVersion;
+        var version = CodexSecurityValidatorTests.ReferencePackageVersion;
         var packageFullName =
             $"OpenAI.Codex_{version}_x64__2p2nqsd0c76g0";
-        var profileWithoutRoot = CodexCompatibilityCatalog.Evaluate(
+        var identityWithoutRoot = CodexSecurityValidator.Validate(
             new CodexPackageDescriptor(
-                CodexCompatibilityCatalog.OfficialPackageName,
-                CodexCompatibilityCatalog.OfficialPackageFamilyName,
+                CodexSecurityValidator.OfficialPackageName,
+                CodexSecurityValidator.OfficialPackageFamilyName,
                 version,
                 CodexPackageArchitecture.X64,
-                CodexCompatibilityCatalog.OfficialApplicationId,
+                CodexSecurityValidator.OfficialApplicationId,
                 packageFullName),
             new CodexRuntimeDescriptor(
                 IsWindows: true,
                 new Version(10, 0, 26100, 0),
-                CodexPackageArchitecture.X64)).Profile!;
+                CodexPackageArchitecture.X64)).Identity!;
         var target = Target(
             "page",
             "Codex",
@@ -103,14 +110,21 @@ public sealed class CdpTargetClassifierTests
 
         Assert.Equal(
             CdpTargetClassification.OtherPage,
-            CdpTargetClassifier.Classify(target, profileWithoutRoot));
+            CdpTargetClassifier.Classify(target, identityWithoutRoot));
     }
 
     [Theory]
     [InlineData("file:///C:/Users/Alice/Codex/index.html")]
+    [InlineData("file:///C:/Program%20Files/WindowsApps/OpenAI.Codex_26.715.10079.0_x64__2p2nqsd0c76g0/app/index.html?initialRoute=%2Favatar-overlay")]
     [InlineData("app://evil/index.html")]
     [InlineData("app://codex/auth/index.html")]
+    [InlineData("app://-/index.html?initialRoute=/avatar-overlay")]
+    [InlineData("app://-/index.html?initialRoute=%2Favatar-overlay")]
+    [InlineData("app://-/index.html?initialRoute=/home&initialRoute=%2Favatar-overlay")]
+    [InlineData("app://codex/index.html?initialRoute=%2Favatar-overlay")]
+    [InlineData("app://codex/index.html?%69nitialRoute=%2Favatar-overlay")]
     [InlineData("codex://evil/index.html")]
+    [InlineData("codex://desktop/index.html?initialRoute=%2Favatar-overlay")]
     [InlineData("http://127.0.0.2/app")]
     [InlineData("http://127.0.0.1/auth")]
     [InlineData("http://127.0.0.1:4100/app")]
@@ -134,7 +148,9 @@ public sealed class CdpTargetClassifierTests
     {
         var target = Target("page", "Codex", url);
 
-        Assert.Equal(CdpTargetClassification.OtherPage, CdpTargetClassifier.Classify(target, _profile));
+        Assert.Equal(
+            CdpTargetClassification.OtherPage,
+            CdpTargetClassifier.Classify(target, _identity));
     }
 
     [Theory]
@@ -149,7 +165,9 @@ public sealed class CdpTargetClassifierTests
         string url,
         CdpTargetClassification expected)
     {
-        Assert.Equal(expected, CdpTargetClassifier.Classify(Target(type, title, url), _profile));
+        Assert.Equal(
+            expected,
+            CdpTargetClassifier.Classify(Target(type, title, url), _identity));
     }
 
     private static CdpTargetDescriptor Target(string type, string title, string url) =>

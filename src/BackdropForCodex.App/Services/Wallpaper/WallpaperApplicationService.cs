@@ -43,6 +43,8 @@ public interface IWallpaperApplicationCapabilitySource
     event EventHandler<WallpaperInjectionCapabilitiesChangedEventArgs>? CapabilitiesChanged;
 
     CompatibilityCapabilities Capabilities { get; }
+
+    WallpaperCompatibilitySnapshot Compatibility { get; }
 }
 
 public interface IWallpaperSettingsRecoveryService
@@ -84,6 +86,8 @@ public sealed class WallpaperApplicationService :
     public bool IsPaused => _coordinator.IsPaused;
 
     public CompatibilityCapabilities Capabilities => _coordinator.Capabilities;
+
+    public WallpaperCompatibilitySnapshot Compatibility => _coordinator.Compatibility;
 
     public Task<SettingsV1> LoadSettingsAsync(CancellationToken cancellationToken = default) =>
         _coordinator.LoadSettingsAsync(cancellationToken);

@@ -327,7 +327,7 @@ public sealed class InjectionScriptBuilderTests
             script,
             StringComparison.Ordinal);
         Assert.DoesNotContain("body main button", script, StringComparison.Ordinal);
-        Assert.DoesNotContain("background-image", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("background-image", forcedColorsBlock, StringComparison.Ordinal);
     }
 
     [Fact]

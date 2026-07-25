@@ -19,7 +19,10 @@ public sealed class WallpaperCoordinatorTests
 
         Assert.True(coordinator.IsActive);
         Assert.Equal(MediaKind.Image, saved.MediaKind);
-        Assert.Equal(CodexCompatibilityCatalog.SupportedPackageVersion, fixture.Package.Descriptor.Version);
+        Assert.Equal(
+            BackdropForCodex.Core.Tests.Codex.CodexSecurityValidatorTests
+                .ReferencePackageVersion,
+            fixture.Package.Descriptor.Version);
         Assert.Equal(1, fixture.Activation.CallCount);
         Assert.Equal(WallpaperCoordinator.RemoteDebuggingArguments, fixture.Activation.Arguments);
         Assert.Equal(1, fixture.SourceProvider.AcquireCount);
@@ -35,46 +38,54 @@ public sealed class WallpaperCoordinatorTests
     }
 
     [Fact]
-    public async Task StartOrUpdateAsync_PersistsAndActivatesInstalled3996CompatibilityProfile()
+    public async Task StartOrUpdateAsync_PreservesLegacyMarkerAndActivatesInstalled3996Identity()
     {
         var fixture = new CoordinatorFixture(new Version(26, 721, 3996, 0));
+#pragma warning disable CS0618 // Explicit backward-compatible round-trip coverage.
+        fixture.SettingsRepository.Settings = fixture.SettingsRepository.Settings with
+        {
+            LastCompatibilityProfileId = "opaque-legacy-marker",
+        };
+#pragma warning restore CS0618
         await using var coordinator = fixture.CreateCoordinator();
 
         var saved = await coordinator.StartOrUpdateAsync(fixture.ValidSettings);
 
+#pragma warning disable CS0618 // Explicit backward-compatible round-trip coverage.
         Assert.Equal(
-            "openai-codex-26.721.3996.0-windows11-x64-v1",
+            "opaque-legacy-marker",
             saved.LastCompatibilityProfileId);
+#pragma warning restore CS0618
         Assert.Equal(
             "OpenAI.Codex_26.721.3996.0_x64__2p2nqsd0c76g0",
-            fixture.Activation.Profile?.PackageFullName);
+            fixture.Activation.Identity?.PackageFullName);
         Assert.Equal(
-            CompatibilityProbePackageKind.Exact,
-            fixture.Activation.Profile?.ProbePackageKind);
-        Assert.True(fixture.Activation.Profile?.Capabilities.Glass.IsAvailable);
-        Assert.True(fixture.Activation.Profile?.Capabilities.Advanced.IsAvailable);
+            PresentationContractCatalog.CodexShellId,
+            coordinator.Compatibility.Presentation.ActiveContractId);
+        Assert.True(coordinator.Compatibility.Capabilities.Glass.IsAvailable);
+        Assert.True(coordinator.Compatibility.Capabilities.Advanced.IsAvailable);
         Assert.Equal(fixture.Endpoint, fixture.Injection.LastEndpoint);
     }
 
     [Fact]
-    public async Task StartOrUpdateAsync_UsesReviewedBandForLater721Patch()
+    public async Task StartOrUpdateAsync_FutureVersionUsesTheSamePresentationContract()
     {
-        var fixture = new CoordinatorFixture(new Version(26, 721, 4000, 0));
+        var fixture = new CoordinatorFixture(new Version(999, 1, 2, 3));
         await using var coordinator = fixture.CreateCoordinator();
 
-        var saved = await coordinator.StartOrUpdateAsync(fixture.ValidSettings);
+        _ = await coordinator.StartOrUpdateAsync(fixture.ValidSettings);
 
         Assert.Equal(
-            "openai-codex-26.721-reviewed-band-windows11-x64-v1",
-            saved.LastCompatibilityProfileId);
+            new Version(999, 1, 2, 3),
+            fixture.Activation.Identity?.PackageVersion);
         Assert.Equal(
-            "OpenAI.Codex_26.721.4000.0_x64__2p2nqsd0c76g0",
-            fixture.Activation.Profile?.PackageFullName);
+            PresentationContractCatalog.CodexShellId,
+            coordinator.Compatibility.Presentation.ActiveContractId);
         Assert.Equal(
-            CompatibilityProbePackageKind.ReviewedBand,
-            fixture.Activation.Profile?.ProbePackageKind);
-        Assert.True(fixture.Activation.Profile?.Capabilities.Glass.IsAvailable);
-        Assert.True(fixture.Activation.Profile?.Capabilities.Advanced.IsAvailable);
+            ContractMatchState.Matched,
+            coordinator.Compatibility.Presentation.MatchState);
+        Assert.True(coordinator.Compatibility.Capabilities.Glass.IsAvailable);
+        Assert.True(coordinator.Compatibility.Capabilities.Advanced.IsAvailable);
         Assert.Equal(fixture.Endpoint, fixture.Injection.LastEndpoint);
     }
 
@@ -260,6 +271,77 @@ public sealed class WallpaperCoordinatorTests
         Assert.Equal(1, fixture.SourceProvider.DisposeCount);
         Assert.Equal(1, fixture.Injection.StopCount);
         Assert.False(coordinator.IsActive);
+        Assert.Equal(
+            CodexSecurityFailureCode.NoVerifiedTarget,
+            coordinator.Compatibility.Security.FailureCode);
+    }
+
+    [Fact]
+    public async Task StartOrUpdateAsync_PlaybackTransferFailureRetainsVerifiedSecurity()
+    {
+        var fixture = new CoordinatorFixture();
+        fixture.PlaybackPool.ActivateException =
+            new InvalidOperationException("playback transfer failed");
+        await using var coordinator = fixture.CreateCoordinator();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => coordinator.StartOrUpdateAsync(fixture.ValidSettings));
+
+        Assert.Equal(
+            CodexSecurityStatus.Verified,
+            coordinator.Compatibility.Security.Status);
+        Assert.Equal(
+            CodexSecurityStage.TargetValidation,
+            coordinator.Compatibility.Security.Stage);
+        Assert.Equal(1, fixture.Injection.StopCount);
+        Assert.Equal(1, fixture.PlaybackPool.ReleaseCount);
+        Assert.False(coordinator.IsActive);
+    }
+
+    [Fact]
+    public async Task StartOrUpdateAsync_BrowserHandshakeFailureHasTypedSecurityStage()
+    {
+        var fixture = new CoordinatorFixture();
+        fixture.Injection.ApplyException = new WallpaperBrowserHandshakeException(
+            "browser handshake failed",
+            new InvalidOperationException("socket closed"));
+        await using var coordinator = fixture.CreateCoordinator();
+
+        await Assert.ThrowsAsync<WallpaperBrowserHandshakeException>(
+            () => coordinator.StartOrUpdateAsync(fixture.ValidSettings));
+
+        Assert.Equal(
+            CodexSecurityStatus.Rejected,
+            coordinator.Compatibility.Security.Status);
+        Assert.Equal(
+            CodexSecurityStage.BrowserHandshake,
+            coordinator.Compatibility.Security.Stage);
+        Assert.Equal(
+            CodexSecurityFailureCode.EndpointUnreachable,
+            coordinator.Compatibility.Security.FailureCode);
+    }
+
+    [Fact]
+    public async Task StartOrUpdateAsync_FinalPageApplyDeadlineRetainsVerifiedTargetSecurity()
+    {
+        var fixture = new CoordinatorFixture();
+        fixture.Injection.ApplyException = new FinalPageApplyTimeoutException(
+            "final page apply timed out",
+            new TimeoutException());
+        await using var coordinator = fixture.CreateCoordinator();
+
+        await Assert.ThrowsAsync<FinalPageApplyTimeoutException>(
+            () => coordinator.StartOrUpdateAsync(fixture.ValidSettings));
+
+        Assert.Equal(
+            CodexSecurityStatus.Verified,
+            coordinator.Compatibility.Security.Status);
+        Assert.Equal(
+            CodexSecurityStage.TargetValidation,
+            coordinator.Compatibility.Security.Stage);
+        Assert.Equal(
+            CodexSecurityFailureCode.None,
+            coordinator.Compatibility.Security.FailureCode);
     }
 
     [Fact]
@@ -311,7 +393,7 @@ public sealed class WallpaperCoordinatorTests
             fixture.Endpoint.Browser,
             fixture.Endpoint.BrowserWebSocketUri,
             fixture.Endpoint.Targets,
-            fixture.Endpoint.Profile);
+            fixture.Endpoint.Identity);
         fixture.Discovery.Results.Clear();
         fixture.Discovery.Results.Enqueue(new CdpDiscoveryResult([foreignEndpoint], []));
         await using var coordinator = fixture.CreateCoordinator(
@@ -326,6 +408,53 @@ public sealed class WallpaperCoordinatorTests
 
         Assert.Equal(0, fixture.Injection.ApplyCount);
         Assert.Equal(1, fixture.Activation.CallCount);
+        Assert.Equal(
+            CodexSecurityFailureCode.EndpointDiscoveryTimedOut,
+            coordinator.Compatibility.Security.FailureCode);
+    }
+
+    [Theory]
+    [InlineData(
+        CdpEndpointRejection.NoCodexTarget,
+        CodexSecurityStage.TargetValidation,
+        CodexSecurityFailureCode.NoCodexTarget)]
+    [InlineData(
+        CdpEndpointRejection.TargetSocketMismatch,
+        CodexSecurityStage.TargetValidation,
+        CodexSecurityFailureCode.TargetSocketMismatch)]
+    public async Task StartOrUpdateAsync_PreservesDeterministicDiscoveryRejectionAtTimeout(
+        CdpEndpointRejection endpointRejection,
+        CodexSecurityStage expectedStage,
+        CodexSecurityFailureCode expectedFailureCode)
+    {
+        var fixture = new CoordinatorFixture();
+        fixture.Discovery.Results.Clear();
+        fixture.Discovery.Results.Enqueue(new CdpDiscoveryResult(
+            [],
+            [
+                new CdpEndpointProbe(
+                    fixture.Endpoint.Candidate,
+                    endpointRejection,
+                    @"sensitive C:\Users\person\wallpaper.png https://example.invalid/private"),
+            ]));
+        await using var coordinator = fixture.CreateCoordinator(
+            new WallpaperCoordinatorOptions
+            {
+                DiscoveryTimeout = TimeSpan.FromMilliseconds(25),
+                DiscoveryInterval = TimeSpan.FromMilliseconds(1),
+            });
+
+        await Assert.ThrowsAsync<CdpEndpointTimeoutException>(
+            () => coordinator.StartOrUpdateAsync(fixture.ValidSettings));
+
+        Assert.Equal(CodexSecurityStatus.Rejected, coordinator.Compatibility.Security.Status);
+        Assert.Equal(expectedStage, coordinator.Compatibility.Security.Stage);
+        Assert.Equal(expectedFailureCode, coordinator.Compatibility.Security.FailureCode);
+        Assert.DoesNotContain(
+            "sensitive",
+            coordinator.Compatibility.Security.Reason,
+            StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(0, fixture.Injection.ApplyCount);
     }
 
     [Fact]
@@ -446,6 +575,14 @@ public sealed class WallpaperCoordinatorTests
         Assert.Null(fixture.PlaybackPool.ActiveLease);
         Assert.Equal(1, fixture.PlaybackPool.ReleaseCount);
         Assert.Equal(WallpaperRuntimePhase.Faulted, coordinator.Status.Phase);
+        Assert.Equal(
+            CodexSecurityFailureCode.TargetRevalidationFailed,
+            coordinator.Compatibility.Security.FailureCode);
+        Assert.All(
+            GetCapabilities(coordinator.Capabilities),
+            capability => Assert.Equal(
+                CompatibilityCapabilityReasonCode.SecurityRejected,
+                capability.ReasonCode));
     }
 
     [Fact]
@@ -504,11 +641,11 @@ public sealed class WallpaperCoordinatorTests
                 "Contoso.Codex_unreviewed",
                 fixture.Package.Descriptor.Version,
                 CodexPackageArchitecture.X64,
-                CodexCompatibilityCatalog.OfficialApplicationId),
+                CodexSecurityValidator.OfficialApplicationId),
         };
         await using var coordinator = fixture.CreateCoordinator();
 
-        await Assert.ThrowsAsync<UnsupportedCodexVersionException>(
+        await Assert.ThrowsAsync<CodexSecurityValidationException>(
             () => coordinator.StartOrUpdateAsync(fixture.ValidSettings));
 
         Assert.All(
@@ -520,14 +657,49 @@ public sealed class WallpaperCoordinatorTests
                     CompatibilityCapabilityReasonCode.SecurityRejected,
                     capability.ReasonCode);
             });
+        Assert.Equal(
+            fixture.Package.Descriptor.Version,
+            coordinator.Compatibility.CodexVersion);
+        Assert.Equal(
+            CodexSecurityFailureCode.UnofficialPackageIdentity,
+            coordinator.Compatibility.Security.FailureCode);
         Assert.Equal(0, fixture.SourceProvider.AcquireCount);
+        Assert.Equal(0, fixture.Injection.ApplyCount);
+    }
+
+    [Fact]
+    public async Task SecurityRejectionDuringUpdateStopsThePreviouslyActiveInjection()
+    {
+        var fixture = new CoordinatorFixture();
+        await using var coordinator = fixture.CreateCoordinator();
+        await coordinator.StartOrUpdateAsync(fixture.ValidSettings);
+        fixture.Package = fixture.Package with
+        {
+            Descriptor = new CodexPackageDescriptor(
+                "Contoso.Codex",
+                "Contoso.Codex_unreviewed",
+                fixture.Package.Descriptor.Version,
+                CodexPackageArchitecture.X64,
+                CodexSecurityValidator.OfficialApplicationId),
+        };
+
+        await Assert.ThrowsAsync<CodexSecurityValidationException>(
+            () => coordinator.StartOrUpdateAsync(fixture.ValidSettings));
+
+        Assert.False(coordinator.IsActive);
+        Assert.Equal(1, fixture.Injection.ApplyCount);
+        Assert.Equal(1, fixture.Injection.StopCount);
+        Assert.Equal(1, fixture.PlaybackPool.ReleaseCount);
+        Assert.Equal(
+            CodexSecurityStatus.Rejected,
+            coordinator.Compatibility.Security.Status);
     }
 
     [Fact]
     public async Task StructuralProbeFailure_SurvivesFailedApplyAndSessionCleanup()
     {
         var fixture = new CoordinatorFixture();
-        var baseline = fixture.Endpoint.Profile.Capabilities;
+        var baseline = PresentationContractCatalog.CreateFullySupportedCapabilities();
         fixture.Injection.ApplyCapabilities = baseline.DowngradeWith(
             new CompatibilityCapabilities(
                 new CompatibilityCapability(
@@ -538,80 +710,85 @@ public sealed class WallpaperCoordinatorTests
                 baseline.Audio,
                 baseline.Advanced));
         fixture.Injection.ApplyException =
-            new WallpaperInjectionException("global structural probe failed");
+            new WallpaperPresentationContractException(
+                "global structural probe failed");
         await using var coordinator = fixture.CreateCoordinator();
 
-        await Assert.ThrowsAsync<WallpaperInjectionException>(
+        await Assert.ThrowsAsync<WallpaperPresentationContractException>(
             () => coordinator.StartOrUpdateAsync(fixture.ValidSettings));
 
         Assert.Equal(
             CompatibilityCapabilityReasonCode.StructuralProbeFailed,
             coordinator.Capabilities.Global.ReasonCode);
         Assert.Equal(
-            CompatibilityCapabilityReasonCode.AvailableFromExactProbePackage,
+            CompatibilityCapabilityReasonCode.AvailableFromPresentationContract,
             coordinator.Capabilities.Glass.ReasonCode);
         Assert.All(
             GetCapabilities(fixture.Injection.Capabilities),
             capability => Assert.Equal(
                 CompatibilityCapabilityReasonCode.DisabledForGeneration,
                 capability.ReasonCode));
+        Assert.Equal(
+            CodexSecurityStatus.Verified,
+            coordinator.Compatibility.Security.Status);
+        Assert.Equal(
+            CodexSecurityStage.TargetValidation,
+            coordinator.Compatibility.Security.Stage);
     }
 
     [Fact]
-    public async Task GenericCompatibilityEvidence_SurvivesFailedApply()
+    public async Task FutureVersionPresentationEvidence_SurvivesFailedApply()
     {
         var fixture = new CoordinatorFixture(new Version(27, 1, 0, 0));
-        fixture.Injection.ApplyException = new WallpaperInjectionException("test failure");
+        fixture.Injection.ApplyException =
+            new WallpaperMediaLoadException("test failure");
         await using var coordinator = fixture.CreateCoordinator();
 
-        await Assert.ThrowsAsync<WallpaperInjectionException>(
+        await Assert.ThrowsAsync<WallpaperMediaLoadException>(
             () => coordinator.StartOrUpdateAsync(fixture.ValidSettings));
 
         Assert.Equal(
-            CompatibilityCapabilityReasonCode.AvailableFromGenericProbePackage,
+            CompatibilityCapabilityReasonCode.AvailableFromGlobalBaseline,
             coordinator.Capabilities.Global.ReasonCode);
         Assert.Equal(
             CompatibilityCapabilityReasonCode.NotImplementedInCurrentRelease,
             coordinator.Capabilities.Regions.ReasonCode);
         Assert.Equal(
-            CompatibilityCapabilityReasonCode.UnavailableForGenericProbePackage,
+            CompatibilityCapabilityReasonCode.AvailableFromPresentationContract,
             coordinator.Capabilities.Glass.ReasonCode);
+        Assert.Equal(
+            PresentationContractCatalog.CodexShellId,
+            coordinator.Compatibility.Presentation.ActiveContractId);
+        Assert.Equal(new Version(27, 1, 0, 0), coordinator.Compatibility.CodexVersion);
+        Assert.Equal(
+            CodexSecurityStatus.Verified,
+            coordinator.Compatibility.Security.Status);
     }
 
     [Fact]
-    public async Task DisableAsync_ExplicitlyResetsCapabilitySnapshot()
+    public async Task DisableAsync_RetainsLastCompatibilitySnapshotForDiagnostics()
     {
         var fixture = new CoordinatorFixture();
         await using var coordinator = fixture.CreateCoordinator();
         await coordinator.StartOrUpdateAsync(fixture.ValidSettings);
+        var beforeDisable = coordinator.Compatibility;
 
         await coordinator.DisableAsync();
 
-        Assert.All(
-            GetCapabilities(coordinator.Capabilities),
-            capability =>
-            {
-                Assert.False(capability.IsAvailable);
-                Assert.Equal(
-                    CompatibilityCapabilityReasonCode.DisabledForGeneration,
-                    capability.ReasonCode);
-            });
+        Assert.Equal(beforeDisable, coordinator.Compatibility);
     }
 
     [Fact]
-    public async Task ResetSettingsAsync_ExplicitlyResetsCapabilitySnapshot()
+    public async Task ResetSettingsAsync_RetainsLastCompatibilitySnapshotForDiagnostics()
     {
         var fixture = new CoordinatorFixture();
         await using var coordinator = fixture.CreateCoordinator();
         await coordinator.StartOrUpdateAsync(fixture.ValidSettings);
+        var beforeReset = coordinator.Compatibility;
 
         await coordinator.ResetSettingsAsync();
 
-        Assert.All(
-            GetCapabilities(coordinator.Capabilities),
-            capability => Assert.Equal(
-                CompatibilityCapabilityReasonCode.DisabledForGeneration,
-                capability.ReasonCode));
+        Assert.Equal(beforeReset, coordinator.Compatibility);
     }
 
     [Fact]
@@ -665,39 +842,32 @@ public sealed class WallpaperCoordinatorTests
         Assert.Equal(expected.LightOverlay, actual.LightOverlay);
         Assert.Equal(expected.RecentMediaPaths.ToArray(), actual.RecentMediaPaths.ToArray());
         Assert.Equal(expected.AcceptedCdpRisk, actual.AcceptedCdpRisk);
-        Assert.Equal(expected.LastCompatibilityProfileId, actual.LastCompatibilityProfileId);
     }
 
     private sealed class CoordinatorFixture
     {
-        private readonly CodexCompatibilityProfile _profile;
+        private readonly VerifiedCodexIdentity _identity;
 
         public CoordinatorFixture(Version? packageVersion = null)
         {
-            packageVersion ??= CodexCompatibilityCatalog.SupportedPackageVersion;
-            var descriptor = new CodexPackageDescriptor(
-                CodexCompatibilityCatalog.OfficialPackageName,
-                CodexCompatibilityCatalog.OfficialPackageFamilyName,
-                packageVersion,
-                CodexPackageArchitecture.X64,
-                CodexCompatibilityCatalog.OfficialApplicationId,
-                $"OpenAI.Codex_{packageVersion}_x64__2p2nqsd0c76g0");
-            _profile = CodexCompatibilityCatalog.Evaluate(
-                descriptor,
-                new CodexRuntimeDescriptor(
-                    IsWindows: true,
-                    new Version(10, 0, 22631, 0),
-                    CodexPackageArchitecture.X64)).Profile!;
+            packageVersion ??=
+                BackdropForCodex.Core.Tests.Codex.CodexSecurityValidatorTests
+                    .ReferencePackageVersion;
+            var descriptor =
+                BackdropForCodex.Core.Tests.Codex.CodexSecurityValidatorTests
+                    .CreateOfficialPackage(packageVersion);
+            _identity = BackdropForCodex.Core.Tests.Codex.CodexSecurityValidatorTests
+                .GetIdentity(packageVersion);
             Package = new InstalledCodexPackage(
                 descriptor,
-                _profile.PackageFullName,
-                "C:\\Codex",
+                _identity.PackageFullName,
+                _identity.PackageRoot!,
                 "app/ChatGPT.exe");
             ReviewedProcess = new CodexProcessSnapshot(
                 42,
                 "ChatGPT.exe",
-                CodexCompatibilityCatalog.OfficialPackageFamilyName,
-                _profile.PackageFullName,
+                _identity.PackageFamilyName,
+                _identity.PackageFullName,
                 new DateTimeOffset(2026, 7, 22, 0, 0, 0, TimeSpan.Zero),
                 WindowsCodexProcessSnapshotSource.CurrentSessionId,
                 null);
@@ -725,7 +895,7 @@ public sealed class WallpaperCoordinatorTests
                         "app://codex/index.html",
                         "ws://127.0.0.1:49152/devtools/page/page"),
                     CdpTargetClassification.CodexPage)],
-                _profile);
+                _identity);
             Discovery.Results.Enqueue(new CdpDiscoveryResult([Endpoint], []));
             Injection.Events = CleanupEvents;
             PlaybackPool.Events = CleanupEvents;
@@ -761,7 +931,7 @@ public sealed class WallpaperCoordinatorTests
         };
 
         public WallpaperCoordinator CreateCoordinator(WallpaperCoordinatorOptions? options = null) => new(
-            new FakePackageLocator(Package),
+            new FakePackageLocator(() => Package),
             ProcessSource,
             Activation,
             Discovery,
@@ -775,10 +945,10 @@ public sealed class WallpaperCoordinatorTests
                 DiscoveryInterval = TimeSpan.FromMilliseconds(1),
             });
 
-        private sealed class FakePackageLocator(InstalledCodexPackage package)
+        private sealed class FakePackageLocator(Func<InstalledCodexPackage> locate)
             : IInstalledCodexPackageLocator
         {
-            public InstalledCodexPackage Locate() => package;
+            public InstalledCodexPackage Locate() => locate();
         }
     }
 
@@ -796,16 +966,16 @@ public sealed class WallpaperCoordinatorTests
 
         public string? Arguments { get; private set; }
 
-        public CodexCompatibilityProfile? Profile { get; private set; }
+        public VerifiedCodexIdentity? Identity { get; private set; }
 
         public ApplicationActivationResult Activate(
-            CodexCompatibilityProfile profile,
+            VerifiedCodexIdentity identity,
             string? arguments = null,
             ApplicationActivationOptions options = ApplicationActivationOptions.NoErrorUi)
         {
             CallCount++;
             Arguments = arguments;
-            Profile = profile;
+            Identity = identity;
             return new ApplicationActivationResult(42);
         }
     }
@@ -815,7 +985,7 @@ public sealed class WallpaperCoordinatorTests
         public Queue<CdpDiscoveryResult> Results { get; } = new();
 
         public ValueTask<CdpDiscoveryResult> DiscoverAsync(
-            CodexCompatibilityProfile profile,
+            VerifiedCodexIdentity identity,
             CancellationToken cancellationToken = default) =>
             ValueTask.FromResult(
                 Results.Count == 0 ? new CdpDiscoveryResult([], []) : Results.Dequeue());
@@ -885,6 +1055,8 @@ public sealed class WallpaperCoordinatorTests
 
         public Exception? ReleaseException { get; set; }
 
+        public Exception? ActivateException { get; set; }
+
         public Exception? DisposeException { get; set; }
 
         public List<string> Events { get; set; } = [];
@@ -899,6 +1071,11 @@ public sealed class WallpaperCoordinatorTests
             if (previous is not null && !ReferenceEquals(previous, lease))
             {
                 await previous.DisposeAsync();
+            }
+
+            if (ActivateException is not null)
+            {
+                throw ActivateException;
             }
         }
 
@@ -946,9 +1123,11 @@ public sealed class WallpaperCoordinatorTests
         public event EventHandler<WallpaperInjectionCapabilitiesChangedEventArgs>? CapabilitiesChanged;
 
         public CompatibilityCapabilities Capabilities { get; private set; } =
-            BackdropForCodex.Core.Tests.Codex.CodexCompatibilityTests
-                .GetProfile()
-                .Capabilities;
+            CompatibilityCapabilities.AllUnavailable(
+                CompatibilityCapabilityReasonCode.DisabledForGeneration);
+
+        public PresentationContractSnapshot PresentationContract { get; private set; } =
+            PresentationContractSnapshot.NotEvaluated;
 
         public bool IsActive { get; private set; }
 
@@ -986,19 +1165,21 @@ public sealed class WallpaperCoordinatorTests
             ApplyCount++;
             LastEndpoint = endpoint;
             LastOptions = options;
-            var previous = endpoint.Profile.Capabilities;
+            var previous = Capabilities;
+            var baseline = PresentationContractCatalog.CreateFullySupportedCapabilities();
             Capabilities = ApplyCapabilities is null
-                ? previous
-                : previous.DowngradeWith(ApplyCapabilities);
-            if (Capabilities != previous)
-            {
-                CapabilitiesChanged?.Invoke(
-                    this,
-                    new WallpaperInjectionCapabilitiesChangedEventArgs(
-                        options.Generation,
-                        previous,
-                        Capabilities));
-            }
+                ? baseline
+                : baseline.DowngradeWith(ApplyCapabilities);
+            PresentationContract = new PresentationContractSnapshot(
+                PresentationContractCatalog.CodexShellId,
+                ContractMatchState.Matched);
+            CapabilitiesChanged?.Invoke(
+                this,
+                new WallpaperInjectionCapabilitiesChangedEventArgs(
+                    options.Generation,
+                    previous,
+                    Capabilities,
+                    PresentationContract));
 
             if (ApplyException is not null)
             {
@@ -1023,6 +1204,7 @@ public sealed class WallpaperCoordinatorTests
             LastOptions = null;
             Capabilities = CompatibilityCapabilities.AllUnavailable(
                 CompatibilityCapabilityReasonCode.DisabledForGeneration);
+            PresentationContract = PresentationContractSnapshot.NotEvaluated;
             return StopException is null ? Task.CompletedTask : Task.FromException(StopException);
         }
 
@@ -1089,7 +1271,8 @@ public sealed class WallpaperCoordinatorTests
                 new WallpaperInjectionCapabilitiesChangedEventArgs(
                     generation,
                     previous,
-                    Capabilities));
+                    Capabilities,
+                    PresentationContract));
         }
 
         public void RaiseCapabilityChange(
@@ -1101,7 +1284,8 @@ public sealed class WallpaperCoordinatorTests
                 new WallpaperInjectionCapabilitiesChangedEventArgs(
                     generation,
                     Capabilities,
-                    capabilities));
+                    capabilities,
+                    PresentationContract));
         }
     }
 

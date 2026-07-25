@@ -21,7 +21,7 @@ public sealed record ApplicationActivationResult(uint ProcessId);
 public interface IApplicationActivationManager
 {
     ApplicationActivationResult Activate(
-        CodexCompatibilityProfile profile,
+        VerifiedCodexIdentity identity,
         string? arguments = null,
         ApplicationActivationOptions options = ApplicationActivationOptions.NoErrorUi);
 }
@@ -54,13 +54,13 @@ public sealed class WindowsApplicationActivationManager : IApplicationActivation
     }
 
     public ApplicationActivationResult Activate(
-        CodexCompatibilityProfile profile,
+        VerifiedCodexIdentity identity,
         string? arguments = null,
         ApplicationActivationOptions options = ApplicationActivationOptions.NoErrorUi)
     {
-        ArgumentNullException.ThrowIfNull(profile);
+        ArgumentNullException.ThrowIfNull(identity);
         var hresult = _backend.ActivateApplication(
-            profile.AppUserModelId,
+            identity.AppUserModelId,
             arguments ?? string.Empty,
             options,
             out var processId);

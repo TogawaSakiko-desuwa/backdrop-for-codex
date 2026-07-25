@@ -15,7 +15,7 @@ public enum CodexPackageArchitecture
 }
 
 /// <summary>
-/// The package identity fields used by the compatibility gate. The descriptor deliberately
+/// The package identity fields used by the security gate. The descriptor deliberately
 /// contains no "best effort" defaults: every value must come from the installed package.
 /// </summary>
 public sealed record CodexPackageDescriptor

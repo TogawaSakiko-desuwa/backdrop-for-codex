@@ -38,7 +38,7 @@ public sealed class SettingsV2Tests
         Assert.Empty(settings.RecentMediaIds);
         Assert.Equal(profile.ProfileId, settings.RegionBindings[SemanticRegion.Global]);
         Assert.False(settings.AcceptedCdpRisk);
-        Assert.Null(settings.LastCompatibilityProfileId);
+        Assert.Null(GetLegacyCompatibilityProfileId(settings));
         settings.Validate();
     }
 
@@ -188,40 +188,42 @@ public sealed class SettingsV2Tests
         {
             MediaId = workshop.MediaId,
         };
-        var settings = new SettingsV2
-        {
-            Profiles = [global, other],
-            MediaCatalog = [originalLocal, workshop],
-            RecentMediaIds = [originalLocal.MediaId, workshop.MediaId],
-            RegionBindings = new Dictionary<SemanticRegion, Guid>
+        var settings = WithLegacyCompatibilityProfileId(
+            new SettingsV2
             {
-                [SemanticRegion.Global] = global.ProfileId,
-                [SemanticRegion.Home] = other.ProfileId,
+                Profiles = [global, other],
+                MediaCatalog = [originalLocal, workshop],
+                RecentMediaIds = [originalLocal.MediaId, workshop.MediaId],
+                RegionBindings = new Dictionary<SemanticRegion, Guid>
+                {
+                    [SemanticRegion.Global] = global.ProfileId,
+                    [SemanticRegion.Home] = other.ProfileId,
+                },
+                AcceptedCdpRisk = true,
             },
-            AcceptedCdpRisk = true,
-            LastCompatibilityProfileId = "keep-this-profile",
-        };
+            "keep-this-profile");
 
         var projected = SettingsV1Projection.ProjectGlobal(settings);
         var replacementPath = Path.GetFullPath("replacement.webm");
-        var legacyEdit = projected with
-        {
-            MediaPath = replacementPath,
-            MediaKind = MediaKind.Video,
-            Fit = WallpaperFit.Contain,
-            FocusX = 0.1,
-            FocusY = 0.9,
-            RecentMediaPaths = [replacementPath],
-            AcceptedCdpRisk = false,
-            LastCompatibilityProfileId = "must-not-overwrite",
-        };
+        var legacyEdit = WithLegacyCompatibilityProfileId(
+            projected with
+            {
+                MediaPath = replacementPath,
+                MediaKind = MediaKind.Video,
+                Fit = WallpaperFit.Contain,
+                FocusX = 0.1,
+                FocusY = 0.9,
+                RecentMediaPaths = [replacementPath],
+                AcceptedCdpRisk = false,
+            },
+            "must-not-overwrite");
 
         var updated = SettingsV1Projection.ApplyGlobal(settings, legacyEdit);
 
         Assert.Equal(settings.AcceptedCdpRisk, updated.AcceptedCdpRisk);
         Assert.Equal(
-            settings.LastCompatibilityProfileId,
-            updated.LastCompatibilityProfileId);
+            GetLegacyCompatibilityProfileId(settings),
+            GetLegacyCompatibilityProfileId(updated));
         Assert.Equal(settings.RegionBindings, updated.RegionBindings);
         Assert.Equal(other, updated.Profiles.Single(profile => profile.ProfileId == other.ProfileId));
         Assert.Contains(
@@ -248,6 +250,21 @@ public sealed class SettingsV2Tests
                 workshop.MediaId,
             },
             updated.RecentMediaIds);
+    }
+
+    [Fact]
+    public void LegacyProjectionCannotPopulateANullDeprecatedCompatibilityProfileId()
+    {
+        var settings = SettingsV2.CreateDefault();
+        var projected = SettingsV1Projection.ProjectGlobal(settings);
+        var edited = WithLegacyCompatibilityProfileId(
+            projected,
+            "caller-supplied-profile");
+
+        var updated = SettingsV1Projection.ApplyGlobal(settings, edited);
+
+        Assert.Null(GetLegacyCompatibilityProfileId(projected));
+        Assert.Null(GetLegacyCompatibilityProfileId(updated));
     }
 
     [Fact]
@@ -385,4 +402,22 @@ public sealed class SettingsV2Tests
             SourceIdentifier = Path.GetFullPath(fileName),
             LastKnownKind = MediaKind.Image,
         };
+
+#pragma warning disable CS0618 // Tests intentionally exercise the deprecated persistence field.
+    private static SettingsV1 WithLegacyCompatibilityProfileId(
+        SettingsV1 settings,
+        string? profileId) =>
+        settings with { LastCompatibilityProfileId = profileId };
+
+    private static SettingsV2 WithLegacyCompatibilityProfileId(
+        SettingsV2 settings,
+        string? profileId) =>
+        settings with { LastCompatibilityProfileId = profileId };
+
+    private static string? GetLegacyCompatibilityProfileId(SettingsV1 settings) =>
+        settings.LastCompatibilityProfileId;
+
+    private static string? GetLegacyCompatibilityProfileId(SettingsV2 settings) =>
+        settings.LastCompatibilityProfileId;
+#pragma warning restore CS0618
 }

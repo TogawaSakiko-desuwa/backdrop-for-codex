@@ -118,10 +118,6 @@ public sealed class WallpaperConfigurationState
                left.DarkOverlay.Equals(right.DarkOverlay) &&
                left.LightOverlay.Equals(right.LightOverlay) &&
                left.AcceptedCdpRisk == right.AcceptedCdpRisk &&
-               string.Equals(
-                   left.LastCompatibilityProfileId,
-                   right.LastCompatibilityProfileId,
-                   StringComparison.Ordinal) &&
                left.RecentMediaPaths.SequenceEqual(
                    right.RecentMediaPaths,
                    StringComparer.OrdinalIgnoreCase);

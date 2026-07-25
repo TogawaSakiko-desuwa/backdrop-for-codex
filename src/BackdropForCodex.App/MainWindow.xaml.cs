@@ -374,9 +374,10 @@ public partial class MainWindow : FluentWindow
         var runtime = _diagnosticReports.CreateRuntimeSnapshot(
             _viewModel.RuntimePhase,
             _viewModel.IsActive,
-            _viewModel.IsPaused,
-            _viewModel.CompatibilityCapabilities);
-        var report = _diagnosticReports.CreateReport(runtime);
+            _viewModel.IsPaused);
+        var compatibility = _diagnosticReports.CreateCompatibilitySnapshot(
+            _viewModel.WallpaperCompatibility);
+        var report = _diagnosticReports.CreateReport(runtime, compatibility);
         await _diagnosticReports.WriteAsync(
             picker.FileName,
             report,

@@ -2,7 +2,10 @@ using System.Globalization;
 using BackdropForCodex.App.Models;
 using BackdropForCodex.App.Services.Errors;
 using BackdropForCodex.App.Services.Localization;
+using BackdropForCodex.Core.Codex;
+using BackdropForCodex.Core.Injection;
 using BackdropForCodex.Core.Media;
+using BackdropForCodex.Core.Runtime;
 using Xunit;
 
 namespace BackdropForCodex.Core.Tests.AppSupport;
@@ -63,6 +66,43 @@ public sealed class UserFacingErrorMapperTests
             "sensitive source details",
             $"{result.Message} {result.Recovery}",
             StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SecurityValidationFailureMapsToNonRetryableSafeContent()
+    {
+        const string privateDetail =
+            "Package discovery failed at C:\\Users\\person\\AppData\\secret";
+        var mapper = new UserFacingErrorMapper(
+            new AppTextProvider(CultureInfo.GetCultureInfo("en")));
+        var security = CodexSecurityResult.Rejected(
+            CodexSecurityStage.PackageIdentity,
+            CodexSecurityFailureCode.PackageDiscoveryFailed,
+            privateDetail);
+
+        var result = mapper.Map(new CodexSecurityValidationException(security));
+
+        Assert.Equal(UserFacingErrorCode.CodexSecurityRejected, result.Code);
+        Assert.False(result.CanRetry);
+        Assert.DoesNotContain(
+            privateDetail,
+            $"{result.Title} {result.Message} {result.Recovery}",
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void FinalPageApplyDeadlineMapsToWallpaperApplyInsteadOfBrowserHandshake()
+    {
+        var mapper = new UserFacingErrorMapper(
+            new AppTextProvider(CultureInfo.GetCultureInfo("en")));
+        var exception = new FinalPageApplyTimeoutException(
+            "bounded final apply deadline elapsed",
+            new TimeoutException());
+
+        var result = mapper.Map(exception, UserFacingOperation.ApplyWallpaper);
+
+        Assert.Equal(UserFacingErrorCode.WallpaperApplyFailed, result.Code);
+        Assert.True(result.CanRetry);
     }
 
     [Fact]

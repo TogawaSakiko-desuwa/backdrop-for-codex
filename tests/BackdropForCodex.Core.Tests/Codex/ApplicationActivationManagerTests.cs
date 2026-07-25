@@ -7,19 +7,19 @@ namespace BackdropForCodex.Core.Tests.Codex;
 public sealed class ApplicationActivationManagerTests
 {
     [Fact]
-    public void Activate_UsesProfileAumidAndReturnsPid()
+    public void Activate_UsesVerifiedIdentityAumidAndReturnsPid()
     {
         var backend = new StubBackend { ProcessId = 4242 };
         var manager = new WindowsApplicationActivationManager(backend);
-        var profile = CodexCompatibilityTests.GetProfile();
+        var identity = CodexSecurityValidatorTests.GetIdentity();
 
         var result = manager.Activate(
-            profile,
+            identity,
             "--from-wallpaper",
             ApplicationActivationOptions.NoErrorUi | ApplicationActivationOptions.NoSplashScreen);
 
         Assert.Equal(4242u, result.ProcessId);
-        Assert.Equal(profile.AppUserModelId, backend.AppUserModelId);
+        Assert.Equal(identity.AppUserModelId, backend.AppUserModelId);
         Assert.Equal("--from-wallpaper", backend.Arguments);
         Assert.Equal(
             ApplicationActivationOptions.NoErrorUi | ApplicationActivationOptions.NoSplashScreen,
@@ -32,7 +32,8 @@ public sealed class ApplicationActivationManagerTests
         var backend = new StubBackend { HResult = unchecked((int)0x80004005), ProcessId = 1 };
         var manager = new WindowsApplicationActivationManager(backend);
 
-        Assert.Throws<COMException>(() => manager.Activate(CodexCompatibilityTests.GetProfile()));
+        Assert.Throws<COMException>(
+            () => manager.Activate(CodexSecurityValidatorTests.GetIdentity()));
     }
 
     [Fact]
@@ -41,7 +42,7 @@ public sealed class ApplicationActivationManagerTests
         var manager = new WindowsApplicationActivationManager(new StubBackend());
 
         Assert.Throws<InvalidOperationException>(
-            () => manager.Activate(CodexCompatibilityTests.GetProfile()));
+            () => manager.Activate(CodexSecurityValidatorTests.GetIdentity()));
     }
 
     private sealed class StubBackend : IApplicationActivationBackend

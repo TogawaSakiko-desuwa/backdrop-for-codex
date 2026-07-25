@@ -10,23 +10,20 @@ public sealed class CurrentMachineCompatibilityTests
 
     [IntegrationFact(OptInVariable)]
     [Trait("Category", "Integration")]
-    public void InstalledStorePackage_MatchesReviewedCompatibilityProfile_WhenOptedIn()
+    public void InstalledStorePackage_PassesSecurityIdentityValidation_WhenOptedIn()
     {
         var package = new InstalledCodexPackageLocator().Locate();
-        var result = CodexCompatibilityCatalog.Evaluate(
+        var result = CodexSecurityValidator.Validate(
             package.Descriptor,
             CodexRuntimeDescriptor.Current);
 
-        Assert.True(result.IsSupported, result.Reason);
-        Assert.Equal(result.Profile!.PackageFullName, package.PackageFullName);
-        Assert.Equal(CodexCompatibilityCatalog.OfficialPackageFamilyName, package.Descriptor.FamilyName);
+        Assert.True(result.IsVerified, result.Reason);
+        Assert.Equal(result.Identity!.PackageFullName, package.PackageFullName);
+        Assert.Equal(
+            CodexSecurityValidator.OfficialPackageFamilyName,
+            package.Descriptor.FamilyName);
         Assert.Equal("ChatGPT.exe", Path.GetFileName(package.ExecutablePath));
         Assert.True(File.Exists(package.ExecutablePath));
-        Assert.NotEqual(
-            CompatibilityProbePackageKind.Generic,
-            result.Profile.ProbePackageKind);
-        Assert.True(result.Capabilities.Glass.IsAvailable);
-        Assert.True(result.Capabilities.Advanced.IsAvailable);
     }
 
     [IntegrationFact(OptInVariable)]
@@ -34,11 +31,11 @@ public sealed class CurrentMachineCompatibilityTests
     public async Task RunningCodexProcesses_AreBoundToOfficialPackage_WhenOptedIn()
     {
         var package = new InstalledCodexPackageLocator().Locate();
-        var compatibility = CodexCompatibilityCatalog.Evaluate(
+        var security = CodexSecurityValidator.Validate(
             package.Descriptor,
             CodexRuntimeDescriptor.Current);
-        Assert.True(compatibility.IsSupported, compatibility.Reason);
-        var profile = compatibility.Profile!;
+        Assert.True(security.IsVerified, security.Reason);
+        var identity = security.Identity!;
         var processes = await new WindowsCodexProcessSnapshotSource().GetProcessesAsync();
 
         Assert.Contains(
@@ -47,11 +44,11 @@ public sealed class CurrentMachineCompatibilityTests
                 string.Equals(process.ExecutableName, "ChatGPT.exe", StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(
                     process.PackageFamilyName,
-                    profile.PackageFamilyName,
+                    identity.PackageFamilyName,
                     StringComparison.Ordinal) &&
                 string.Equals(
                     process.PackageFullName,
-                    profile.PackageFullName,
+                    identity.PackageFullName,
                     StringComparison.Ordinal) &&
                 process.StartTimeUtc != default &&
                 process.SessionId == WindowsCodexProcessSnapshotSource.CurrentSessionId);

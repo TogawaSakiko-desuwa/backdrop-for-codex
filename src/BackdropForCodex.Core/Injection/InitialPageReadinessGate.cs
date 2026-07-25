@@ -1,5 +1,3 @@
-using System.Diagnostics;
-
 namespace BackdropForCodex.Core.Injection;
 
 /// <summary>
@@ -32,39 +30,121 @@ internal sealed class InitialPageReadinessGate
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(applyAttempt);
-        var elapsed = Stopwatch.StartNew();
-        var greatestEligibleCount = 0;
+        cancellationToken.ThrowIfCancellationRequested();
+        using var deadlineCancellation =
+            CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        deadlineCancellation.CancelAfter(_timeout);
+        var deadlineToken = deadlineCancellation.Token;
+        var latestResult = default(PageApplyResult);
+        var hasResult = false;
         var ambiguousTargetsObserved = false;
-        do
+        while (true)
         {
-            var result = await applyAttempt(cancellationToken).ConfigureAwait(false);
-            greatestEligibleCount = Math.Max(greatestEligibleCount, result.EligibleCount);
-            ambiguousTargetsObserved |= result.IsAmbiguous;
+            PageApplyResult result;
+            try
+            {
+                result = await applyAttempt(deadlineToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (deadlineToken.IsCancellationRequested)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                return CreateTerminalResult(
+                    latestResult,
+                    hasResult,
+                    ambiguousTargetsObserved);
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            if (deadlineToken.IsCancellationRequested)
+            {
+                return CreateTerminalResult(
+                    latestResult,
+                    hasResult,
+                    ambiguousTargetsObserved);
+            }
+
+            latestResult = result;
+            hasResult = true;
+            ambiguousTargetsObserved |=
+                result.IsAmbiguous || result.AmbiguousTargetsObserved;
             if (result.AppliedCount != 0)
             {
-                return new PageApplyResult(
-                    greatestEligibleCount,
-                    result.AppliedCount,
-                    IsAmbiguous: false,
-                    AmbiguousTargetsObserved: ambiguousTargetsObserved);
+                return CreateTerminalResult(
+                    latestResult,
+                    hasResult,
+                    ambiguousTargetsObserved);
             }
 
-            var remaining = _timeout - elapsed.Elapsed;
-            if (remaining <= TimeSpan.Zero)
+            if (deadlineToken.IsCancellationRequested)
             {
-                return new PageApplyResult(
-                    greatestEligibleCount,
-                    AppliedCount: 0,
-                    IsAmbiguous: greatestEligibleCount > 1,
-                    AmbiguousTargetsObserved: ambiguousTargetsObserved);
+                cancellationToken.ThrowIfCancellationRequested();
+                return CreateTerminalResult(
+                    latestResult,
+                    hasResult,
+                    ambiguousTargetsObserved);
             }
 
-            await Task.Delay(
-                    remaining < _pollInterval ? remaining : _pollInterval,
-                    cancellationToken)
-                .ConfigureAwait(false);
+            try
+            {
+                await Task.Delay(_pollInterval, deadlineToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (deadlineToken.IsCancellationRequested)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                return CreateTerminalResult(
+                    latestResult,
+                    hasResult,
+                    ambiguousTargetsObserved);
+            }
         }
-        while (true);
+    }
+
+    public async Task<PageApplyResult> RunFinalAttemptAsync(
+        Func<CancellationToken, Task<PageApplyResult>> applyAttempt,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(applyAttempt);
+        cancellationToken.ThrowIfCancellationRequested();
+        using var operationCancellation =
+            CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        operationCancellation.CancelAfter(_timeout);
+        try
+        {
+            var result = await applyAttempt(operationCancellation.Token).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+            operationCancellation.Token.ThrowIfCancellationRequested();
+            return result;
+        }
+        catch (OperationCanceledException exception)
+            when (operationCancellation.IsCancellationRequested)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            throw new FinalPageApplyTimeoutException(
+                "The final Global presentation fallback exceeded its bounded operation deadline.",
+                exception);
+        }
+    }
+
+    private static PageApplyResult CreateTerminalResult(
+        PageApplyResult latestResult,
+        bool hasResult,
+        bool ambiguousTargetsObserved)
+    {
+        return hasResult
+            ? new PageApplyResult(
+                latestResult.EligibleCount,
+                latestResult.AppliedCount,
+                latestResult.IsAmbiguous,
+                AmbiguousTargetsObserved: ambiguousTargetsObserved)
+            : default;
+    }
+}
+
+internal sealed class FinalPageApplyTimeoutException : WallpaperInjectionException
+{
+    public FinalPageApplyTimeoutException(string message, Exception innerException)
+        : base(message, innerException)
+    {
     }
 }
 

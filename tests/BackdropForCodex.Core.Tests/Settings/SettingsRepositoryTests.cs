@@ -63,19 +63,20 @@ public sealed class SettingsRepositoryTests
                 Volume = 0.35,
                 PerformancePolicy = PerformancePolicy.PreferQuality,
             };
-            var settings = new SettingsV2
-            {
-                Profiles = [profile],
-                MediaCatalog = [media],
-                RecentMediaIds = [media.MediaId],
-                RegionBindings = new Dictionary<SemanticRegion, Guid>
+            var settings = WithLegacyCompatibilityProfileId(
+                new SettingsV2
                 {
-                    [SemanticRegion.Global] = profile.ProfileId,
-                    [SemanticRegion.Home] = profile.ProfileId,
+                    Profiles = [profile],
+                    MediaCatalog = [media],
+                    RecentMediaIds = [media.MediaId],
+                    RegionBindings = new Dictionary<SemanticRegion, Guid>
+                    {
+                        [SemanticRegion.Global] = profile.ProfileId,
+                        [SemanticRegion.Home] = profile.ProfileId,
+                    },
+                    AcceptedCdpRisk = true,
                 },
-                AcceptedCdpRisk = true,
-                LastCompatibilityProfileId = "reviewed-profile",
-            };
+                "reviewed-profile");
 
             var canonical = await repository.SaveAsync(settings);
             var loadedResult = await repository.LoadAsync();
@@ -91,18 +92,49 @@ public sealed class SettingsRepositoryTests
             Assert.Equal(canonical.RecentMediaIds, loaded.RecentMediaIds);
             Assert.Equal(canonical.RegionBindings, loaded.RegionBindings);
             Assert.True(loaded.AcceptedCdpRisk);
-            Assert.Equal("reviewed-profile", loaded.LastCompatibilityProfileId);
+            Assert.Equal(
+                "reviewed-profile",
+                GetLegacyCompatibilityProfileId(loaded));
 
             var json = await File.ReadAllTextAsync(settingsPath);
             Assert.Contains("\"schemaVersion\": 2", json, StringComparison.Ordinal);
             Assert.Contains("\"sourceKind\": \"LocalFile\"", json, StringComparison.Ordinal);
             Assert.Contains("\"Global\"", json, StringComparison.Ordinal);
             Assert.Contains("\"performancePolicy\": \"PreferQuality\"", json, StringComparison.Ordinal);
+            Assert.Contains(
+                "\"lastCompatibilityProfileId\": \"reviewed-profile\"",
+                json,
+                StringComparison.Ordinal);
             Assert.Empty(
                 Directory.GetFiles(
                     Path.GetDirectoryName(settingsPath)!,
                     "*.tmp",
                     SearchOption.TopDirectoryOnly));
+        }
+        finally
+        {
+            DeleteTemporaryDirectory(directoryPath);
+        }
+    }
+
+    [Fact]
+    public async Task SaveAsyncRoundTripsANullDeprecatedCompatibilityProfileId()
+    {
+        var directoryPath = CreateTemporaryDirectory();
+        try
+        {
+            var settingsPath = Path.Combine(directoryPath, "settings.json");
+            using var repository = new SettingsRepository(settingsPath);
+
+            await repository.SaveAsync(SettingsV2.CreateDefault());
+
+            var loaded = Assert.IsType<SettingsLoadResult.Ready>(
+                await repository.LoadAsync()).Settings;
+            Assert.Null(GetLegacyCompatibilityProfileId(loaded));
+            Assert.DoesNotContain(
+                "\"lastCompatibilityProfileId\"",
+                await File.ReadAllTextAsync(settingsPath),
+                StringComparison.Ordinal);
         }
         finally
         {
@@ -119,21 +151,22 @@ public sealed class SettingsRepositoryTests
             var settingsPath = Path.Combine(directoryPath, "settings.json");
             var selectedPath = Path.Combine(directoryPath, "does-not-exist.webm");
             var olderPath = Path.Combine(directoryPath, "also-missing.png");
-            var version1 = new SettingsV1
-            {
-                MediaPath = selectedPath,
-                MediaKind = MediaKind.Video,
-                Fit = WallpaperFit.Stretch,
-                FocusX = 0.2,
-                FocusY = 0.8,
-                PanelOpacity = 0.91,
-                BlurPx = 7,
-                DarkOverlay = 0.85,
-                LightOverlay = 0.9,
-                RecentMediaPaths = [olderPath, selectedPath.ToUpperInvariant()],
-                AcceptedCdpRisk = true,
-                LastCompatibilityProfileId = "legacy-reviewed-profile",
-            };
+            var version1 = WithLegacyCompatibilityProfileId(
+                new SettingsV1
+                {
+                    MediaPath = selectedPath,
+                    MediaKind = MediaKind.Video,
+                    Fit = WallpaperFit.Stretch,
+                    FocusX = 0.2,
+                    FocusY = 0.8,
+                    PanelOpacity = 0.91,
+                    BlurPx = 7,
+                    DarkOverlay = 0.85,
+                    LightOverlay = 0.9,
+                    RecentMediaPaths = [olderPath, selectedPath.ToUpperInvariant()],
+                    AcceptedCdpRisk = true,
+                },
+                "legacy-reviewed-profile");
             var originalBytes = SerializeVersion1(version1, includeSchemaVersion: false);
             Assert.DoesNotContain(
                 "schemaVersion",
@@ -161,7 +194,9 @@ public sealed class SettingsRepositoryTests
             Assert.Equal(0.5, profile.Volume);
             Assert.Equal(PerformancePolicy.Automatic, profile.PerformancePolicy);
             Assert.True(migrated.AcceptedCdpRisk);
-            Assert.Equal("legacy-reviewed-profile", migrated.LastCompatibilityProfileId);
+            Assert.Equal(
+                "legacy-reviewed-profile",
+                GetLegacyCompatibilityProfileId(migrated));
             Assert.Single(migrated.RegionBindings);
             Assert.Equal(profile.ProfileId, migrated.RegionBindings[SemanticRegion.Global]);
             Assert.Equal(2, migrated.MediaCatalog.Count);
@@ -211,18 +246,18 @@ public sealed class SettingsRepositoryTests
             var settingsPath = Path.Combine(directoryPath, "settings.json");
             using var repository = new SettingsRepository(settingsPath);
             var original = await repository.SaveAsync(SettingsV2.CreateDefault());
-            var replacement = original with
-            {
-                AcceptedCdpRisk = true,
-                LastCompatibilityProfileId = "replacement-profile",
-            };
+            var replacement = WithLegacyCompatibilityProfileId(
+                original with { AcceptedCdpRisk = true },
+                "replacement-profile");
 
             await repository.SaveAsync(replacement);
 
             var loaded = Assert.IsType<SettingsLoadResult.Ready>(
                 await repository.LoadAsync()).Settings;
             Assert.True(loaded.AcceptedCdpRisk);
-            Assert.Equal("replacement-profile", loaded.LastCompatibilityProfileId);
+            Assert.Equal(
+                "replacement-profile",
+                GetLegacyCompatibilityProfileId(loaded));
             Assert.Empty(
                 Directory.GetFiles(
                     directoryPath,
@@ -261,6 +296,7 @@ public sealed class SettingsRepositoryTests
             Assert.Single(migrated.MediaCatalog);
             Assert.Empty(migrated.RecentMediaIds);
             Assert.NotNull(Assert.Single(migrated.Profiles).MediaId);
+            Assert.Null(GetLegacyCompatibilityProfileId(migrated));
         }
         finally
         {
@@ -541,11 +577,13 @@ public sealed class SettingsRepositoryTests
             var backupPath = Path.Combine(
                 directoryPath,
                 SettingsRepository.Version1BackupFileName);
-            var backupBytes = SerializeVersion1(SettingsV1.CreateDefault() with
-            {
-                AcceptedCdpRisk = true,
-                LastCompatibilityProfileId = "backup-profile",
-            });
+            var backupBytes = SerializeVersion1(
+                WithLegacyCompatibilityProfileId(
+                    SettingsV1.CreateDefault() with
+                    {
+                        AcceptedCdpRisk = true,
+                    },
+                    "backup-profile"));
             await File.WriteAllTextAsync(settingsPath, "{ corrupt }");
             await File.WriteAllBytesAsync(backupPath, backupBytes);
             File.SetAttributes(
@@ -558,7 +596,9 @@ public sealed class SettingsRepositoryTests
             var ready = Assert.IsType<SettingsLoadResult.Ready>(result);
             Assert.True(ready.MigratedFromVersion1);
             Assert.True(ready.Settings.AcceptedCdpRisk);
-            Assert.Equal("backup-profile", ready.Settings.LastCompatibilityProfileId);
+            Assert.Equal(
+                "backup-profile",
+                GetLegacyCompatibilityProfileId(ready.Settings));
             Assert.Equal(backupBytes, await File.ReadAllBytesAsync(backupPath));
             Assert.True(File.GetAttributes(backupPath).HasFlag(FileAttributes.ReadOnly));
             Assert.IsType<SettingsLoadResult.Ready>(await repository.LoadAsync());
@@ -886,6 +926,21 @@ public sealed class SettingsRepositoryTests
 
     private static SettingsRepository CreateRepository(string directoryPath) =>
         new(Path.Combine(directoryPath, "settings.json"));
+
+#pragma warning disable CS0618 // Tests intentionally exercise the deprecated persistence field.
+    private static SettingsV1 WithLegacyCompatibilityProfileId(
+        SettingsV1 settings,
+        string? profileId) =>
+        settings with { LastCompatibilityProfileId = profileId };
+
+    private static SettingsV2 WithLegacyCompatibilityProfileId(
+        SettingsV2 settings,
+        string? profileId) =>
+        settings with { LastCompatibilityProfileId = profileId };
+
+    private static string? GetLegacyCompatibilityProfileId(SettingsV2 settings) =>
+        settings.LastCompatibilityProfileId;
+#pragma warning restore CS0618
 
     private static byte[] SerializeVersion1(
         SettingsV1 settings,

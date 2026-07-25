@@ -31,6 +31,19 @@ public sealed class InstalledCodexPackageLocator : IInstalledCodexPackageLocator
     private const int ErrorInsufficientBuffer = 122;
     private const string ExpectedPublisher = "CN=50BDFD77-8903-4850-9FFE-6E8522F64D5B";
     private const string ExpectedExecutable = "app/ChatGPT.exe";
+    private readonly Func<IReadOnlyList<InstalledCodexPackage>> _validatedCandidateSource;
+
+    public InstalledCodexPackageLocator()
+        : this(DiscoverValidatedCandidates)
+    {
+    }
+
+    internal InstalledCodexPackageLocator(
+        Func<IReadOnlyList<InstalledCodexPackage>> validatedCandidateSource)
+    {
+        _validatedCandidateSource = validatedCandidateSource ??
+            throw new ArgumentNullException(nameof(validatedCandidateSource));
+    }
 
     public InstalledCodexPackage Locate()
     {
@@ -39,7 +52,21 @@ public sealed class InstalledCodexPackageLocator : IInstalledCodexPackageLocator
             throw new PlatformNotSupportedException("Backdrop for Codex requires Windows 11.");
         }
 
-        var packages = GetRegisteredPackageFullNames(CodexCompatibilityCatalog.OfficialPackageFamilyName);
+        var candidates = _validatedCandidateSource();
+        return candidates.Count switch
+        {
+            0 => throw new CodexPackageDiscoveryException(
+                "The reviewed official OpenAI Codex Store package is not installed."),
+            1 => candidates[0],
+            _ => throw new CodexPackageDiscoveryException(
+                "Multiple fully validated official OpenAI Codex Store packages were found; " +
+                "package selection is ambiguous."),
+        };
+    }
+
+    private static IReadOnlyList<InstalledCodexPackage> DiscoverValidatedCandidates()
+    {
+        var packages = GetRegisteredPackageFullNames(CodexSecurityValidator.OfficialPackageFamilyName);
         var candidates = new List<InstalledCodexPackage>();
 
         foreach (var packageFullName in packages)
@@ -50,11 +77,7 @@ public sealed class InstalledCodexPackageLocator : IInstalledCodexPackageLocator
             }
         }
 
-        return candidates
-            .OrderByDescending(candidate => candidate.Descriptor.Version)
-            .FirstOrDefault()
-            ?? throw new CodexPackageDiscoveryException(
-                "The reviewed official OpenAI Codex Store package is not installed.");
+        return candidates;
     }
 
     private static bool TryReadPackage(string packageFullName, out InstalledCodexPackage package)
@@ -63,7 +86,7 @@ public sealed class InstalledCodexPackageLocator : IInstalledCodexPackageLocator
         var familyName = GetPackageFamilyName(packageFullName);
         if (!string.Equals(
                 familyName,
-                CodexCompatibilityCatalog.OfficialPackageFamilyName,
+                CodexSecurityValidator.OfficialPackageFamilyName,
                 StringComparison.Ordinal))
         {
             return false;
@@ -114,7 +137,7 @@ public sealed class InstalledCodexPackageLocator : IInstalledCodexPackageLocator
 
             if (name is null ||
                 applicationId is null ||
-                !string.Equals(name, CodexCompatibilityCatalog.OfficialPackageName, StringComparison.Ordinal) ||
+                !string.Equals(name, CodexSecurityValidator.OfficialPackageName, StringComparison.Ordinal) ||
                 !Version.TryParse(versionValue, out var version) ||
                 !string.Equals(architecture, "x64", StringComparison.OrdinalIgnoreCase) ||
                 !string.Equals(publisher, ExpectedPublisher, StringComparison.Ordinal) ||

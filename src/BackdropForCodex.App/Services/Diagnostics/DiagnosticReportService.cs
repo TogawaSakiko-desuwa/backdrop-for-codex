@@ -16,43 +16,44 @@ public enum DiagnosticCapabilityCode
     AdvancedSurfaces,
 }
 
-public enum DiagnosticCapabilityState
-{
-    Available = 0,
-    Unavailable,
-    Degraded,
-}
-
 public enum DiagnosticCapabilityReason
 {
-    AvailableFromExactProbePackage = 0,
-    AvailableFromGenericProbePackage,
-    DisabledByExactProbePackage,
-    NotImplemented,
+    AvailableFromGlobalBaseline = 0,
+    AvailableFromPresentationContract,
+    NotImplementedInCurrentRelease,
+    NoMatchingPresentationContract,
+    AmbiguousPresentationContract,
     StructuralProbeFailed,
-    DependencyUnavailable,
     SecurityRejected,
     DisabledForGeneration,
-    AvailableFromReviewedBandProbePackage,
-    UnavailableForGenericProbePackage,
 }
 
 public sealed record DiagnosticCapabilitySnapshot(
     DiagnosticCapabilityCode Capability,
-    DiagnosticCapabilityState State,
+    bool IsEnabled,
     DiagnosticCapabilityReason Reason);
+
+public sealed record DiagnosticSecuritySnapshot(
+    CodexSecurityStatus Status,
+    CodexSecurityStage Stage,
+    CodexSecurityFailureCode FailureCode);
+
+public sealed record DiagnosticCompatibilitySnapshot(
+    string? CodexVersion,
+    DiagnosticSecuritySnapshot Security,
+    string? PresentationContractId,
+    ContractMatchState ContractMatchState,
+    IReadOnlyList<DiagnosticCapabilitySnapshot> Capabilities);
 
 public sealed record DiagnosticRuntimeSnapshot(
     WallpaperRuntimePhase Phase,
     bool IsActive,
-    bool IsPaused,
-    IReadOnlyList<DiagnosticCapabilitySnapshot> Capabilities)
+    bool IsPaused)
 {
     public static DiagnosticRuntimeSnapshot Idle { get; } = new(
         WallpaperRuntimePhase.Idle,
         IsActive: false,
-        IsPaused: false,
-        Array.Empty<DiagnosticCapabilitySnapshot>());
+        IsPaused: false);
 }
 
 public sealed record DiagnosticEnvironmentSnapshot(
@@ -76,28 +77,32 @@ public sealed record DiagnosticEnvironmentSnapshot(
     }
 }
 
-public sealed record DiagnosticReportV1(
+public sealed record DiagnosticReportV2(
     int SchemaVersion,
     DiagnosticEnvironmentSnapshot Environment,
-    DiagnosticRuntimeSnapshot Runtime);
+    DiagnosticRuntimeSnapshot Runtime,
+    DiagnosticCompatibilitySnapshot Compatibility);
 
 public interface IDiagnosticReportService
 {
     DiagnosticRuntimeSnapshot CreateRuntimeSnapshot(
         WallpaperRuntimePhase phase,
         bool isActive,
-        bool isPaused,
-        CompatibilityCapabilities? capabilities);
+        bool isPaused);
 
-    DiagnosticReportV1 CreateReport(
+    DiagnosticCompatibilitySnapshot CreateCompatibilitySnapshot(
+        WallpaperCompatibilitySnapshot compatibility);
+
+    DiagnosticReportV2 CreateReport(
         DiagnosticRuntimeSnapshot runtime,
+        DiagnosticCompatibilitySnapshot compatibility,
         DiagnosticEnvironmentSnapshot? environment = null);
 
-    string Serialize(DiagnosticReportV1 report);
+    string Serialize(DiagnosticReportV2 report);
 
     Task WriteAsync(
         string destinationPath,
-        DiagnosticReportV1 report,
+        DiagnosticReportV2 report,
         CancellationToken cancellationToken = default);
 }
 
@@ -106,93 +111,95 @@ public interface IDiagnosticReportService
 /// </summary>
 public sealed class DiagnosticReportService : IDiagnosticReportService
 {
-    public const int CurrentSchemaVersion = 1;
+    public const int CurrentSchemaVersion = 2;
 
     private static readonly JsonSerializerOptions SerializerOptions = CreateSerializerOptions();
 
     public DiagnosticRuntimeSnapshot CreateRuntimeSnapshot(
         WallpaperRuntimePhase phase,
         bool isActive,
-        bool isPaused,
-        CompatibilityCapabilities? capabilities)
+        bool isPaused)
     {
         if (!Enum.IsDefined(phase))
         {
             throw new ArgumentOutOfRangeException(nameof(phase));
         }
 
-        if (capabilities is null)
-        {
-            return new DiagnosticRuntimeSnapshot(
-                phase,
-                isActive,
-                isPaused,
-                Enum.GetValues<DiagnosticCapabilityCode>()
-                    .Select(code => new DiagnosticCapabilitySnapshot(
-                        code,
-                        DiagnosticCapabilityState.Unavailable,
-                        DiagnosticCapabilityReason.DependencyUnavailable))
-                    .ToArray());
-        }
+        return new DiagnosticRuntimeSnapshot(phase, isActive, isPaused);
+    }
 
-        var globalAvailable = capabilities.GlobalBackground.IsAvailable;
-        return new DiagnosticRuntimeSnapshot(
-            phase,
-            isActive,
-            isPaused,
+    public DiagnosticCompatibilitySnapshot CreateCompatibilitySnapshot(
+        WallpaperCompatibilitySnapshot compatibility)
+    {
+        ArgumentNullException.ThrowIfNull(compatibility);
+        ArgumentNullException.ThrowIfNull(compatibility.Security);
+        ArgumentNullException.ThrowIfNull(compatibility.Presentation);
+        ArgumentNullException.ThrowIfNull(compatibility.Capabilities);
+
+        return new DiagnosticCompatibilitySnapshot(
+            compatibility.CodexVersion?.ToString(),
+            new DiagnosticSecuritySnapshot(
+                compatibility.Security.Status,
+                compatibility.Security.Stage,
+                compatibility.Security.FailureCode),
+            AllowListedContractId(compatibility.Presentation.ActiveContractId),
+            compatibility.Presentation.MatchState,
+            Array.AsReadOnly(
             [
                 Map(
                     DiagnosticCapabilityCode.GlobalBackground,
-                    capabilities.GlobalBackground,
-                    globalAvailable),
+                    compatibility.Capabilities.GlobalBackground),
                 Map(
                     DiagnosticCapabilityCode.SemanticRegions,
-                    capabilities.RegionRecognition,
-                    globalAvailable),
+                    compatibility.Capabilities.RegionRecognition),
                 Map(
                     DiagnosticCapabilityCode.GlassStyling,
-                    capabilities.GlassStyle,
-                    globalAvailable),
+                    compatibility.Capabilities.GlassStyle),
                 Map(
                     DiagnosticCapabilityCode.Audio,
-                    capabilities.Audio,
-                    globalAvailable),
+                    compatibility.Capabilities.Audio),
                 Map(
                     DiagnosticCapabilityCode.AdvancedSurfaces,
-                    capabilities.AdvancedSurfaces,
-                    globalAvailable),
-            ]);
+                    compatibility.Capabilities.AdvancedSurfaces),
+            ]));
     }
 
-    public DiagnosticReportV1 CreateReport(
+    public DiagnosticReportV2 CreateReport(
         DiagnosticRuntimeSnapshot runtime,
+        DiagnosticCompatibilitySnapshot compatibility,
         DiagnosticEnvironmentSnapshot? environment = null)
     {
         ArgumentNullException.ThrowIfNull(runtime);
-        ArgumentNullException.ThrowIfNull(runtime.Capabilities);
+        ArgumentNullException.ThrowIfNull(compatibility);
+        ArgumentNullException.ThrowIfNull(compatibility.Security);
+        ArgumentNullException.ThrowIfNull(compatibility.Capabilities);
 
-        var capabilities = runtime.Capabilities
+        var capabilities = compatibility.Capabilities
             .OrderBy(item => item.Capability)
             .ToArray();
-        if (capabilities.Select(item => item.Capability).Distinct().Count() != capabilities.Length)
+        if (capabilities.Select(item => item.Capability).Distinct().Count() !=
+            capabilities.Length)
         {
             throw new ArgumentException(
                 "A diagnostic capability can appear at most once.",
-                nameof(runtime));
+                nameof(compatibility));
         }
 
-        var snapshot = runtime with
+        var compatibilitySnapshot = compatibility with
         {
+            PresentationContractId =
+                AllowListedContractId(compatibility.PresentationContractId),
             Capabilities = Array.AsReadOnly(capabilities),
         };
 
-        return new DiagnosticReportV1(
+        return new DiagnosticReportV2(
             CurrentSchemaVersion,
             environment ?? DiagnosticEnvironmentSnapshot.CreateCurrent(),
-            snapshot);
+            runtime,
+            compatibilitySnapshot);
     }
 
-    public string Serialize(DiagnosticReportV1 report)
+    public string Serialize(DiagnosticReportV2 report)
     {
         ArgumentNullException.ThrowIfNull(report);
         if (report.SchemaVersion != CurrentSchemaVersion)
@@ -207,7 +214,7 @@ public sealed class DiagnosticReportService : IDiagnosticReportService
 
     public async Task WriteAsync(
         string destinationPath,
-        DiagnosticReportV1 report,
+        DiagnosticReportV2 report,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(destinationPath);
@@ -277,45 +284,51 @@ public sealed class DiagnosticReportService : IDiagnosticReportService
 
     private static DiagnosticCapabilitySnapshot Map(
         DiagnosticCapabilityCode code,
-        CompatibilityCapability capability,
-        bool globalAvailable)
+        CompatibilityCapability capability)
     {
-        var state = capability.IsAvailable
-            ? DiagnosticCapabilityState.Available
-            : capability.ReasonCode is
-              CompatibilityCapabilityReasonCode.NotImplementedInCurrentRelease or
-              CompatibilityCapabilityReasonCode.UnavailableForGenericProbePackage
-                ? DiagnosticCapabilityState.Unavailable
-            : globalAvailable && code != DiagnosticCapabilityCode.GlobalBackground
-                ? DiagnosticCapabilityState.Degraded
-                : DiagnosticCapabilityState.Unavailable;
+        ArgumentNullException.ThrowIfNull(capability);
         var reason = capability.ReasonCode switch
         {
-            CompatibilityCapabilityReasonCode.AvailableFromExactProbePackage =>
-                DiagnosticCapabilityReason.AvailableFromExactProbePackage,
-            CompatibilityCapabilityReasonCode.AvailableFromGenericProbePackage =>
-                DiagnosticCapabilityReason.AvailableFromGenericProbePackage,
-            CompatibilityCapabilityReasonCode.AvailableFromReviewedBandProbePackage =>
-                DiagnosticCapabilityReason.AvailableFromReviewedBandProbePackage,
-            CompatibilityCapabilityReasonCode.DisabledByExactProbePackage =>
-                DiagnosticCapabilityReason.DisabledByExactProbePackage,
+            CompatibilityCapabilityReasonCode.AvailableFromGlobalBaseline =>
+                DiagnosticCapabilityReason.AvailableFromGlobalBaseline,
+            CompatibilityCapabilityReasonCode.AvailableFromPresentationContract =>
+                DiagnosticCapabilityReason.AvailableFromPresentationContract,
             CompatibilityCapabilityReasonCode.NotImplementedInCurrentRelease =>
-                DiagnosticCapabilityReason.NotImplemented,
-            CompatibilityCapabilityReasonCode.UnavailableForGenericProbePackage =>
-                DiagnosticCapabilityReason.UnavailableForGenericProbePackage,
+                DiagnosticCapabilityReason.NotImplementedInCurrentRelease,
+            CompatibilityCapabilityReasonCode.NoMatchingPresentationContract =>
+                DiagnosticCapabilityReason.NoMatchingPresentationContract,
+            CompatibilityCapabilityReasonCode.AmbiguousPresentationContract =>
+                DiagnosticCapabilityReason.AmbiguousPresentationContract,
             CompatibilityCapabilityReasonCode.StructuralProbeFailed =>
                 DiagnosticCapabilityReason.StructuralProbeFailed,
             CompatibilityCapabilityReasonCode.SecurityRejected =>
                 DiagnosticCapabilityReason.SecurityRejected,
-            CompatibilityCapabilityReasonCode.DisabledForGeneration or
-            CompatibilityCapabilityReasonCode.None =>
+            CompatibilityCapabilityReasonCode.DisabledForGeneration =>
                 DiagnosticCapabilityReason.DisabledForGeneration,
             _ => throw new ArgumentOutOfRangeException(
                 nameof(capability),
                 capability.ReasonCode,
                 "Unsupported compatibility capability reason."),
         };
-        return new DiagnosticCapabilitySnapshot(code, state, reason);
+        return new DiagnosticCapabilitySnapshot(code, capability.IsAvailable, reason);
+    }
+
+    private static string? AllowListedContractId(string? contractId)
+    {
+        if (string.Equals(
+                contractId,
+                PresentationContractCatalog.GlobalBaselineId,
+                StringComparison.Ordinal))
+        {
+            return PresentationContractCatalog.GlobalBaselineId;
+        }
+
+        return string.Equals(
+                contractId,
+                PresentationContractCatalog.CodexShellId,
+                StringComparison.Ordinal)
+            ? PresentationContractCatalog.CodexShellId
+            : null;
     }
 
     private static void TryDelete(string path)

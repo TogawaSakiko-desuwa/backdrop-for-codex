@@ -4,10 +4,10 @@ public static class CdpTargetClassifier
 {
     public static CdpTargetClassification Classify(
         CdpTargetDescriptor target,
-        CodexCompatibilityProfile profile)
+        VerifiedCodexIdentity identity)
     {
         ArgumentNullException.ThrowIfNull(target);
-        ArgumentNullException.ThrowIfNull(profile);
+        ArgumentNullException.ThrowIfNull(identity);
 
         if (string.Equals(target.Type, "service_worker", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(target.Type, "worker", StringComparison.OrdinalIgnoreCase) ||
@@ -42,7 +42,7 @@ public static class CdpTargetClassifier
             return CdpTargetClassification.AuthenticationPage;
         }
 
-        if (profile.IsKnownTitle(target.Title) && IsReviewedCodexPage(uri, profile))
+        if (identity.IsKnownTitle(target.Title) && IsReviewedCodexPage(uri, identity))
         {
             return CdpTargetClassification.CodexPage;
         }
@@ -50,11 +50,21 @@ public static class CdpTargetClassifier
         return CdpTargetClassification.OtherPage;
     }
 
-    private static bool IsReviewedCodexPage(Uri uri, CodexCompatibilityProfile profile)
+    internal static bool IsReviewedCodexPage(
+        Uri uri,
+        VerifiedCodexIdentity identity)
     {
+        ArgumentNullException.ThrowIfNull(uri);
+        ArgumentNullException.ThrowIfNull(identity);
+
+        if (IsAuxiliaryApplicationPage(uri))
+        {
+            return false;
+        }
+
         if (string.Equals(uri.Scheme, Uri.UriSchemeFile, StringComparison.OrdinalIgnoreCase))
         {
-            return IsReviewedPackagedFilePage(uri, profile);
+            return IsReviewedPackagedFilePage(uri, identity);
         }
 
         if (string.Equals(uri.Scheme, "app", StringComparison.OrdinalIgnoreCase))
@@ -75,7 +85,7 @@ public static class CdpTargetClassifier
             return false;
         }
 
-        if (!profile.AllowedRemotePageHosts.Contains(uri.IdnHost))
+        if (!identity.AllowedRemotePageHosts.Contains(uri.IdnHost))
         {
             return false;
         }
@@ -158,9 +168,9 @@ public static class CdpTargetClassifier
 
     private static bool IsReviewedPackagedFilePage(
         Uri uri,
-        CodexCompatibilityProfile profile)
+        VerifiedCodexIdentity identity)
     {
-        if (profile.PackageRoot is null || uri.IsUnc)
+        if (identity.PackageRoot is null || uri.IsUnc)
         {
             return false;
         }
@@ -169,7 +179,7 @@ public static class CdpTargetClassifier
         {
             var candidatePath = Path.GetFullPath(uri.LocalPath);
             var expectedPath = Path.GetFullPath(
-                Path.Combine(profile.PackageRoot, "app", "index.html"));
+                Path.Combine(identity.PackageRoot, "app", "index.html"));
             return string.Equals(
                 candidatePath,
                 expectedPath,
@@ -199,6 +209,57 @@ public static class CdpTargetClassifier
                (string.Equals(normalized, "/app", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(normalized, "/index.html", StringComparison.OrdinalIgnoreCase) ||
                 normalized.EndsWith("/index.html", StringComparison.OrdinalIgnoreCase));
+    }
+
+    internal static bool IsAuxiliaryApplicationPage(Uri uri)
+    {
+        ArgumentNullException.ThrowIfNull(uri);
+        if (!string.Equals(uri.Scheme, Uri.UriSchemeFile, StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(uri.Scheme, "app", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(uri.Scheme, "codex", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var query = uri.Query.TrimStart('?');
+        foreach (var parameter in query.Split('&', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var separator = parameter.IndexOf('=');
+            var encodedName = separator < 0 ? parameter : parameter[..separator];
+            var encodedValue = separator < 0 ? string.Empty : parameter[(separator + 1)..];
+            string name;
+            try
+            {
+                name = Uri.UnescapeDataString(encodedName);
+            }
+            catch (UriFormatException)
+            {
+                continue;
+            }
+
+            if (!string.Equals(name, "initialRoute", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            try
+            {
+                if (string.Equals(
+                        Uri.UnescapeDataString(encodedValue).TrimEnd('/'),
+                        "/avatar-overlay",
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+            catch (UriFormatException)
+            {
+                // A malformed initial route is never evidence for the main work page.
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static bool IsAuthenticationPage(Uri uri) =>

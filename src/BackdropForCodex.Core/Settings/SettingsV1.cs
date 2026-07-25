@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using BackdropForCodex.Core.Media;
 
 namespace BackdropForCodex.Core.Settings;
@@ -48,6 +49,14 @@ public sealed record SettingsV1
 
     public bool AcceptedCdpRisk { get; init; }
 
+    /// <summary>
+    /// Retained only to deserialize and round-trip settings written by older releases.
+    /// It no longer participates in compatibility selection or runtime behavior.
+    /// </summary>
+    [Obsolete(
+        "Retained only for backward-compatible settings round-tripping. " +
+        "Do not use this property for runtime behavior.")]
+    [EditorBrowsable(EditorBrowsableState.Never)]
     public string? LastCompatibilityProfileId { get; init; }
 
     public static SettingsV1 CreateDefault() => new();
@@ -182,6 +191,7 @@ public sealed record SettingsV1
             }
         }
 
+#pragma warning disable CS0618 // Validate the deprecated value solely for safe round-tripping.
         if (LastCompatibilityProfileId is not null)
         {
             if (string.IsNullOrWhiteSpace(LastCompatibilityProfileId))
@@ -193,6 +203,7 @@ public sealed record SettingsV1
                 errors.Add("LastCompatibilityProfileId cannot exceed 128 characters.");
             }
         }
+#pragma warning restore CS0618
 
         return new ReadOnlyCollection<string>(errors);
     }

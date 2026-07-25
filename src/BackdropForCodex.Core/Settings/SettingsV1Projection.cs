@@ -75,7 +75,9 @@ public static class SettingsV1Projection
             LightOverlay = profile.LightOverlay,
             RecentMediaPaths = new ReadOnlyCollection<string>(recentPaths),
             AcceptedCdpRisk = snapshot.AcceptedCdpRisk,
+#pragma warning disable CS0618 // Keep the deprecated value in the legacy projection for round-tripping.
             LastCompatibilityProfileId = snapshot.LastCompatibilityProfileId,
+#pragma warning restore CS0618
         }.Snapshot();
     }
 
@@ -207,6 +209,8 @@ public static class SettingsV1Projection
                 : profile)
             .ToArray();
 
+        // LastCompatibilityProfileId is deliberately omitted. A V1-shaped editor may
+        // round-trip the deprecated field, but it cannot replace the V2 persisted value.
         var updated = snapshot with
         {
             Profiles = new ReadOnlyCollection<WallpaperProfile>(profiles),

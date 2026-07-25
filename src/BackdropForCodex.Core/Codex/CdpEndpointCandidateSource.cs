@@ -12,7 +12,7 @@ public interface ICodexProcessSnapshotSource
 public interface ICdpEndpointCandidateSource
 {
     ValueTask<IReadOnlyList<CdpEndpointCandidate>> GetCandidatesAsync(
-        CodexCompatibilityProfile profile,
+        VerifiedCodexIdentity identity,
         CancellationToken cancellationToken = default);
 }
 
@@ -31,10 +31,10 @@ public sealed partial class CommandLineCdpEndpointCandidateSource : ICdpEndpoint
     }
 
     public async ValueTask<IReadOnlyList<CdpEndpointCandidate>> GetCandidatesAsync(
-        CodexCompatibilityProfile profile,
+        VerifiedCodexIdentity identity,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(profile);
+        ArgumentNullException.ThrowIfNull(identity);
         var processes = await _processSource.GetProcessesAsync(cancellationToken).ConfigureAwait(false);
         var candidates = new List<CdpEndpointCandidate>();
 
@@ -42,14 +42,14 @@ public sealed partial class CommandLineCdpEndpointCandidateSource : ICdpEndpoint
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (process.ProcessId <= 0 ||
-                !profile.IsKnownExecutable(process.ExecutableName) ||
+                !identity.IsKnownExecutable(process.ExecutableName) ||
                 !string.Equals(
                     process.PackageFamilyName,
-                    profile.PackageFamilyName,
+                    identity.PackageFamilyName,
                     StringComparison.Ordinal) ||
                 !string.Equals(
                     process.PackageFullName,
-                    profile.PackageFullName,
+                    identity.PackageFullName,
                     StringComparison.Ordinal) ||
                 process.StartTimeUtc == default ||
                 process.SessionId != WindowsCodexProcessSnapshotSource.CurrentSessionId ||

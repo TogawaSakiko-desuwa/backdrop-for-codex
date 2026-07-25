@@ -230,6 +230,9 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     internal CompatibilityCapabilities? CompatibilityCapabilities =>
         (_wallpaper as IWallpaperApplicationCapabilitySource)?.Capabilities;
 
+    internal WallpaperCompatibilitySnapshot WallpaperCompatibility =>
+        _capabilitySource?.Compatibility ?? WallpaperCompatibilitySnapshot.NotEvaluated;
+
     public bool IsPaused
     {
         get => _isPaused;
@@ -1135,6 +1138,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         void Update()
         {
             OnPropertyChanged(nameof(CompatibilityCapabilities));
+            OnPropertyChanged(nameof(WallpaperCompatibility));
             var visualCapabilityDropped =
                 (eventArgs.Previous.GlassStyle.IsAvailable &&
                  !eventArgs.Current.GlassStyle.IsAvailable) ||

@@ -20,9 +20,8 @@ internal sealed class WallpaperInjectionGenerationMonitor
     private Task _healthFaultTask = Task.CompletedTask;
     private long _activeGeneration;
     private long _capabilityObservationGeneration;
-    private CompatibilityCapabilities _capabilitySnapshot =
-        CompatibilityCapabilities.AllUnavailable(
-            CompatibilityCapabilityReasonCode.DisabledForGeneration);
+    private WallpaperCompatibilitySnapshot _compatibilitySnapshot =
+        WallpaperCompatibilitySnapshot.NotEvaluated;
     private int _stopped;
 
     public WallpaperInjectionGenerationMonitor(
@@ -52,14 +51,70 @@ internal sealed class WallpaperInjectionGenerationMonitor
         CapabilitiesChanged;
 
     public CompatibilityCapabilities Capabilities =>
-        Volatile.Read(ref _capabilitySnapshot);
+        Volatile.Read(ref _compatibilitySnapshot).Capabilities;
+
+    public WallpaperCompatibilitySnapshot Compatibility =>
+        Volatile.Read(ref _compatibilitySnapshot);
+
+    public void BeginAttempt()
+    {
+        lock (_capabilitySync)
+        {
+            _capabilityObservationGeneration = 0;
+            Volatile.Write(
+                ref _compatibilitySnapshot,
+                WallpaperCompatibilitySnapshot.NotEvaluated);
+        }
+    }
+
+    public void CaptureSecurity(CodexSecurityResult security)
+    {
+        ArgumentNullException.ThrowIfNull(security);
+        lock (_capabilitySync)
+        {
+            var current = Volatile.Read(ref _compatibilitySnapshot);
+            var capabilities = security.Status == CodexSecurityStatus.Rejected
+                ? CompatibilityCapabilities.SecurityRejected()
+                : current.Capabilities;
+            Volatile.Write(
+                ref _compatibilitySnapshot,
+                current with
+                {
+                    CodexVersion = security.Identity?.PackageVersion ??
+                        current.CodexVersion,
+                    Security = security,
+                    Capabilities = capabilities,
+                });
+        }
+    }
+
+    public void CaptureCodexVersion(Version version)
+    {
+        ArgumentNullException.ThrowIfNull(version);
+        lock (_capabilitySync)
+        {
+            var current = Volatile.Read(ref _compatibilitySnapshot);
+            Volatile.Write(
+                ref _compatibilitySnapshot,
+                current with
+                {
+                    CodexVersion = version,
+                });
+        }
+    }
 
     public void CaptureCapabilities(CompatibilityCapabilities capabilities)
     {
         ArgumentNullException.ThrowIfNull(capabilities);
         lock (_capabilitySync)
         {
-            Volatile.Write(ref _capabilitySnapshot, capabilities);
+            var current = Volatile.Read(ref _compatibilitySnapshot);
+            Volatile.Write(
+                ref _compatibilitySnapshot,
+                current with
+                {
+                    Capabilities = capabilities,
+                });
         }
     }
 
@@ -69,18 +124,6 @@ internal sealed class WallpaperInjectionGenerationMonitor
         lock (_capabilitySync)
         {
             _capabilityObservationGeneration = generation;
-        }
-    }
-
-    public void ResetCapabilities()
-    {
-        lock (_capabilitySync)
-        {
-            _capabilityObservationGeneration = 0;
-            Volatile.Write(
-                ref _capabilitySnapshot,
-                CompatibilityCapabilities.AllUnavailable(
-                    CompatibilityCapabilityReasonCode.DisabledForGeneration));
         }
     }
 
@@ -191,7 +234,14 @@ internal sealed class WallpaperInjectionGenerationMonitor
                 return;
             }
 
-            Volatile.Write(ref _capabilitySnapshot, eventArgs.Current);
+            var current = Volatile.Read(ref _compatibilitySnapshot);
+            Volatile.Write(
+                ref _compatibilitySnapshot,
+                current with
+                {
+                    Presentation = eventArgs.PresentationContract,
+                    Capabilities = eventArgs.Current,
+                });
         }
 
         PublishCapabilitiesChanged(eventArgs);

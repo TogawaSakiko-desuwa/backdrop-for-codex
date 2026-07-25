@@ -11,8 +11,7 @@ namespace BackdropForCodex.Core.Injection;
 /// </summary>
 internal sealed class VerifiedCodexPageSelector
 {
-    private const string MainDocumentReadyExpression =
-        "Boolean(document.documentElement && document.body && document.querySelector('main'))";
+    private static readonly TimeSpan SessionDetachTimeout = TimeSpan.FromSeconds(1);
 
     private readonly Dictionary<IPage, string> _targetIds =
         new(ReferenceEqualityComparer.Instance);
@@ -39,7 +38,7 @@ internal sealed class VerifiedCodexPageSelector
         var eligiblePages = new List<IPage>();
         foreach (var page in activePages)
         {
-            if (await IsEligibleMainPageAsync(page, endpoint, cancellationToken)
+            if (await IsEligibleVerifiedPageAsync(page, endpoint, cancellationToken)
                     .ConfigureAwait(false))
             {
                 eligiblePages.Add(page);
@@ -78,6 +77,11 @@ internal sealed class VerifiedCodexPageSelector
             return false;
         }
 
+        if (CdpTargetClassifier.IsAuxiliaryApplicationPage(pageUri))
+        {
+            return false;
+        }
+
         return endpoint.InjectableTargets.Any(target =>
             string.Equals(target.Id, targetId, StringComparison.Ordinal) &&
             IsSameReviewedDocument(pageUri, target.Url));
@@ -97,6 +101,12 @@ internal sealed class VerifiedCodexPageSelector
             return false;
         }
 
+        if (CdpTargetClassifier.IsAuxiliaryApplicationPage(pageUri) ||
+            CdpTargetClassifier.IsAuxiliaryApplicationPage(reviewedUri))
+        {
+            return false;
+        }
+
         return Uri.Compare(
             pageUri,
             reviewedUri,
@@ -105,7 +115,7 @@ internal sealed class VerifiedCodexPageSelector
             StringComparison.OrdinalIgnoreCase) == 0;
     }
 
-    public async Task<bool> IsEligibleMainPageAsync(
+    public async Task<bool> IsEligibleVerifiedPageAsync(
         IPage page,
         VerifiedCdpEndpoint endpoint,
         CancellationToken cancellationToken)
@@ -119,14 +129,8 @@ internal sealed class VerifiedCodexPageSelector
         try
         {
             var title = await page.GetTitleAsync().WaitAsync(cancellationToken).ConfigureAwait(false);
-            if (!title.Contains("Codex", StringComparison.OrdinalIgnoreCase) ||
-                !IsEligibleTargetDocument(targetId, page.Url, endpoint))
-            {
-                return false;
-            }
-
-            return await page.EvaluateExpressionAsync<bool>(MainDocumentReadyExpression)
-                .WaitAsync(cancellationToken).ConfigureAwait(false);
+            return endpoint.Identity.IsKnownTitle(title) &&
+                   IsEligibleTargetDocument(targetId, page.Url, endpoint);
         }
         catch (PuppeteerException)
         {
@@ -173,14 +177,41 @@ internal sealed class VerifiedCodexPageSelector
         {
             if (session is not null)
             {
+                Task? detachTask = null;
+                using var detachCancellation =
+                    CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                detachCancellation.CancelAfter(SessionDetachTimeout);
                 try
                 {
-                    await session.DetachAsync().ConfigureAwait(false);
+                    detachTask = session.DetachAsync();
+                    await detachTask.WaitAsync(detachCancellation.Token).ConfigureAwait(false);
                 }
                 catch (PuppeteerException)
                 {
                 }
+                catch (OperationCanceledException)
+                    when (detachCancellation.IsCancellationRequested)
+                {
+                    if (detachTask is not null)
+                    {
+                        _ = ObserveDetachCompletionAsync(detachTask);
+                    }
+
+                    cancellationToken.ThrowIfCancellationRequested();
+                }
             }
+        }
+    }
+
+    private static async Task ObserveDetachCompletionAsync(Task detachTask)
+    {
+        try
+        {
+            await detachTask.ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            // The bounded cleanup path has already returned; observe late detach failure.
         }
     }
 }

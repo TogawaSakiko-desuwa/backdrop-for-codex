@@ -4,6 +4,35 @@
 
 ## [Unreleased]
 
+## [1.3.3] - 2026-07-25
+
+### Changed
+
+- 移除按 Codex 精确版本、受审版本带和通用探针选择表现能力的策略，改为两个程序内置、只读且与版本无关的结构契约：`global-baseline-v1` 独立验证全局背景所需的最小结构，`codex-shell-v1` 按实际页面证据声明玻璃和高级内容表面。相同 DOM fixture 不再因官方 Codex 版本号变化而得到不同契约或能力。
+- Codex 四段版本仍用于已验证包身份的自洽检查和脱敏诊断，但不参与表现契约的候选、排序或决胜。高级契约恰好命中一个时使用该契约；零匹配或多重匹配在就绪窗结束后只启用 `global-baseline-v1`，baseline 失败则不注入。
+- 结构契约在一次 generation 内锁定，五项能力继续独立且只能降级；证据恢复不会在同一 generation 中重新启用能力或切换契约。
+- `LastCompatibilityProfileId` 保留 schema 2 序列化和 V1 迁移透传以兼容旧设置，但已废弃；运行时不再生成、更新或读取该字段作控制，V1 编辑门面和脏状态比较也不再让它参与行为决策。
+- 诊断报告升级到 `schemaVersion: 2`，固定为 Environment、Runtime 和 Compatibility 三部分，只导出 Codex 版本、类型化安全结果、活动结构契约、匹配状态和逐项能力原因等白名单字段；不导出路径、包完整名、Publisher、进程/会话/端口、页面标题或 URL、DOM、选择器、原始异常或 CDP Detail。
+
+### Fixed
+
+- 移除 Codex 主内容区原生顶部渐变在透明壁纸上暴露出的首屏黑带；规则只清除经审核节点的 `background-image`，保留 edge-scroll 的原生 0.5px 分隔线和其他表面属性。
+- 收紧 `codex-shell-v1` 的结构证据，只有经审核的 header 与 main viewport 锚点同时存在时才启用 Glass/Advanced；普通 `aside` 或单一锚点不再足以命中高级契约。
+- 修正初始就绪窗把历史短暂歧义误当作终局歧义、以及单次探测可越过 10 秒上限的问题；终局现在以最新页面集合为准，持续多目标才失败关闭。
+- 修正 Codex 冷启动头像浮层 `initialRoute=/avatar-overlay` 被误认作主工作页的问题；端点发现和注入前页面复验现在都会排除该辅助页面，避免有效图片或视频被误报为媒体载入失败或多目标歧义。
+- 修正同 generation 的浏览器重连会清空活动契约与能力锁的问题；同代继续只允许能力降级，跨代才重新选择契约。
+- 安装包发现不再按 Codex 版本排序或选择最高版本；多个完整验证候选现在一律报告歧义并失败关闭。
+
+### Security
+
+- 包、Publisher、AppId、进程、当前会话、PID/启动时间、监听器所有权、严格 IPv4 回环、CDP browser/socket/target 和唯一页面验证继续严格失败关闭。只有安全目标验证成功后才会运行结构证据探针，任何安全失败或持续多目标歧义都不会执行 DOM 探针。
+- 1.3.3 作为既有能力的安全边界与兼容模型重构直接进入 Stable；这是一次明确的 Preview 例外，后续新增的上游敏感能力仍须先发 Preview 再进入 Stable。
+
+### Verification
+
+- 实施前非集成测试基线为 390 个。512 MiB/8 GiB 边界测试改用声明长度只读测试流的修复已经包含在 1.3.1，本版本沿用该基线，不重复把它记作 1.3.3 的改动。
+- 当前实现的 436 个非集成测试全部通过；显式启用的 3 个真实 Edge/CDP 用例同时验证冷启动及 `visible` / `full-bleed` / `hidden` 状态和节点重建后的顶部渐变均被清除、无关渐变与 0.5px 分隔线保留、四种 shell 锚点组合、同 DOM 下跨版本契约一致，以及 CSP 受限媒体加载；另有 2 个当前机器用例验证官方 Codex 包和运行中进程身份。
+
 ## [1.3.2] - 2026-07-25
 
 ### Fixed
@@ -135,7 +164,8 @@
 - 复验完整 MSIX 包名、激活 PID、进程启动时间、Windows 会话和监听器所有权；媒体服务保持已校验文件的只读句柄。
 - 明确禁止 CSP bypass；关闭、更换或 lease 到期时移除媒体 `src`、撤销 `blob:` URL，并仅删除带有本项目 owner/generation 的节点和样式。
 
-[Unreleased]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.3.2...HEAD
+[Unreleased]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.3.3...HEAD
+[1.3.3]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.3.2...v1.3.3
 [1.3.2]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.3.1...v1.3.2
 [1.3.1]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.2.1...v1.3.0

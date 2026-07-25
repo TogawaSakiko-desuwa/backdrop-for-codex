@@ -47,7 +47,9 @@ internal sealed class InjectedPageRegistry
         }
     }
 
-    public async Task CleanupTrackedPageAsync(IPage page)
+    public async Task CleanupTrackedPageAsync(
+        IPage page,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(page);
         var cleanupGeneration = 0L;
@@ -63,17 +65,38 @@ internal sealed class InjectedPageRegistry
 
         if (cleanupGeneration != 0)
         {
-            await CleanupOrTrackPendingAsync(page, cleanupGeneration).ConfigureAwait(false);
+            await CleanupOrTrackPendingAsync(
+                    page,
+                    cleanupGeneration,
+                    cancellationToken)
+                .ConfigureAwait(false);
         }
     }
 
-    public async Task<bool> CleanupOrTrackPendingAsync(IPage page, long generation)
+    public async Task<bool> CleanupOrTrackPendingAsync(
+        IPage page,
+        long generation,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(page);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(generation);
-        var cleaned = await PuppeteerPageScriptExecutor
-            .CleanupBestEffortAsync(page, generation, CleanupTimeout)
-            .ConfigureAwait(false);
+        bool cleaned;
+        try
+        {
+            cleaned = await PuppeteerPageScriptExecutor
+                .CleanupBestEffortAsync(
+                    page,
+                    generation,
+                    CleanupTimeout,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            TrackPendingCleanup(page, generation);
+            throw;
+        }
+
         if (cleaned || page.IsClosed)
         {
             RemovePendingCleanupUpTo(page, generation);
@@ -182,13 +205,16 @@ internal static class PuppeteerPageScriptExecutor
     public static async Task<bool> CleanupBestEffortAsync(
         IPage page,
         long generation,
-        TimeSpan timeout)
+        TimeSpan timeout,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(page);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(generation);
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(timeout, TimeSpan.Zero);
 
-        using var cleanupCancellation = new CancellationTokenSource(timeout);
+        using var cleanupCancellation =
+            CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        cleanupCancellation.CancelAfter(timeout);
         try
         {
             return await TryEvaluateAsync(
@@ -199,6 +225,7 @@ internal static class PuppeteerPageScriptExecutor
         }
         catch (OperationCanceledException) when (cleanupCancellation.IsCancellationRequested)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             return false;
         }
     }

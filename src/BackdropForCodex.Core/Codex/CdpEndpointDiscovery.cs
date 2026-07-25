@@ -191,12 +191,12 @@ public static class CdpEndpointIdentityVerifier
 {
     public static CdpEndpointIdentityResult Verify(
         CdpEndpointCandidate candidate,
-        CodexCompatibilityProfile profile,
+        VerifiedCodexIdentity verifiedIdentity,
         CdpBrowserVersion browser,
         IReadOnlyList<CdpTargetDescriptor> targets)
     {
         ArgumentNullException.ThrowIfNull(candidate);
-        ArgumentNullException.ThrowIfNull(profile);
+        ArgumentNullException.ThrowIfNull(verifiedIdentity);
         ArgumentNullException.ThrowIfNull(browser);
         ArgumentNullException.ThrowIfNull(targets);
 
@@ -208,14 +208,14 @@ public static class CdpEndpointIdentityVerifier
         }
 
         if (candidate.ProcessId <= 0 ||
-            !profile.IsKnownExecutable(candidate.ExecutableName) ||
+            !verifiedIdentity.IsKnownExecutable(candidate.ExecutableName) ||
             !string.Equals(
                 candidate.PackageFamilyName,
-                profile.PackageFamilyName,
+                verifiedIdentity.PackageFamilyName,
                 StringComparison.Ordinal) ||
             !string.Equals(
                 candidate.PackageFullName,
-                profile.PackageFullName,
+                verifiedIdentity.PackageFullName,
                 StringComparison.Ordinal) ||
             candidate.StartTimeUtc == default ||
             candidate.SessionId != WindowsCodexProcessSnapshotSource.CurrentSessionId)
@@ -261,7 +261,7 @@ public static class CdpEndpointIdentityVerifier
         var classified = targets
             .Select(target => new ClassifiedCdpTarget(
                 target,
-                CdpTargetClassifier.Classify(target, profile)))
+                CdpTargetClassifier.Classify(target, verifiedIdentity)))
             .ToArray();
         var codexTargets = classified
             .Where(target => target.Classification == CdpTargetClassification.CodexPage)
@@ -290,7 +290,12 @@ public static class CdpEndpointIdentityVerifier
         return new CdpEndpointIdentityResult(
             CdpEndpointRejection.None,
             "The endpoint is owned by the reviewed Codex package and exposes a Codex page.",
-            new VerifiedCdpEndpoint(candidate, browser, browserSocket!, classified, profile));
+            new VerifiedCdpEndpoint(
+                candidate,
+                browser,
+                browserSocket!,
+                classified,
+                verifiedIdentity));
     }
 
     internal static bool IsStrictIpv4LoopbackHttp(Uri uri, bool requireRootPath) =>
@@ -362,12 +367,12 @@ public sealed class CdpEndpointDiscovery
     }
 
     public async ValueTask<CdpDiscoveryResult> DiscoverAsync(
-        CodexCompatibilityProfile profile,
+        VerifiedCodexIdentity verifiedIdentity,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(profile);
+        ArgumentNullException.ThrowIfNull(verifiedIdentity);
         var candidates = await _candidateSource
-            .GetCandidatesAsync(profile, cancellationToken)
+            .GetCandidatesAsync(verifiedIdentity, cancellationToken)
             .ConfigureAwait(false);
         var endpoints = new List<VerifiedCdpEndpoint>();
         var rejections = new List<CdpEndpointProbe>();
@@ -394,7 +399,7 @@ public sealed class CdpEndpointDiscovery
                     cancellationToken).ConfigureAwait(false);
 
                 var currentCandidates = await _candidateSource
-                    .GetCandidatesAsync(profile, cancellationToken)
+                    .GetCandidatesAsync(verifiedIdentity, cancellationToken)
                     .ConfigureAwait(false);
                 if (!currentCandidates.Any(current => IsSameCandidate(candidate, current)))
                 {
@@ -420,17 +425,21 @@ public sealed class CdpEndpointDiscovery
                     continue;
                 }
 
-                var identity = CdpEndpointIdentityVerifier.Verify(candidate, profile, browser, targets);
-                if (identity.IsVerified)
+                var endpointIdentity = CdpEndpointIdentityVerifier.Verify(
+                    candidate,
+                    verifiedIdentity,
+                    browser,
+                    targets);
+                if (endpointIdentity.IsVerified)
                 {
-                    endpoints.Add(identity.Endpoint!);
+                    endpoints.Add(endpointIdentity.Endpoint!);
                 }
                 else
                 {
                     rejections.Add(new CdpEndpointProbe(
                         candidate,
-                        identity.Rejection,
-                        identity.Detail));
+                        endpointIdentity.Rejection,
+                        endpointIdentity.Detail));
                 }
             }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)

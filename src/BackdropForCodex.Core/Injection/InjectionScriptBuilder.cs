@@ -29,15 +29,7 @@ public static class InjectionScriptBuilder
     internal static string BuildInstall(WallpaperInjectionOptions options) =>
         BuildInstall(
             options,
-            CompatibilityCapabilities.FromProbePackage(
-                CompatibilityProbePackageKind.Exact,
-                globalBackground: true,
-                regionRecognition: false,
-                glassStyle: true,
-                audio: false,
-                advancedSurfaces: true,
-                unavailableReasonOverride:
-                    CompatibilityCapabilityReasonCode.NotImplementedInCurrentRelease));
+            PresentationContractCatalog.CreateFullySupportedCapabilities());
 
     internal static string BuildInstall(
         WallpaperInjectionOptions options,
@@ -304,6 +296,10 @@ public static class InjectionScriptBuilder
                   }
                   /* codex-wallpaper-glass:end */
                   /* codex-wallpaper-advanced:start */
+                  {{advancedBodySelector}} main
+                    .app-shell-main-content-top-fade[data-app-shell-main-content-top-fade] {
+                    background-image: none !important;
+                  }
                   {{advancedBodySelector}} main .thread-scroll-container
                     [class~="bg-gradient-to-t"][class~="from-token-main-surface-primary"][class~="via-token-main-surface-primary"] {
                     background: transparent !important;
