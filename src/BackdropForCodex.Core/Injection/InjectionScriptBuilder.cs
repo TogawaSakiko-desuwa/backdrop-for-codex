@@ -207,6 +207,114 @@ public static class InjectionScriptBuilder
                     -webkit-backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
                     backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
                   }
+                  /*
+                   * Plugin browse owns an opaque sticky search shell. Glass only that
+                   * reviewed shell; plugin cards and controls retain their theme surfaces.
+                   */
+                  {{glassBodySelector}} [class~="sticky"][class~="z-30"][class~="bg-token-main-surface-primary"]:has([id="plugins-page-search"]) {
+                    background-color: var(--codex-wallpaper-glass) !important;
+                    -webkit-backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
+                    backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
+                    border-color: var(--codex-wallpaper-border);
+                  }
+                  {{glassBodySelector}} [class~="sticky"][class~="z-30"][class~="bg-token-main-surface-primary"]:has([id="plugins-page-search"])::after {
+                    background-image: linear-gradient(to bottom, var(--codex-wallpaper-glass), transparent) !important;
+                  }
+                  /*
+                   * Scheduled tasks uses the same page chrome but a distinct stable search
+                   * anchor. Keep task rows and their status surfaces outside this rule.
+                   */
+                  {{glassBodySelector}} [class~="sticky"][class~="z-30"][class~="bg-token-main-surface-primary"]:has([id="scheduled-page-search"]) {
+                    background-color: var(--codex-wallpaper-glass) !important;
+                    -webkit-backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
+                    backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
+                    border-color: var(--codex-wallpaper-border);
+                  }
+                  {{glassBodySelector}} [class~="sticky"][class~="z-30"][class~="bg-token-main-surface-primary"]:has([id="scheduled-page-search"])::after {
+                    background-image: linear-gradient(to bottom, var(--codex-wallpaper-glass), transparent) !important;
+                  }
+                  /*
+                   * Sites has an opaque route root around the shared page chrome. Glass
+                   * that root once, then clear only its nested search shell.
+                   */
+                  {{glassBodySelector}} [class~="flex"][class~="h-full"][class~="min-h-0"][class~="flex-col"][class~="bg-token-main-surface-primary"]:has([id="appgen-site-search"]) {
+                    background-color: var(--codex-wallpaper-glass) !important;
+                    -webkit-backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
+                    backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
+                    border-color: var(--codex-wallpaper-border);
+                  }
+                  {{glassBodySelector}} [class~="flex"][class~="h-full"][class~="min-h-0"][class~="flex-col"][class~="bg-token-main-surface-primary"]:has([id="appgen-site-search"])
+                    [class~="sticky"][class~="z-30"][class~="bg-token-main-surface-primary"]:has([id="appgen-site-search"]) {
+                    background-color: transparent !important;
+                  }
+                  {{glassBodySelector}} [class~="flex"][class~="h-full"][class~="min-h-0"][class~="flex-col"][class~="bg-token-main-surface-primary"]:has([id="appgen-site-search"])
+                    [class~="sticky"][class~="z-30"][class~="bg-token-main-surface-primary"]:has([id="appgen-site-search"])::after {
+                    background-image: none !important;
+                  }
+                  /*
+                   * Pull requests renders an opaque list plus a persistent detail outlet
+                   * inside the reviewed right-panel aside. Glass the list and the outlet's
+                   * outer shell once, preserve its divider, and clear only the two full-size
+                   * inner primary surfaces. Ordinary right-panel tabs fail the DetailPanel
+                   * presence guard; diff, editor, code, and review cards remain surfaced.
+                   */
+                  {{glassBodySelector}} [class~="flex"][class~="h-full"][class~="min-h-0"][class~="w-full"][class~="flex-col"][class~="bg-token-main-surface-primary"]:has([id="pull-request-inbox-search"]),
+                  {{glassBodySelector}} main:has([id="pull-request-inbox-search"])
+                    aside[data-app-shell-focus-area="right-panel"]:has(
+                      section[class~="h-full"][class~="min-h-0"][class~="min-w-0"][class~="bg-token-main-surface-primary"]
+                      > div[class~="@container/app-shell-detail-panel"][class~="flex"][class~="h-full"][class~="min-h-0"][class~="flex-col"][class~="bg-token-main-surface-primary"]
+                    )
+                    > div[class~="absolute"][class~="inset-0"][class~="min-h-0"][class~="min-w-0"][class~="overflow-hidden"]
+                    > div[class~="absolute"][class~="top-0"][class~="bottom-0"][class~="left-0"][class~="min-w-0"][class~="bg-token-main-surface-primary"] {
+                    background-color: var(--codex-wallpaper-glass) !important;
+                    -webkit-backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
+                    backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
+                    border-color: var(--codex-wallpaper-border);
+                  }
+                  {{glassBodySelector}} main:has([id="pull-request-inbox-search"])
+                    aside[data-app-shell-focus-area="right-panel"]:has(
+                      section[class~="h-full"][class~="min-h-0"][class~="min-w-0"][class~="bg-token-main-surface-primary"]
+                      > div[class~="@container/app-shell-detail-panel"][class~="flex"][class~="h-full"][class~="min-h-0"][class~="flex-col"][class~="bg-token-main-surface-primary"]
+                    )
+                    > div[class~="absolute"][class~="inset-0"][class~="min-h-0"][class~="min-w-0"][class~="overflow-hidden"]
+                    > div[class~="absolute"][class~="top-0"][class~="bottom-0"][class~="left-0"][class~="min-w-0"][class~="bg-token-main-surface-primary"]
+                    > div[class~="h-full"][class~="min-h-0"][class~="min-w-0"][class~="overflow-hidden"]
+                    > div[class~="h-full"]
+                    > section[class~="h-full"][class~="min-h-0"][class~="min-w-0"][class~="bg-token-main-surface-primary"],
+                  {{glassBodySelector}} main:has([id="pull-request-inbox-search"])
+                    aside[data-app-shell-focus-area="right-panel"]:has(
+                      section[class~="h-full"][class~="min-h-0"][class~="min-w-0"][class~="bg-token-main-surface-primary"]
+                      > div[class~="@container/app-shell-detail-panel"][class~="flex"][class~="h-full"][class~="min-h-0"][class~="flex-col"][class~="bg-token-main-surface-primary"]
+                    )
+                    > div[class~="absolute"][class~="inset-0"][class~="min-h-0"][class~="min-w-0"][class~="overflow-hidden"]
+                    > div[class~="absolute"][class~="top-0"][class~="bottom-0"][class~="left-0"][class~="min-w-0"][class~="bg-token-main-surface-primary"]
+                    > div[class~="h-full"][class~="min-h-0"][class~="min-w-0"][class~="overflow-hidden"]
+                    > div[class~="h-full"]
+                    > section[class~="h-full"][class~="min-h-0"][class~="min-w-0"][class~="bg-token-main-surface-primary"]
+                    > div[class~="@container/app-shell-detail-panel"][class~="flex"][class~="h-full"][class~="min-h-0"][class~="flex-col"][class~="bg-token-main-surface-primary"] {
+                    background-color: transparent !important;
+                  }
+                  {{glassBodySelector}} [class~="flex"][class~="h-full"][class~="min-h-0"][class~="w-full"][class~="flex-col"][class~="bg-token-main-surface-primary"]:has([id="pull-request-inbox-search"])
+                    [class~="sticky"][class~="z-30"][class~="bg-token-main-surface-primary"]:has([id="pull-request-inbox-search"]) {
+                    background-color: transparent !important;
+                  }
+                  {{glassBodySelector}} [class~="flex"][class~="h-full"][class~="min-h-0"][class~="w-full"][class~="flex-col"][class~="bg-token-main-surface-primary"]:has([id="pull-request-inbox-search"])
+                    [class~="sticky"][class~="z-30"][class~="bg-token-main-surface-primary"]:has([id="pull-request-inbox-search"])::after {
+                    background-image: none !important;
+                  }
+                  /*
+                   * Settings now renders its right canvas as a div.main-surface. Anchor
+                   * through the settings navigation and exact content slot so unrelated
+                   * main surfaces and nested settings cards remain untouched.
+                   */
+                  {{glassBodySelector}} [class~="flex"][class~="h-full"][class~="min-h-0"]:has([class~="app-shell-left-panel"] [data-settings-panel-slug])
+                    > [class~="relative"][class~="isolate"][class~="min-w-0"][class~="flex-1"][class~="overflow-visible"]
+                    > div[class~="main-surface"][class~="flex"][class~="h-full"][class~="min-h-0"][class~="flex-col"] {
+                    background-color: var(--codex-wallpaper-glass) !important;
+                    -webkit-backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
+                    backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
+                    border-color: var(--codex-wallpaper-border);
+                  }
                   /* codex-wallpaper-glass:end */
                   /*
                    * The reviewed right-panel shell owns the opaque theme surface. Glass that
@@ -303,6 +411,17 @@ public static class InjectionScriptBuilder
                   {{advancedBodySelector}} main .thread-scroll-container
                     [class~="bg-gradient-to-t"][class~="from-token-main-surface-primary"][class~="via-token-main-surface-primary"] {
                     background: transparent !important;
+                  }
+                  /*
+                   * The in-progress changed-files summary is rendered above the composer
+                   * in a portal with its own primary-to-transparent fade. Remove only that
+                   * reviewed fade; the summary button and composer chrome stay surfaced.
+                   */
+                  {{advancedBodySelector}} main [data-codex-composer-root] [data-above-composer-portal]
+                    > [data-in-progress-fixed-content]
+                    > [class~="absolute"][class~="inset-x-0"][class~="bottom-1"][class~="flex"][class~="min-h-7"][class~="items-center"][class~="justify-center"][class~="gap-2"][class~="pb-1"]
+                    > [class~="pointer-events-none"][class~="absolute"][class~="inset-x-0"][class~="-bottom-1"][class~="h-7"][class~="bg-gradient-to-t"][class~="from-token-main-surface-primary"][class~="to-transparent"] {
+                    background-image: none !important;
                   }
                   {{advancedBodySelector}} main [data-response-annotation-conversation][data-response-annotation-target],
                   {{advancedBodySelector}} main [data-user-message-bubble="true"] {

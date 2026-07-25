@@ -180,6 +180,119 @@ public sealed class InjectionScriptBuilderTests
     }
 
     [Fact]
+    public void BuildInstall_ReplacesOnlyReviewedPageStickyFadesWithGlassGradients()
+    {
+        var script = InjectionScriptBuilder.BuildInstall(CreateOptions());
+        var compactScript = string.Concat(script.Where(character => !char.IsWhiteSpace(character)));
+        const string GradientDeclaration =
+            "background-image: linear-gradient(to bottom, var(--codex-wallpaper-glass), transparent) !important;";
+        var compactGradientDeclaration = string.Concat(
+            GradientDeclaration.Where(character => !char.IsWhiteSpace(character)));
+
+        Assert.Equal(
+            2,
+            script.Split(GradientDeclaration, StringSplitOptions.None).Length - 1);
+
+        Assert.Contains(
+            "body[class~=\"sticky\"][class~=\"z-30\"]" +
+            "[class~=\"bg-token-main-surface-primary\"]" +
+            ":has([id=\"plugins-page-search\"])::after{" +
+            compactGradientDeclaration +
+            "}",
+            compactScript,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "body[class~=\"sticky\"][class~=\"z-30\"]" +
+            "[class~=\"bg-token-main-surface-primary\"]" +
+            ":has([id=\"scheduled-page-search\"])::after{" +
+            compactGradientDeclaration +
+            "}",
+            compactScript,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "body[class~=\"after:bg-linear-to-b\"]" +
+            "[class~=\"after:from-token-main-surface-primary\"]" +
+            "[class~=\"after:to-transparent\"]::after",
+            compactScript,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildInstall_RemovesOnlyNestedSitesAndPullRequestStickyPseudoFades()
+    {
+        var script = InjectionScriptBuilder.BuildInstall(CreateOptions());
+        var compactScript = string.Concat(script.Where(character => !char.IsWhiteSpace(character)));
+        const string ClearDeclaration = "background-image: none !important;";
+        var compactClearDeclaration = string.Concat(
+            ClearDeclaration.Where(character => !char.IsWhiteSpace(character)));
+
+        Assert.Contains(
+            "body[class~=\"flex\"][class~=\"h-full\"][class~=\"min-h-0\"]" +
+            "[class~=\"flex-col\"][class~=\"bg-token-main-surface-primary\"]" +
+            ":has([id=\"appgen-site-search\"])" +
+            "[class~=\"sticky\"][class~=\"z-30\"]" +
+            "[class~=\"bg-token-main-surface-primary\"]" +
+            ":has([id=\"appgen-site-search\"])::after{" +
+            compactClearDeclaration +
+            "}",
+            compactScript,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "body[class~=\"flex\"][class~=\"h-full\"][class~=\"min-h-0\"]" +
+            "[class~=\"w-full\"][class~=\"flex-col\"]" +
+            "[class~=\"bg-token-main-surface-primary\"]" +
+            ":has([id=\"pull-request-inbox-search\"])" +
+            "[class~=\"sticky\"][class~=\"z-30\"]" +
+            "[class~=\"bg-token-main-surface-primary\"]" +
+            ":has([id=\"pull-request-inbox-search\"])::after{" +
+            compactClearDeclaration +
+            "}",
+            compactScript,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "[class~=\"sticky\"]::after",
+            compactScript,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "[class~=\"after:bg-linear-to-b\"]" +
+            "[class~=\"after:from-token-main-surface-primary\"]" +
+            "[class~=\"after:to-transparent\"]::after",
+            compactScript,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildInstall_DoesNotEmitUnanchoredGlobalSurfaceOrGradientSelectors()
+    {
+        var script = InjectionScriptBuilder.BuildInstall(CreateOptions());
+        var compactScript = string.Concat(script.Where(character => !char.IsWhiteSpace(character)));
+
+        Assert.DoesNotContain(
+            "bodydiv[class~=\"main-surface\"]{",
+            compactScript,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "body[class~=\"main-surface\"]{",
+            compactScript,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "body[class~=\"bg-token-main-surface-primary\"]{",
+            compactScript,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "body[class*=\"bg-token-\"]",
+            compactScript,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "body[class~=\"bg-gradient-to-t\"]" +
+            "[class~=\"from-token-main-surface-primary\"]",
+            compactScript,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(":nth-child(", script, StringComparison.Ordinal);
+        Assert.DoesNotContain(":nth-of-type(", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BuildInstall_AppliesCropFocusAndAddsAnOwnedThemeAwareOverlay()
     {
         var script = InjectionScriptBuilder.BuildInstall(CreateOptions(
@@ -285,7 +398,9 @@ public sealed class InjectionScriptBuilderTests
             StringComparison.Ordinal);
         Assert.True(forcedColorsBlockStart >= 0);
         var nextRuleStart = normalizedScript.IndexOf(
-            "\nbody :is(\naside:not(",
+            "\nbody [class~=\"sticky\"][class~=\"z-30\"]" +
+            "[class~=\"bg-token-main-surface-primary\"]" +
+            ":has([id=\"plugins-page-search\"])",
             forcedColorsBlockStart,
             StringComparison.Ordinal);
         Assert.True(nextRuleStart > forcedColorsBlockStart);

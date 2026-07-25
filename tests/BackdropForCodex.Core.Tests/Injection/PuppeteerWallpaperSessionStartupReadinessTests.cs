@@ -209,6 +209,8 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
             Assert.Equal("0.5px", mainContent.FrameBorderTopWidthDeclaration);
             Assert.NotEqual("0px", mainContent.FrameComputedBorderTopWidth);
             Assert.True(shellSurfaces.StyleElementPreserved);
+
+            await AssertRouteAndChangedFilesSurfacesAsync(endpoint);
         }
         finally
         {
@@ -1073,6 +1075,718 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
         }
     }
 
+    private static async Task AssertRouteAndChangedFilesSurfacesAsync(
+        VerifiedCdpEndpoint endpoint)
+    {
+        var browser = await Puppeteer.ConnectAsync(new ConnectOptions
+        {
+            BrowserWSEndpoint = endpoint.BrowserWebSocketUri.AbsoluteUri,
+            DefaultViewport = null,
+            ProtocolTimeout = 5_000,
+            AcceptInsecureCerts = false,
+            NetworkEnabled = false,
+        });
+        try
+        {
+            var reviewedTarget = Assert.Single(endpoint.InjectableTargets);
+            var pages = await browser.PagesAsync(includeAll: true);
+            var page = Assert.Single(
+                pages,
+                candidate =>
+                    !candidate.IsClosed &&
+                    Uri.TryCreate(candidate.Url, UriKind.Absolute, out var candidateUri) &&
+                    VerifiedCodexPageSelector.IsSameReviewedDocument(
+                        candidateUri,
+                        reviewedTarget.Url));
+
+            var initial = await page.EvaluateExpressionAsync<RouteFixtureRendering>(
+                $$"""
+                (async () => {
+                  const main = document.querySelector("main");
+                  if (!main) throw new Error("Missing fixture main element.");
+                  const ownedStyle = document.querySelector(
+                    "#{{InjectionScriptBuilder.StyleElementId}}"
+                  );
+                  if (!ownedStyle) throw new Error("Missing owned wallpaper style.");
+
+                  const nativeStyles = document.createElement("style");
+                  nativeStyles.id = "route-surface-native-styles";
+                  nativeStyles.textContent = `
+                    .bg-token-main-surface-primary,
+                    .main-surface {
+                      background-color: rgb(24 24 24);
+                      -webkit-backdrop-filter: none;
+                      backdrop-filter: none;
+                    }
+                    [data-protected-route-surface] {
+                      background-color: rgb(41 42 43);
+                      -webkit-backdrop-filter: none;
+                      backdrop-filter: none;
+                    }
+                    [data-route-sticky]::after {
+                      content: "";
+                      background-image: linear-gradient(
+                        to bottom,
+                        rgb(24 24 24),
+                        rgba(24, 24, 24, 0));
+                    }
+                    [data-native-changed-files-fade] {
+                      background-image: linear-gradient(
+                        to top,
+                        rgb(24 24 24),
+                        rgba(24, 24, 24, 0));
+                    }
+                    #pull-request-detail-shell {
+                      border-left: 1px solid rgb(90 91 92);
+                    }
+                    #settings-canvas {
+                      display: flex;
+                      flex-direction: column;
+                      overflow-y: auto;
+                      border-radius: 17px;
+                      box-shadow: rgb(1 2 3) 0 0 0 3px;
+                    }
+                  `;
+                  document.head.append(nativeStyles);
+
+                  const fixtureHost = document.createElement("div");
+                  fixtureHost.id = "route-surface-fixture-host";
+                  main.append(fixtureHost);
+
+                  const create = (tag, id, className = "") => {
+                    const node = document.createElement(tag);
+                    if (id) node.id = id;
+                    if (className) node.className = className;
+                    return node;
+                  };
+                  const createProtectedSurface = (id, extraClass = "") => {
+                    const surface = create(
+                      "div",
+                      id,
+                      `bg-token-main-surface-primary ${extraClass}`.trim()
+                    );
+                    surface.dataset.protectedRouteSurface = "true";
+                    return surface;
+                  };
+                  const createSticky = (id, searchId) => {
+                    const sticky = create(
+                      "div",
+                      id,
+                      "sticky z-30 bg-token-main-surface-primary"
+                    );
+                    sticky.dataset.routeSticky = "true";
+                    sticky.append(create("input", searchId));
+                    return sticky;
+                  };
+
+                  const createPlugins = () => {
+                    const route = create("div", "plugins-route");
+                    route.append(
+                      createSticky("plugins-sticky", "plugins-page-search"),
+                      createProtectedSurface("plugins-card", "plugin-card")
+                    );
+                    return route;
+                  };
+                  const createScheduled = () => {
+                    const route = create("div", "scheduled-route");
+                    route.append(
+                      createSticky("scheduled-sticky", "scheduled-page-search"),
+                      createProtectedSurface("scheduled-row", "scheduled-task-row")
+                    );
+                    return route;
+                  };
+                  const createSites = () => {
+                    const route = create(
+                      "div",
+                      "sites-route",
+                      "flex h-full min-h-0 flex-col bg-token-main-surface-primary"
+                    );
+                    route.append(
+                      createSticky("sites-sticky", "appgen-site-search"),
+                      createProtectedSurface("sites-card", "site-card")
+                    );
+                    return route;
+                  };
+                  const createPullRequests = () => {
+                    const layout = create(
+                      "div",
+                      "pull-request-layout",
+                      "relative isolate flex min-h-0 flex-1 overflow-hidden"
+                    );
+                    const viewport = create(
+                      "div",
+                      "pull-request-viewport",
+                      "app-shell-main-content-viewport"
+                    );
+                    const route = create(
+                      "div",
+                      "pull-request-route",
+                      "flex h-full min-h-0 w-full flex-col " +
+                        "bg-token-main-surface-primary"
+                    );
+                    route.append(
+                      createSticky(
+                        "pull-request-sticky",
+                        "pull-request-inbox-search"
+                      ),
+                      createProtectedSurface("pull-request-card", "review-card")
+                    );
+                    viewport.append(route);
+                    const aside = create("aside", "pull-request-detail-aside");
+                    aside.dataset.appShellFocusArea = "right-panel";
+                    const shellFrame = create(
+                      "div",
+                      "pull-request-detail-shell-frame",
+                      "absolute inset-0 min-h-0 min-w-0 overflow-hidden"
+                    );
+                    const detailShell = create(
+                      "div",
+                      "pull-request-detail-shell",
+                      "absolute top-0 bottom-0 left-0 min-w-0 " +
+                        "bg-token-main-surface-primary border-l " +
+                        "border-token-border-default"
+                    );
+                    const portalBoundary = create(
+                      "div",
+                      "pull-request-detail-portal-boundary",
+                      "h-full min-h-0 min-w-0 overflow-hidden"
+                    );
+                    const portalHeight = create(
+                      "div",
+                      "pull-request-detail-portal-height",
+                      "h-full"
+                    );
+                    const detailSection = create(
+                      "section",
+                      "pull-request-detail-section",
+                      "h-full min-h-0 min-w-0 bg-token-main-surface-primary"
+                    );
+                    const detailRoot = create(
+                      "div",
+                      "pull-request-detail-root",
+                      "@container/app-shell-detail-panel flex h-full min-h-0 " +
+                        "flex-col bg-token-main-surface-primary"
+                    );
+                    detailRoot.append(
+                      createProtectedSurface("pull-request-diff", "diff-view"),
+                      createProtectedSurface("pull-request-editor", "monaco-editor")
+                    );
+                    detailSection.append(detailRoot);
+                    portalHeight.append(detailSection);
+                    portalBoundary.append(portalHeight);
+                    detailShell.append(portalBoundary);
+                    shellFrame.append(detailShell);
+                    aside.append(shellFrame);
+                    layout.append(viewport, aside);
+                    return layout;
+                  };
+                  const createSettings = () => {
+                    const layout = create(
+                      "div",
+                      "settings-layout",
+                      "flex h-full min-h-0"
+                    );
+                    const navigation = create(
+                      "div",
+                      "settings-navigation",
+                      "app-shell-left-panel"
+                    );
+                    const navigationItem = create("button", "settings-general");
+                    navigationItem.dataset.settingsPanelSlug = "general";
+                    navigation.append(navigationItem);
+                    const slot = create(
+                      "div",
+                      "settings-content-slot",
+                      "relative isolate min-w-0 flex-1 overflow-visible"
+                    );
+                    const canvas = create(
+                      "div",
+                      "settings-canvas",
+                      "main-surface flex h-full min-h-0 flex-col"
+                    );
+                    canvas.append(
+                      createProtectedSurface("settings-card", "settings-card")
+                    );
+                    slot.append(canvas);
+                    layout.append(navigation, slot);
+                    return layout;
+                  };
+                  const createChangedFiles = () => {
+                    const composer = create(
+                      "div",
+                      "changed-files-composer-root"
+                    );
+                    composer.dataset.codexComposerRoot = "true";
+                    const portal = create("div", "changed-files-portal");
+                    portal.dataset.aboveComposerPortal = "true";
+                    const fixedContent = create(
+                      "div",
+                      "changed-files-fixed-content"
+                    );
+                    fixedContent.dataset.inProgressFixedContent = "true";
+                    const row = create(
+                      "div",
+                      "changed-files-row",
+                      "absolute inset-x-0 bottom-1 flex min-h-7 items-center " +
+                        "justify-center gap-2 pb-1"
+                    );
+                    const fade = create(
+                      "div",
+                      "changed-files-fade",
+                      "pointer-events-none absolute inset-x-0 -bottom-1 h-7 " +
+                        "bg-gradient-to-t from-token-main-surface-primary " +
+                        "to-transparent"
+                    );
+                    fade.dataset.nativeChangedFilesFade = "true";
+                    row.append(
+                      fade,
+                      createProtectedSurface(
+                        "changed-files-summary",
+                        "changed-files-summary"
+                      )
+                    );
+                    fixedContent.append(row);
+                    portal.append(fixedContent);
+                    composer.append(
+                      portal,
+                      createProtectedSurface(
+                        "composer-surface",
+                        "composer-surface"
+                      )
+                    );
+                    return composer;
+                  };
+
+                  const factories = [
+                    ["plugins", createPlugins],
+                    ["scheduled", createScheduled],
+                    ["sites", createSites],
+                    ["pull-requests", createPullRequests],
+                    ["settings", createSettings],
+                    ["changed-files", createChangedFiles]
+                  ];
+                  const styleNode = () => document.querySelector(
+                    "#{{InjectionScriptBuilder.StyleElementId}}"
+                  );
+                  const generation = () => Number(document.querySelector(
+                    "#{{InjectionScriptBuilder.RootElementId}}"
+                  )?.dataset.codexWallpaperGeneration ?? 0);
+                  const ownedStyleCount = () => document.querySelectorAll(
+                    "#{{InjectionScriptBuilder.StyleElementId}}"
+                  ).length;
+                  const paint = () => new Promise(resolve => requestAnimationFrame(
+                    () => requestAnimationFrame(resolve)
+                  ));
+                  const style = element => getComputedStyle(element);
+                  const required = id => {
+                    const element = document.getElementById(id);
+                    if (!element) throw new Error(`Missing route fixture: ${id}`);
+                    return element;
+                  };
+                  const background = id => style(required(id)).backgroundColor;
+                  const filter = id => style(required(id)).backdropFilter;
+                  const afterBackgroundImage = id =>
+                    getComputedStyle(required(id), "::after").backgroundImage;
+                  const isGlass = id =>
+                    background(id) === "rgba(16, 18, 24, 0.36)" &&
+                    filter(id).includes("blur(") &&
+                    filter(id).includes("saturate(");
+                  const isTransparent = id =>
+                    background(id) === "rgba(0, 0, 0, 0)";
+                  const hasGlassGradient = id => {
+                    const image = afterBackgroundImage(id);
+                    return image.includes("linear-gradient(") &&
+                      image.includes("rgba(16, 18, 24, 0.36)") &&
+                      image.includes("rgba(0, 0, 0, 0)");
+                  };
+                  const routeVisualMatches = name => {
+                    switch (name) {
+                      case "plugins":
+                        return isGlass("plugins-sticky") &&
+                          hasGlassGradient("plugins-sticky");
+                      case "scheduled":
+                        return isGlass("scheduled-sticky") &&
+                          hasGlassGradient("scheduled-sticky");
+                      case "sites":
+                        return isGlass("sites-route") &&
+                          isTransparent("sites-sticky") &&
+                          afterBackgroundImage("sites-sticky") === "none";
+                      case "pull-requests":
+                        return isGlass("pull-request-route") &&
+                          isGlass("pull-request-detail-shell") &&
+                          isTransparent("pull-request-sticky") &&
+                          afterBackgroundImage("pull-request-sticky") === "none" &&
+                          isTransparent("pull-request-detail-section") &&
+                          isTransparent("pull-request-detail-root");
+                      case "settings":
+                        return isGlass("settings-canvas");
+                      case "changed-files":
+                        return style(required("changed-files-fade"))
+                          .backgroundImage === "none" &&
+                          background("composer-surface") === "rgb(41, 42, 43)";
+                      default:
+                        return false;
+                    }
+                  };
+                  const spaReplacements = [];
+                  for (const [name, factory] of factories) {
+                    fixtureHost.replaceChildren(factory());
+                    await paint();
+                    spaReplacements.push({
+                      name,
+                      generation: generation(),
+                      ownedStyleCount: ownedStyleCount(),
+                      styleElementPreserved: styleNode() === ownedStyle,
+                      visualSentinelMatches: routeVisualMatches(name)
+                    });
+                  }
+
+                  fixtureHost.replaceChildren(...factories.map(([, factory]) => factory()));
+                  await paint();
+
+                  const read = () => {
+                    const state = globalThis[
+                      {{JsonSerializer.Serialize(InjectionScriptBuilder.StateProperty)}}
+                    ];
+                    return {
+                      generation: generation(),
+                      ownedStyleCount: ownedStyleCount(),
+                      styleElementPreserved: styleNode() === ownedStyle,
+                      glassEnabled: Boolean(state?.glassEnabled),
+                      advancedSurfacesEnabled:
+                        Boolean(state?.advancedSurfacesEnabled),
+                      pluginStickyBackground: background("plugins-sticky"),
+                      pluginStickyBackdropFilter: filter("plugins-sticky"),
+                      pluginStickyAfterBackgroundImage:
+                        afterBackgroundImage("plugins-sticky"),
+                      scheduledStickyBackground: background("scheduled-sticky"),
+                      scheduledStickyBackdropFilter: filter("scheduled-sticky"),
+                      scheduledStickyAfterBackgroundImage:
+                        afterBackgroundImage("scheduled-sticky"),
+                      sitesRootBackground: background("sites-route"),
+                      sitesRootBackdropFilter: filter("sites-route"),
+                      sitesStickyBackground: background("sites-sticky"),
+                      sitesStickyAfterBackgroundImage:
+                        afterBackgroundImage("sites-sticky"),
+                      pullRequestRootBackground: background("pull-request-route"),
+                      pullRequestRootBackdropFilter: filter("pull-request-route"),
+                      pullRequestStickyBackground:
+                        background("pull-request-sticky"),
+                      pullRequestStickyAfterBackgroundImage:
+                        afterBackgroundImage("pull-request-sticky"),
+                      pullRequestDetailShellBackground:
+                        background("pull-request-detail-shell"),
+                      pullRequestDetailShellBackdropFilter:
+                        filter("pull-request-detail-shell"),
+                      pullRequestDetailSectionBackground:
+                        background("pull-request-detail-section"),
+                      pullRequestDetailSectionBackdropFilter:
+                        filter("pull-request-detail-section"),
+                      pullRequestDetailRootBackground:
+                        background("pull-request-detail-root"),
+                      pullRequestDetailRootBackdropFilter:
+                        filter("pull-request-detail-root"),
+                      pullRequestDetailBorderLeftWidth:
+                        style(required("pull-request-detail-shell")).borderLeftWidth,
+                      pullRequestDetailBorderLeftStyle:
+                        style(required("pull-request-detail-shell")).borderLeftStyle,
+                      pullRequestDetailBorderLeftColor:
+                        style(required("pull-request-detail-shell")).borderLeftColor,
+                      settingsCanvasBackground: background("settings-canvas"),
+                      settingsCanvasBackdropFilter: filter("settings-canvas"),
+                      settingsCanvasBorderRadius:
+                        style(required("settings-canvas")).borderRadius,
+                      settingsCanvasBoxShadow:
+                        style(required("settings-canvas")).boxShadow,
+                      settingsCanvasOverflowY:
+                        style(required("settings-canvas")).overflowY,
+                      settingsCanvasDisplay:
+                        style(required("settings-canvas")).display,
+                      settingsCanvasFlexDirection:
+                        style(required("settings-canvas")).flexDirection,
+                      protectedSurfaceBackgrounds: Array.from(
+                        fixtureHost.querySelectorAll(
+                          "[data-protected-route-surface]"
+                        ),
+                        element => style(element).backgroundColor
+                      ),
+                      changedFilesFadeBackgroundImage:
+                        style(required("changed-files-fade")).backgroundImage,
+                      composerBackground: background("composer-surface")
+                    };
+                  };
+
+                  globalThis.__backdropRouteSurfaceTest = {
+                    fixtureHost,
+                    nativeStyles,
+                    ownedStyle,
+                    read
+                  };
+                  return {
+                    snapshot: read(),
+                    spaReplacements
+                  };
+                })()
+                """);
+
+            Assert.Equal(
+                [
+                    "plugins",
+                    "scheduled",
+                    "sites",
+                    "pull-requests",
+                    "settings",
+                    "changed-files",
+                ],
+                initial.SpaReplacements.Select(replacement => replacement.Name));
+            Assert.All(
+                initial.SpaReplacements,
+                replacement =>
+                {
+                    Assert.Equal(1, replacement.Generation);
+                    Assert.Equal(1, replacement.OwnedStyleCount);
+                    Assert.True(replacement.StyleElementPreserved);
+                    Assert.True(replacement.VisualSentinelMatches);
+                });
+
+            var initialSnapshot = initial.Snapshot;
+            Assert.Equal(1, initialSnapshot.Generation);
+            Assert.Equal(1, initialSnapshot.OwnedStyleCount);
+            Assert.True(initialSnapshot.StyleElementPreserved);
+            Assert.True(initialSnapshot.GlassEnabled);
+            Assert.True(initialSnapshot.AdvancedSurfacesEnabled);
+            AssertGlassSurface(
+                initialSnapshot.PluginStickyBackground,
+                initialSnapshot.PluginStickyBackdropFilter);
+            AssertGlassPseudoGradient(
+                initialSnapshot.PluginStickyAfterBackgroundImage);
+            AssertGlassSurface(
+                initialSnapshot.ScheduledStickyBackground,
+                initialSnapshot.ScheduledStickyBackdropFilter);
+            AssertGlassPseudoGradient(
+                initialSnapshot.ScheduledStickyAfterBackgroundImage);
+            AssertGlassSurface(
+                initialSnapshot.SitesRootBackground,
+                initialSnapshot.SitesRootBackdropFilter);
+            Assert.Equal("rgba(0, 0, 0, 0)", initialSnapshot.SitesStickyBackground);
+            Assert.Equal("none", initialSnapshot.SitesStickyAfterBackgroundImage);
+            AssertGlassSurface(
+                initialSnapshot.PullRequestRootBackground,
+                initialSnapshot.PullRequestRootBackdropFilter);
+            Assert.Equal(
+                "rgba(0, 0, 0, 0)",
+                initialSnapshot.PullRequestStickyBackground);
+            Assert.Equal(
+                "none",
+                initialSnapshot.PullRequestStickyAfterBackgroundImage);
+            AssertGlassSurface(
+                initialSnapshot.PullRequestDetailShellBackground,
+                initialSnapshot.PullRequestDetailShellBackdropFilter);
+            Assert.Equal(
+                "rgba(0, 0, 0, 0)",
+                initialSnapshot.PullRequestDetailSectionBackground);
+            Assert.Equal(
+                "none",
+                initialSnapshot.PullRequestDetailSectionBackdropFilter);
+            Assert.Equal(
+                "rgba(0, 0, 0, 0)",
+                initialSnapshot.PullRequestDetailRootBackground);
+            Assert.Equal(
+                "none",
+                initialSnapshot.PullRequestDetailRootBackdropFilter);
+            AssertPullRequestDivider(initialSnapshot);
+            AssertGlassSurface(
+                initialSnapshot.SettingsCanvasBackground,
+                initialSnapshot.SettingsCanvasBackdropFilter);
+            AssertSettingsCanvasProperties(initialSnapshot);
+            Assert.Equal(
+                "none",
+                initialSnapshot.ChangedFilesFadeBackgroundImage);
+            Assert.Equal("rgb(41, 42, 43)", initialSnapshot.ComposerBackground);
+            Assert.Equal(9, initialSnapshot.ProtectedSurfaceBackgrounds.Length);
+            Assert.All(
+                initialSnapshot.ProtectedSurfaceBackgrounds,
+                background => Assert.Equal("rgb(41, 42, 43)", background));
+
+            var declared = PresentationContractCatalog.CreateFullySupportedCapabilities();
+            var degraded = declared.DowngradeWith(
+                new CompatibilityCapabilities(
+                    declared.Global,
+                    declared.Regions,
+                    CompatibilityCapability.Disabled(
+                        CompatibilityCapabilityReasonCode.StructuralProbeFailed),
+                    declared.Audio,
+                    declared.Advanced));
+            var downgradeApplied = await page.EvaluateExpressionAsync<bool>(
+                InjectionScriptBuilder.BuildCapabilityDowngrade(1, degraded));
+            Assert.True(downgradeApplied);
+
+            var downgraded = await page.EvaluateExpressionAsync<
+                RouteFixtureDowngradeRendering>(
+                $$"""
+                (() => {
+                  const fixture = globalThis.__backdropRouteSurfaceTest;
+                  if (!fixture) throw new Error("Missing route surface test state.");
+                  const style = document.querySelector(
+                    "#{{InjectionScriptBuilder.StyleElementId}}"
+                  );
+                  const css = style?.textContent ?? "";
+                  return {
+                    snapshot: fixture.read(),
+                    glassStartMarkerPresent:
+                      css.includes("codex-wallpaper-glass:start"),
+                    glassEndMarkerPresent:
+                      css.includes("codex-wallpaper-glass:end"),
+                    advancedStartMarkerPresent:
+                      css.includes("codex-wallpaper-advanced:start"),
+                    advancedEndMarkerPresent:
+                      css.includes("codex-wallpaper-advanced:end")
+                  };
+                })()
+                """);
+
+            var downgradedSnapshot = downgraded.Snapshot;
+            Assert.Equal(1, downgradedSnapshot.Generation);
+            Assert.Equal(1, downgradedSnapshot.OwnedStyleCount);
+            Assert.True(downgradedSnapshot.StyleElementPreserved);
+            Assert.False(downgradedSnapshot.GlassEnabled);
+            Assert.True(downgradedSnapshot.AdvancedSurfacesEnabled);
+            Assert.False(downgraded.GlassStartMarkerPresent);
+            Assert.False(downgraded.GlassEndMarkerPresent);
+            Assert.True(downgraded.AdvancedStartMarkerPresent);
+            Assert.True(downgraded.AdvancedEndMarkerPresent);
+
+            AssertNativeRouteSurface(
+                downgradedSnapshot.PluginStickyBackground,
+                downgradedSnapshot.PluginStickyBackdropFilter);
+            AssertNativePseudoGradient(
+                downgradedSnapshot.PluginStickyAfterBackgroundImage);
+            AssertNativeRouteSurface(
+                downgradedSnapshot.ScheduledStickyBackground,
+                downgradedSnapshot.ScheduledStickyBackdropFilter);
+            AssertNativePseudoGradient(
+                downgradedSnapshot.ScheduledStickyAfterBackgroundImage);
+            AssertNativeRouteSurface(
+                downgradedSnapshot.SitesRootBackground,
+                downgradedSnapshot.SitesRootBackdropFilter);
+            Assert.Equal("rgb(24, 24, 24)", downgradedSnapshot.SitesStickyBackground);
+            AssertNativePseudoGradient(
+                downgradedSnapshot.SitesStickyAfterBackgroundImage);
+            AssertNativeRouteSurface(
+                downgradedSnapshot.PullRequestRootBackground,
+                downgradedSnapshot.PullRequestRootBackdropFilter);
+            Assert.Equal(
+                "rgb(24, 24, 24)",
+                downgradedSnapshot.PullRequestStickyBackground);
+            AssertNativePseudoGradient(
+                downgradedSnapshot.PullRequestStickyAfterBackgroundImage);
+            AssertNativeRouteSurface(
+                downgradedSnapshot.PullRequestDetailShellBackground,
+                downgradedSnapshot.PullRequestDetailShellBackdropFilter);
+            AssertNativeRouteSurface(
+                downgradedSnapshot.PullRequestDetailSectionBackground,
+                downgradedSnapshot.PullRequestDetailSectionBackdropFilter);
+            AssertNativeRouteSurface(
+                downgradedSnapshot.PullRequestDetailRootBackground,
+                downgradedSnapshot.PullRequestDetailRootBackdropFilter);
+            AssertPullRequestDivider(downgradedSnapshot);
+            AssertNativeRouteSurface(
+                downgradedSnapshot.SettingsCanvasBackground,
+                downgradedSnapshot.SettingsCanvasBackdropFilter);
+            AssertSettingsCanvasProperties(downgradedSnapshot);
+            Assert.Equal(
+                "none",
+                downgradedSnapshot.ChangedFilesFadeBackgroundImage);
+            Assert.Equal("rgb(41, 42, 43)", downgradedSnapshot.ComposerBackground);
+            Assert.All(
+                downgradedSnapshot.ProtectedSurfaceBackgrounds,
+                background => Assert.Equal("rgb(41, 42, 43)", background));
+
+            Assert.NotEqual(
+                initialSnapshot.PluginStickyAfterBackgroundImage,
+                downgradedSnapshot.PluginStickyAfterBackgroundImage);
+            Assert.NotEqual(
+                initialSnapshot.ScheduledStickyAfterBackgroundImage,
+                downgradedSnapshot.ScheduledStickyAfterBackgroundImage);
+
+            await page.EvaluateExpressionAsync<bool>(
+                """
+                (() => {
+                  const fixture = globalThis.__backdropRouteSurfaceTest;
+                  fixture?.fixtureHost?.remove();
+                  fixture?.nativeStyles?.remove();
+                  delete globalThis.__backdropRouteSurfaceTest;
+                  return true;
+                })()
+                """);
+        }
+        finally
+        {
+            browser.Disconnect();
+        }
+    }
+
+    private static void AssertGlassSurface(string background, string backdropFilter)
+    {
+        Assert.Equal("rgba(16, 18, 24, 0.36)", background);
+        Assert.Contains("blur(", backdropFilter, StringComparison.Ordinal);
+        Assert.Contains("saturate(", backdropFilter, StringComparison.Ordinal);
+    }
+
+    private static void AssertNativeRouteSurface(
+        string background,
+        string backdropFilter)
+    {
+        Assert.Equal("rgb(24, 24, 24)", background);
+        Assert.Equal("none", backdropFilter);
+    }
+
+    private static void AssertNativePseudoGradient(string backgroundImage)
+    {
+        Assert.Contains("linear-gradient(", backgroundImage, StringComparison.Ordinal);
+        Assert.Contains("rgb(24, 24, 24)", backgroundImage, StringComparison.Ordinal);
+    }
+
+    private static void AssertGlassPseudoGradient(string backgroundImage)
+    {
+        Assert.Contains("linear-gradient(", backgroundImage, StringComparison.Ordinal);
+        Assert.Contains(
+            "rgba(16, 18, 24, 0.36)",
+            backgroundImage,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "rgba(0, 0, 0, 0)",
+            backgroundImage,
+            StringComparison.Ordinal);
+    }
+
+    private static void AssertPullRequestDivider(RouteSurfaceSnapshot snapshot)
+    {
+        Assert.Equal("1px", snapshot.PullRequestDetailBorderLeftWidth);
+        Assert.Equal("solid", snapshot.PullRequestDetailBorderLeftStyle);
+        Assert.DoesNotContain(
+            "rgba(0, 0, 0, 0)",
+            snapshot.PullRequestDetailBorderLeftColor,
+            StringComparison.Ordinal);
+        Assert.NotEqual("transparent", snapshot.PullRequestDetailBorderLeftColor);
+    }
+
+    private static void AssertSettingsCanvasProperties(RouteSurfaceSnapshot snapshot)
+    {
+        Assert.Equal("17px", snapshot.SettingsCanvasBorderRadius);
+        Assert.Contains(
+            "rgb(1, 2, 3)",
+            snapshot.SettingsCanvasBoxShadow,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "0px 0px 0px 3px",
+            snapshot.SettingsCanvasBoxShadow,
+            StringComparison.Ordinal);
+        Assert.Equal("auto", snapshot.SettingsCanvasOverflowY);
+        Assert.Equal("flex", snapshot.SettingsCanvasDisplay);
+        Assert.Equal("column", snapshot.SettingsCanvasFlexDirection);
+    }
+
     private static async Task<HomeSuggestionRendering> ReadHomeSuggestionRenderingAsync(
         IPage page)
     {
@@ -1287,6 +2001,64 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
         string UnrelatedGradientBackgroundImage,
         string FrameBorderTopWidthDeclaration,
         string FrameComputedBorderTopWidth);
+
+    private sealed record RouteFixtureRendering(
+        RouteSurfaceSnapshot Snapshot,
+        SpaReplacementRendering[] SpaReplacements);
+
+    private sealed record RouteFixtureDowngradeRendering(
+        RouteSurfaceSnapshot Snapshot,
+        bool GlassStartMarkerPresent,
+        bool GlassEndMarkerPresent,
+        bool AdvancedStartMarkerPresent,
+        bool AdvancedEndMarkerPresent);
+
+    private sealed record SpaReplacementRendering(
+        string Name,
+        long Generation,
+        int OwnedStyleCount,
+        bool StyleElementPreserved,
+        bool VisualSentinelMatches);
+
+    private sealed record RouteSurfaceSnapshot(
+        long Generation,
+        int OwnedStyleCount,
+        bool StyleElementPreserved,
+        bool GlassEnabled,
+        bool AdvancedSurfacesEnabled,
+        string PluginStickyBackground,
+        string PluginStickyBackdropFilter,
+        string PluginStickyAfterBackgroundImage,
+        string ScheduledStickyBackground,
+        string ScheduledStickyBackdropFilter,
+        string ScheduledStickyAfterBackgroundImage,
+        string SitesRootBackground,
+        string SitesRootBackdropFilter,
+        string SitesStickyBackground,
+        string SitesStickyAfterBackgroundImage,
+        string PullRequestRootBackground,
+        string PullRequestRootBackdropFilter,
+        string PullRequestStickyBackground,
+        string PullRequestStickyAfterBackgroundImage,
+        string PullRequestDetailShellBackground,
+        string PullRequestDetailShellBackdropFilter,
+        string PullRequestDetailSectionBackground,
+        string PullRequestDetailSectionBackdropFilter,
+        string PullRequestDetailRootBackground,
+        string PullRequestDetailRootBackdropFilter,
+        string PullRequestDetailBorderLeftWidth,
+        string PullRequestDetailBorderLeftStyle,
+        string PullRequestDetailBorderLeftColor,
+        string SettingsCanvasBackground,
+        string SettingsCanvasBackdropFilter,
+        string SettingsCanvasBorderRadius,
+        string SettingsCanvasBoxShadow,
+        string SettingsCanvasOverflowY,
+        string SettingsCanvasDisplay,
+        string SettingsCanvasFlexDirection,
+        string[] ProtectedSurfaceBackgrounds,
+        string ChangedFilesFadeBackgroundImage,
+        string ComposerBackground);
 
     private static int ReserveLoopbackPort()
     {

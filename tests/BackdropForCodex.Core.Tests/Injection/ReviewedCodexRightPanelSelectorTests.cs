@@ -300,6 +300,270 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
             SelectFixtureIds(fixture, topFadeRule.Selectors));
     }
 
+    [Fact]
+    public void ReviewedPluginsPageSelectors_GlassOnlyTheSearchStickyShell()
+    {
+        var styleSheet = ExtractGeneratedStyleSheet();
+        var forcedColorsNone = ExtractBlock(styleSheet, "@media (forced-colors: none)");
+        var rules = ParseLeafRules(forcedColorsNone);
+        var fixture = XDocument.Parse(CurrentPluginsPageFixture);
+
+        var stickyGlassRule = Assert.Single(rules, IsReviewedPluginsPageStickyGlassRule);
+
+        Assert.Equal(
+            [
+                CanonicalizeSelector(
+                    """
+                    body [class~="sticky"][class~="z-30"][class~="bg-token-main-surface-primary"]:has([id="plugins-page-search"])
+                    """),
+            ],
+            stickyGlassRule.Selectors);
+        Assert.Equal(
+            ["plugins-search-sticky"],
+            SelectFixtureIds(fixture, stickyGlassRule.Selectors));
+
+        var changedIds = SelectFixtureIds(fixture, stickyGlassRule.Selectors);
+        Assert.DoesNotContain("plugins-search-sticky-wrong-id", changedIds);
+        Assert.DoesNotContain("plugins-featured-card", changedIds);
+    }
+
+    [Fact]
+    public void ReviewedScheduledPageSelectors_GlassOnlyTheSearchStickyShell()
+    {
+        var styleSheet = ExtractGeneratedStyleSheet();
+        var forcedColorsNone = ExtractBlock(styleSheet, "@media (forced-colors: none)");
+        var rules = ParseLeafRules(forcedColorsNone);
+        var fixture = XDocument.Parse(CurrentScheduledPageFixture);
+
+        var stickyGlassRule = Assert.Single(rules, IsReviewedScheduledPageStickyGlassRule);
+
+        Assert.Equal(
+            [
+                CanonicalizeSelector(
+                    """
+                    body [class~="sticky"][class~="z-30"][class~="bg-token-main-surface-primary"]:has([id="scheduled-page-search"])
+                    """),
+            ],
+            stickyGlassRule.Selectors);
+        Assert.Equal(
+            ["scheduled-search-sticky"],
+            SelectFixtureIds(fixture, stickyGlassRule.Selectors));
+
+        var changedIds = SelectFixtureIds(fixture, stickyGlassRule.Selectors);
+        Assert.DoesNotContain("scheduled-search-sticky-wrong-id", changedIds);
+        Assert.DoesNotContain("scheduled-task-row", changedIds);
+    }
+
+    [Fact]
+    public void ReviewedSitesPageSelectors_GlassTheRouteRootAndClearOnlyItsSearchSticky()
+    {
+        var styleSheet = ExtractGeneratedStyleSheet();
+        var forcedColorsNone = ExtractBlock(styleSheet, "@media (forced-colors: none)");
+        var rules = ParseLeafRules(forcedColorsNone);
+        var fixture = XDocument.Parse(CurrentSitesPageFixture);
+
+        var rootGlassRule = Assert.Single(rules, IsReviewedSitesPageRootGlassRule);
+        var stickyClearRule = Assert.Single(rules, IsReviewedSitesPageStickyClearRule);
+
+        const string RootSelector =
+            """
+            body [class~="flex"][class~="h-full"][class~="min-h-0"][class~="flex-col"][class~="bg-token-main-surface-primary"]:has([id="appgen-site-search"])
+            """;
+        Assert.Equal(
+            [CanonicalizeSelector(RootSelector)],
+            rootGlassRule.Selectors);
+        Assert.Equal(
+            [
+                CanonicalizeSelector(
+                    $"""
+                    {RootSelector}
+                      [class~="sticky"][class~="z-30"][class~="bg-token-main-surface-primary"]:has([id="appgen-site-search"])
+                    """),
+            ],
+            stickyClearRule.Selectors);
+
+        Assert.Equal(
+            ["sites-route-root"],
+            SelectFixtureIds(fixture, rootGlassRule.Selectors));
+        Assert.Equal(
+            ["sites-search-sticky"],
+            SelectFixtureIds(fixture, stickyClearRule.Selectors));
+
+        var changedIds = SelectFixtureIds(
+            fixture,
+            [.. rootGlassRule.Selectors, .. stickyClearRule.Selectors]);
+        Assert.DoesNotContain("sites-card", changedIds);
+        Assert.DoesNotContain("sites-route-root-wrong-id", changedIds);
+        Assert.DoesNotContain("sites-search-sticky-outside-route", changedIds);
+    }
+
+    [Fact]
+    public void ReviewedPullRequestSelectors_GlassOnlyTheListAndDetailPanes()
+    {
+        var styleSheet = ExtractGeneratedStyleSheet();
+        var forcedColorsNone = ExtractBlock(styleSheet, "@media (forced-colors: none)");
+        var rules = ParseLeafRules(forcedColorsNone);
+        var fixture = XDocument.Parse(CurrentPullRequestFixture);
+
+        var paneGlassRule = Assert.Single(rules, IsReviewedPullRequestPaneGlassRule);
+        var stickyClearRule = Assert.Single(rules, IsReviewedPullRequestStickyClearRule);
+        var detailInternalClearRule = Assert.Single(
+            rules,
+            IsReviewedPullRequestDetailInternalClearRule);
+
+        const string ListRootSelector =
+            """
+            body [class~="flex"][class~="h-full"][class~="min-h-0"][class~="w-full"][class~="flex-col"][class~="bg-token-main-surface-primary"]:has([id="pull-request-inbox-search"])
+            """;
+        const string DetailEvidenceSelector =
+            """
+            section[class~="h-full"][class~="min-h-0"][class~="min-w-0"][class~="bg-token-main-surface-primary"]
+              > div[class~="@container/app-shell-detail-panel"][class~="flex"][class~="h-full"][class~="min-h-0"][class~="flex-col"][class~="bg-token-main-surface-primary"]
+            """;
+        var detailAsideSelector =
+            $"""
+            body main:has([id="pull-request-inbox-search"])
+              aside[data-app-shell-focus-area="right-panel"]:has(
+                {DetailEvidenceSelector}
+              )
+            """;
+        var detailShellSelector =
+            $"""
+            {detailAsideSelector}
+              > div[class~="absolute"][class~="inset-0"][class~="min-h-0"][class~="min-w-0"][class~="overflow-hidden"]
+              > div[class~="absolute"][class~="top-0"][class~="bottom-0"][class~="left-0"][class~="min-w-0"][class~="bg-token-main-surface-primary"]
+            """;
+        var detailSectionSelector =
+            $"""
+            {detailShellSelector}
+              > div[class~="h-full"][class~="min-h-0"][class~="min-w-0"][class~="overflow-hidden"]
+              > div[class~="h-full"]
+              > section[class~="h-full"][class~="min-h-0"][class~="min-w-0"][class~="bg-token-main-surface-primary"]
+            """;
+        Assert.Equal(
+            [
+                CanonicalizeSelector(ListRootSelector),
+                CanonicalizeSelector(detailShellSelector),
+            ],
+            paneGlassRule.Selectors);
+        Assert.Equal(
+            [
+                CanonicalizeSelector(
+                    $"""
+                    {ListRootSelector}
+                      [class~="sticky"][class~="z-30"][class~="bg-token-main-surface-primary"]:has([id="pull-request-inbox-search"])
+                    """),
+            ],
+            stickyClearRule.Selectors);
+        Assert.Equal(
+            [
+                CanonicalizeSelector(detailSectionSelector),
+                CanonicalizeSelector(
+                    $"""
+                    {detailSectionSelector}
+                      > div[class~="@container/app-shell-detail-panel"][class~="flex"][class~="h-full"][class~="min-h-0"][class~="flex-col"][class~="bg-token-main-surface-primary"]
+                    """),
+            ],
+            detailInternalClearRule.Selectors);
+
+        Assert.Equal(
+            ["pull-request-detail-shell", "pull-request-list-root"],
+            SelectFixtureIds(fixture, paneGlassRule.Selectors));
+        Assert.Equal(
+            ["pull-request-search-sticky"],
+            SelectFixtureIds(fixture, stickyClearRule.Selectors));
+        Assert.Equal(
+            ["pull-request-detail-root", "pull-request-detail-section"],
+            SelectFixtureIds(fixture, detailInternalClearRule.Selectors));
+
+        var changedIds = SelectFixtureIds(
+            fixture,
+            [
+                .. paneGlassRule.Selectors,
+                .. stickyClearRule.Selectors,
+                .. detailInternalClearRule.Selectors,
+            ]);
+        Assert.DoesNotContain("pull-request-list-root-wrong-id", changedIds);
+        Assert.DoesNotContain("pull-request-search-sticky-wrong-id", changedIds);
+        Assert.DoesNotContain("pull-request-ordinary-tab-shell", changedIds);
+        Assert.DoesNotContain("pull-request-detail-shell-wrong-focus", changedIds);
+        Assert.DoesNotContain("pull-request-detail-shell-wrong-id", changedIds);
+        Assert.DoesNotContain("pull-request-detail-root-near-miss", changedIds);
+        Assert.DoesNotContain("pull-request-editor", changedIds);
+        Assert.DoesNotContain("pull-request-diff", changedIds);
+        Assert.DoesNotContain("pull-request-code", changedIds);
+        Assert.DoesNotContain("pull-request-card", changedIds);
+    }
+
+    [Fact]
+    public void ReviewedSettingsSelectors_GlassOnlyTheRightContentCanvas()
+    {
+        var styleSheet = ExtractGeneratedStyleSheet();
+        var forcedColorsNone = ExtractBlock(styleSheet, "@media (forced-colors: none)");
+        var rules = ParseLeafRules(forcedColorsNone);
+        var fixture = XDocument.Parse(CurrentSettingsFixture);
+
+        var canvasGlassRule = Assert.Single(rules, IsReviewedSettingsCanvasGlassRule);
+
+        Assert.Equal(
+            [
+                CanonicalizeSelector(
+                    """
+                    body [class~="flex"][class~="h-full"][class~="min-h-0"]:has([class~="app-shell-left-panel"] [data-settings-panel-slug])
+                      > [class~="relative"][class~="isolate"][class~="min-w-0"][class~="flex-1"][class~="overflow-visible"]
+                      > div[class~="main-surface"][class~="flex"][class~="h-full"][class~="min-h-0"][class~="flex-col"]
+                    """),
+            ],
+            canvasGlassRule.Selectors);
+        Assert.Equal(
+            ["settings-content-canvas"],
+            SelectFixtureIds(fixture, canvasGlassRule.Selectors));
+
+        var changedIds = SelectFixtureIds(fixture, canvasGlassRule.Selectors);
+        Assert.DoesNotContain("ordinary-div-main-surface", changedIds);
+        Assert.DoesNotContain("settings-main-main-surface", changedIds);
+        Assert.DoesNotContain("settings-canvas-without-data-anchor", changedIds);
+        Assert.DoesNotContain("settings-permissions-card", changedIds);
+        Assert.DoesNotContain("settings-general-card", changedIds);
+        Assert.DoesNotContain("settings-dropdown", changedIds);
+        Assert.DoesNotContain("settings-switch", changedIds);
+    }
+
+    [Fact]
+    public void ReviewedChangedFilesComposerSelectors_ClearOnlyTheInProgressFade()
+    {
+        var styleSheet = ExtractGeneratedStyleSheet();
+        var forcedColorsNone = ExtractBlock(styleSheet, "@media (forced-colors: none)");
+        var rules = ParseLeafRules(forcedColorsNone);
+        var fixture = XDocument.Parse(CurrentChangedFilesComposerFixture);
+
+        var fadeClearRule = Assert.Single(
+            rules,
+            IsReviewedChangedFilesComposerFadeClearRule);
+
+        Assert.Equal(
+            [
+                CanonicalizeSelector(
+                    """
+                    body main [data-codex-composer-root] [data-above-composer-portal]
+                      > [data-in-progress-fixed-content]
+                      > [class~="absolute"][class~="inset-x-0"][class~="bottom-1"][class~="flex"][class~="min-h-7"][class~="items-center"][class~="justify-center"][class~="gap-2"][class~="pb-1"]
+                      > [class~="pointer-events-none"][class~="absolute"][class~="inset-x-0"][class~="-bottom-1"][class~="h-7"][class~="bg-gradient-to-t"][class~="from-token-main-surface-primary"][class~="to-transparent"]
+                    """),
+            ],
+            fadeClearRule.Selectors);
+        Assert.Equal(
+            ["changed-files-composer-fade"],
+            SelectFixtureIds(fixture, fadeClearRule.Selectors));
+
+        var changedIds = SelectFixtureIds(fixture, fadeClearRule.Selectors);
+        Assert.DoesNotContain("changed-files-summary-button", changedIds);
+        Assert.DoesNotContain("composer-surface-chrome", changedIds);
+        Assert.DoesNotContain("changed-files-fade-outside-portal", changedIds);
+        Assert.DoesNotContain("changed-files-fade-without-in-progress", changedIds);
+        Assert.DoesNotContain("composer-via-gradient", changedIds);
+    }
+
     private static bool IsReviewedRightPanelGlassRule(CssRule rule) =>
         rule.Declarations.Contains(
             "background-color: var(--codex-wallpaper-glass) !important",
@@ -416,6 +680,210 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
                     StringComparison.Ordinal) &&
                 selector.Contains(
                     "[data-app-shell-main-content-top-fade]",
+                    StringComparison.Ordinal));
+
+    private static bool IsReviewedPluginsPageStickyGlassRule(CssRule rule) =>
+        rule.Declarations.Contains(
+            "background-color: var(--codex-wallpaper-glass) !important",
+            StringComparison.Ordinal) &&
+        rule.Declarations.Contains(
+            "backdrop-filter: blur(var(--codex-wallpaper-blur))",
+            StringComparison.Ordinal) &&
+        rule.Selectors.Any(
+            selector =>
+                selector.Contains(
+                    "[class~=\"sticky\"]",
+                    StringComparison.Ordinal) &&
+                selector.Contains(
+                    "[class~=\"z-30\"]",
+                    StringComparison.Ordinal) &&
+                selector.Contains(
+                    "[class~=\"bg-token-main-surface-primary\"]",
+                    StringComparison.Ordinal) &&
+                selector.Contains(
+                    ":has([id=\"plugins-page-search\"])",
+                    StringComparison.Ordinal));
+
+    private static bool IsReviewedScheduledPageStickyGlassRule(CssRule rule) =>
+        rule.Declarations.Contains(
+            "background-color: var(--codex-wallpaper-glass) !important",
+            StringComparison.Ordinal) &&
+        rule.Declarations.Contains(
+            "backdrop-filter: blur(var(--codex-wallpaper-blur))",
+            StringComparison.Ordinal) &&
+        rule.Selectors.Any(
+            selector =>
+                selector.Contains(
+                    "[class~=\"sticky\"]",
+                    StringComparison.Ordinal) &&
+                selector.Contains(
+                    "[class~=\"z-30\"]",
+                    StringComparison.Ordinal) &&
+                selector.Contains(
+                    "[class~=\"bg-token-main-surface-primary\"]",
+                    StringComparison.Ordinal) &&
+                selector.Contains(
+                    ":has([id=\"scheduled-page-search\"])",
+                    StringComparison.Ordinal));
+
+    private static bool IsReviewedSitesPageRootGlassRule(CssRule rule) =>
+        rule.Declarations.Contains(
+            "background-color: var(--codex-wallpaper-glass) !important",
+            StringComparison.Ordinal) &&
+        rule.Declarations.Contains(
+            "backdrop-filter: blur(var(--codex-wallpaper-blur))",
+            StringComparison.Ordinal) &&
+        rule.Selectors.Any(
+            selector =>
+                selector.Contains(
+                    "[class~=\"flex\"][class~=\"h-full\"][class~=\"min-h-0\"]" +
+                    "[class~=\"flex-col\"][class~=\"bg-token-main-surface-primary\"]",
+                    StringComparison.Ordinal) &&
+                selector.Contains(
+                    ":has([id=\"appgen-site-search\"])",
+                    StringComparison.Ordinal));
+
+    private static bool IsReviewedSitesPageStickyClearRule(CssRule rule) =>
+        CanonicalizeWhitespace(rule.Declarations) ==
+        "background-color: transparent !important;" &&
+        rule.Selectors.Any(
+            selector =>
+                selector.Contains(
+                    "[class~=\"flex\"][class~=\"h-full\"][class~=\"min-h-0\"]" +
+                    "[class~=\"flex-col\"][class~=\"bg-token-main-surface-primary\"]",
+                    StringComparison.Ordinal) &&
+                selector.Contains(
+                    "[class~=\"sticky\"][class~=\"z-30\"]" +
+                    "[class~=\"bg-token-main-surface-primary\"]",
+                    StringComparison.Ordinal) &&
+                selector.Contains(
+                    ":has([id=\"appgen-site-search\"])",
+                    StringComparison.Ordinal));
+
+    private static bool IsReviewedPullRequestPaneGlassRule(CssRule rule) =>
+        rule.Declarations.Contains(
+            "background-color: var(--codex-wallpaper-glass) !important",
+            StringComparison.Ordinal) &&
+        rule.Declarations.Contains(
+            "backdrop-filter: blur(var(--codex-wallpaper-blur))",
+            StringComparison.Ordinal) &&
+        rule.Selectors.Any(
+            selector =>
+                selector.Contains(
+                    "[class~=\"flex\"][class~=\"h-full\"][class~=\"min-h-0\"]" +
+                    "[class~=\"w-full\"][class~=\"flex-col\"]" +
+                    "[class~=\"bg-token-main-surface-primary\"]",
+                    StringComparison.Ordinal) &&
+                selector.Contains(
+                    ":has([id=\"pull-request-inbox-search\"])",
+                    StringComparison.Ordinal)) &&
+        rule.Selectors.Any(
+            selector =>
+                selector.Contains(
+                    "body main:has([id=\"pull-request-inbox-search\"]) " +
+                    "aside[data-app-shell-focus-area=\"right-panel\"]:has(",
+                    StringComparison.Ordinal) &&
+                selector.Contains(
+                    "> div[class~=\"absolute\"][class~=\"inset-0\"]" +
+                    "[class~=\"min-h-0\"][class~=\"min-w-0\"]" +
+                    "[class~=\"overflow-hidden\"]" +
+                    " > div[class~=\"absolute\"][class~=\"top-0\"]" +
+                    "[class~=\"bottom-0\"][class~=\"left-0\"]" +
+                    "[class~=\"min-w-0\"]" +
+                    "[class~=\"bg-token-main-surface-primary\"]",
+                    StringComparison.Ordinal));
+
+    private static bool IsReviewedPullRequestStickyClearRule(CssRule rule) =>
+        CanonicalizeWhitespace(rule.Declarations) ==
+        "background-color: transparent !important;" &&
+        rule.Selectors.Any(
+            selector =>
+                selector.Contains(
+                    "[class~=\"flex\"][class~=\"h-full\"][class~=\"min-h-0\"]" +
+                    "[class~=\"w-full\"][class~=\"flex-col\"]" +
+                    "[class~=\"bg-token-main-surface-primary\"]",
+                    StringComparison.Ordinal) &&
+                selector.Contains(
+                    "[class~=\"sticky\"][class~=\"z-30\"]" +
+                    "[class~=\"bg-token-main-surface-primary\"]",
+                    StringComparison.Ordinal) &&
+                selector.Contains(
+                    ":has([id=\"pull-request-inbox-search\"])",
+                    StringComparison.Ordinal));
+
+    private static bool IsReviewedPullRequestDetailInternalClearRule(CssRule rule) =>
+        CanonicalizeWhitespace(rule.Declarations) ==
+        "background-color: transparent !important;" &&
+        rule.Selectors.Count == 2 &&
+        rule.Selectors.All(
+            selector =>
+                selector.Contains(
+                    "body main:has([id=\"pull-request-inbox-search\"]) " +
+                    "aside[data-app-shell-focus-area=\"right-panel\"]:has(",
+                    StringComparison.Ordinal) &&
+                selector.Contains(
+                    "> div[class~=\"absolute\"][class~=\"inset-0\"]" +
+                    "[class~=\"min-h-0\"][class~=\"min-w-0\"]" +
+                    "[class~=\"overflow-hidden\"]",
+                    StringComparison.Ordinal) &&
+                selector.Contains(
+                    "> div[class~=\"h-full\"][class~=\"min-h-0\"]" +
+                    "[class~=\"min-w-0\"][class~=\"overflow-hidden\"]" +
+                    " > div[class~=\"h-full\"]" +
+                    " > section[class~=\"h-full\"][class~=\"min-h-0\"]" +
+                    "[class~=\"min-w-0\"]" +
+                    "[class~=\"bg-token-main-surface-primary\"]",
+                    StringComparison.Ordinal)) &&
+        rule.Selectors.Any(
+            selector =>
+                selector.Contains(
+                    "> div[class~=\"@container/app-shell-detail-panel\"]" +
+                    "[class~=\"flex\"][class~=\"h-full\"][class~=\"min-h-0\"]" +
+                    "[class~=\"flex-col\"]" +
+                    "[class~=\"bg-token-main-surface-primary\"]",
+                    StringComparison.Ordinal));
+
+    private static bool IsReviewedSettingsCanvasGlassRule(CssRule rule) =>
+        rule.Declarations.Contains(
+            "background-color: var(--codex-wallpaper-glass) !important",
+            StringComparison.Ordinal) &&
+        rule.Declarations.Contains(
+            "backdrop-filter: blur(var(--codex-wallpaper-blur))",
+            StringComparison.Ordinal) &&
+        rule.Selectors.Any(
+            selector =>
+                selector.Contains(
+                    "[class~=\"flex\"][class~=\"h-full\"][class~=\"min-h-0\"]" +
+                    ":has([class~=\"app-shell-left-panel\"] [data-settings-panel-slug])",
+                    StringComparison.Ordinal) &&
+                selector.Contains(
+                    "> [class~=\"relative\"][class~=\"isolate\"][class~=\"min-w-0\"]" +
+                    "[class~=\"flex-1\"][class~=\"overflow-visible\"]",
+                    StringComparison.Ordinal) &&
+                selector.Contains(
+                    "> div[class~=\"main-surface\"][class~=\"flex\"]" +
+                    "[class~=\"h-full\"][class~=\"min-h-0\"][class~=\"flex-col\"]",
+                    StringComparison.Ordinal));
+
+    private static bool IsReviewedChangedFilesComposerFadeClearRule(CssRule rule) =>
+        CanonicalizeWhitespace(rule.Declarations) ==
+        "background-image: none !important;" &&
+        rule.Selectors.Any(
+            selector =>
+                selector.Contains(
+                    "[data-codex-composer-root] [data-above-composer-portal]",
+                    StringComparison.Ordinal) &&
+                selector.Contains(
+                    "> [data-in-progress-fixed-content]",
+                    StringComparison.Ordinal) &&
+                selector.Contains(
+                    "[class~=\"bottom-1\"][class~=\"flex\"][class~=\"min-h-7\"]",
+                    StringComparison.Ordinal) &&
+                selector.Contains(
+                    "[class~=\"-bottom-1\"][class~=\"h-7\"]" +
+                    "[class~=\"bg-gradient-to-t\"]" +
+                    "[class~=\"from-token-main-surface-primary\"]" +
+                    "[class~=\"to-transparent\"]",
                     StringComparison.Ordinal));
 
     private static bool IsGeneralGlassRule(CssRule rule) =>
@@ -1182,6 +1650,286 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
             <div class="app-shell-main-content-top-fade"
                  data-app-shell-main-content-top-fade="visible"
                  data-fixture-id="outside-main-top-fade" />
+          </body>
+        </html>
+        """;
+
+    private const string CurrentPluginsPageFixture =
+        """
+        <html class="electron-dark">
+          <body>
+            <div class="sticky z-30 bg-token-main-surface-primary"
+                 data-fixture-id="plugins-search-sticky">
+              <input id="plugins-page-search" />
+            </div>
+
+            <div class="sticky z-30 bg-token-main-surface-primary"
+                 data-fixture-id="plugins-search-sticky-wrong-id">
+              <input id="plugins-page-search-near-miss" />
+            </div>
+
+            <button class="rounded-lg bg-token-main-surface-primary"
+                    data-fixture-id="plugins-featured-card">
+              Install
+            </button>
+          </body>
+        </html>
+        """;
+
+    private const string CurrentScheduledPageFixture =
+        """
+        <html class="electron-dark">
+          <body>
+            <div class="sticky z-30 bg-token-main-surface-primary"
+                 data-fixture-id="scheduled-search-sticky">
+              <input id="scheduled-page-search" />
+            </div>
+
+            <div class="sticky z-30 bg-token-main-surface-primary"
+                 data-fixture-id="scheduled-search-sticky-wrong-id">
+              <input id="scheduled-page-search-near-miss" />
+            </div>
+
+            <div class="rounded-lg bg-token-main-surface-primary"
+                 data-fixture-id="scheduled-task-row">
+              Daily briefing
+            </div>
+          </body>
+        </html>
+        """;
+
+    private const string CurrentSitesPageFixture =
+        """
+        <html class="electron-dark">
+          <body>
+            <div class="flex h-full min-h-0 flex-col bg-token-main-surface-primary"
+                 data-fixture-id="sites-route-root">
+              <div class="sticky z-30 bg-token-main-surface-primary"
+                   data-fixture-id="sites-search-sticky">
+                <input id="appgen-site-search" />
+              </div>
+              <button class="rounded-lg bg-token-main-surface-primary"
+                      data-fixture-id="sites-card">
+                Open site
+              </button>
+            </div>
+
+            <div class="flex h-full min-h-0 flex-col bg-token-main-surface-primary"
+                 data-fixture-id="sites-route-root-wrong-id">
+              <div class="sticky z-30 bg-token-main-surface-primary">
+                <input id="appgen-site-search-near-miss" />
+              </div>
+            </div>
+
+            <section>
+              <div class="sticky z-30 bg-token-main-surface-primary"
+                   data-fixture-id="sites-search-sticky-outside-route">
+                <input id="appgen-site-search" />
+              </div>
+            </section>
+          </body>
+        </html>
+        """;
+
+    private const string CurrentPullRequestFixture =
+        """
+        <html class="electron-dark">
+          <body>
+            <main>
+              <div class="relative isolate flex min-h-0 flex-1 overflow-hidden">
+                <div class="app-shell-main-content-viewport">
+                  <div class="flex h-full min-h-0 w-full flex-col bg-token-main-surface-primary"
+                       data-fixture-id="pull-request-list-root">
+                    <div class="sticky z-30 bg-token-main-surface-primary"
+                         data-fixture-id="pull-request-search-sticky">
+                      <input id="pull-request-inbox-search" />
+                    </div>
+                    <article class="rounded-lg bg-token-main-surface-primary"
+                             data-fixture-id="pull-request-card">
+                      Pull request
+                    </article>
+                  </div>
+                </div>
+                <aside data-app-shell-focus-area="right-panel">
+                  <div class="absolute inset-0 min-h-0 min-w-0 overflow-hidden">
+                    <div class="absolute top-0 bottom-0 left-0 min-w-0 bg-token-main-surface-primary border-l border-token-border-default"
+                         data-fixture-id="pull-request-detail-shell">
+                      <div class="h-full min-h-0 min-w-0 overflow-hidden">
+                        <div class="h-full">
+                          <section class="h-full min-h-0 min-w-0 bg-token-main-surface-primary"
+                                   data-fixture-id="pull-request-detail-section">
+                            <div class="@container/app-shell-detail-panel flex h-full min-h-0 flex-col bg-token-main-surface-primary"
+                                 data-fixture-id="pull-request-detail-root">
+                              <div class="monaco-editor bg-token-main-surface-primary"
+                                   data-fixture-id="pull-request-editor" />
+                              <div class="bg-token-main-surface-primary"
+                                   data-diff-view="unified"
+                                   data-fixture-id="pull-request-diff" />
+                              <pre class="bg-token-main-surface-primary"
+                                   data-fixture-id="pull-request-code"><code>const approved = true;</code></pre>
+                            </div>
+                            <div class="@container/app-shell-detail-pane flex h-full min-h-0 flex-col bg-token-main-surface-primary"
+                                 data-fixture-id="pull-request-detail-root-near-miss" />
+                          </section>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </aside>
+                <aside data-app-shell-focus-area="right-panel">
+                  <div class="absolute inset-0 min-h-0 min-w-0 overflow-hidden">
+                    <div class="absolute top-0 bottom-0 left-0 min-w-0 bg-token-main-surface-primary"
+                         data-fixture-id="pull-request-ordinary-tab-shell">
+                      <div role="tabpanel"
+                           data-app-shell-tab-panel-controller="right" />
+                    </div>
+                  </div>
+                </aside>
+                <aside data-app-shell-focus-area="left-panel">
+                  <div class="absolute inset-0 min-h-0 min-w-0 overflow-hidden">
+                    <div class="absolute top-0 bottom-0 left-0 min-w-0 bg-token-main-surface-primary"
+                         data-fixture-id="pull-request-detail-shell-wrong-focus">
+                      <section class="h-full min-h-0 min-w-0 bg-token-main-surface-primary">
+                        <div class="@container/app-shell-detail-panel flex h-full min-h-0 flex-col bg-token-main-surface-primary" />
+                      </section>
+                    </div>
+                  </div>
+                </aside>
+              </div>
+            </main>
+
+            <main>
+              <div class="relative isolate flex min-h-0 flex-1 overflow-hidden">
+                <div class="app-shell-main-content-viewport">
+                  <div class="flex h-full min-h-0 w-full flex-col bg-token-main-surface-primary"
+                       data-fixture-id="pull-request-list-root-wrong-id">
+                    <div class="sticky z-30 bg-token-main-surface-primary"
+                         data-fixture-id="pull-request-search-sticky-wrong-id">
+                      <input id="pull-request-inbox-search-near-miss" />
+                    </div>
+                  </div>
+                </div>
+                <aside data-app-shell-focus-area="right-panel">
+                  <div class="absolute inset-0 min-h-0 min-w-0 overflow-hidden">
+                    <div class="absolute top-0 bottom-0 left-0 min-w-0 bg-token-main-surface-primary"
+                         data-fixture-id="pull-request-detail-shell-wrong-id">
+                      <div class="h-full min-h-0 min-w-0 overflow-hidden">
+                        <div class="h-full">
+                          <section class="h-full min-h-0 min-w-0 bg-token-main-surface-primary">
+                            <div class="@container/app-shell-detail-panel flex h-full min-h-0 flex-col bg-token-main-surface-primary" />
+                          </section>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </aside>
+              </div>
+            </main>
+          </body>
+        </html>
+        """;
+
+    private const string CurrentSettingsFixture =
+        """
+        <html class="electron-dark">
+          <body>
+            <div class="flex h-full min-h-0">
+              <aside class="app-shell-left-panel">
+                <button data-settings-panel-slug="general" />
+              </aside>
+              <div class="relative isolate min-w-0 flex-1 overflow-visible">
+                <div class="main-surface flex h-full min-h-0 flex-col"
+                     data-fixture-id="settings-content-canvas">
+                  <section class="rounded-xl bg-token-main-surface-primary"
+                           data-fixture-id="settings-permissions-card">
+                    Permissions
+                  </section>
+                  <section class="rounded-xl bg-token-main-surface-primary"
+                           data-fixture-id="settings-general-card">
+                    <select class="bg-token-main-surface-primary"
+                            data-fixture-id="settings-dropdown">
+                      <option>English</option>
+                    </select>
+                    <button class="bg-token-main-surface-primary"
+                            role="switch"
+                            data-fixture-id="settings-switch" />
+                  </section>
+                </div>
+              </div>
+            </div>
+
+            <div class="main-surface flex h-full min-h-0 flex-col"
+                 data-fixture-id="ordinary-div-main-surface" />
+
+            <div class="flex h-full min-h-0">
+              <aside class="app-shell-left-panel">
+                <button data-settings-panel-slug="appearance" />
+              </aside>
+              <div class="relative isolate min-w-0 flex-1 overflow-visible">
+                <main class="main-surface flex h-full min-h-0 flex-col"
+                      data-fixture-id="settings-main-main-surface" />
+              </div>
+            </div>
+
+            <div class="flex h-full min-h-0">
+              <aside class="app-shell-left-panel" />
+              <div class="relative isolate min-w-0 flex-1 overflow-visible">
+                <div class="main-surface flex h-full min-h-0 flex-col"
+                     data-fixture-id="settings-canvas-without-data-anchor" />
+              </div>
+            </div>
+          </body>
+        </html>
+        """;
+
+    private const string CurrentChangedFilesComposerFixture =
+        """
+        <html class="electron-dark">
+          <body>
+            <main>
+              <div data-codex-composer-root="">
+                <div data-above-composer-portal="">
+                  <div data-in-progress-fixed-content="">
+                    <div class="absolute inset-x-0 bottom-1 flex min-h-7 items-center justify-center gap-2 pb-1">
+                      <button class="bg-token-main-surface-primary"
+                              data-fixture-id="changed-files-summary-button">
+                        View changed files
+                      </button>
+                      <div class="pointer-events-none absolute inset-x-0 -bottom-1 h-7 bg-gradient-to-t from-token-main-surface-primary to-transparent"
+                           data-fixture-id="changed-files-composer-fade" />
+                    </div>
+                  </div>
+                </div>
+
+                <div class="relative bg-token-main-surface-primary"
+                     data-fixture-id="composer-surface-chrome" />
+              </div>
+
+              <div data-codex-composer-root="">
+                <div data-in-progress-fixed-content="">
+                  <div class="absolute inset-x-0 bottom-1 flex min-h-7 items-center justify-center gap-2 pb-1">
+                    <div class="pointer-events-none absolute inset-x-0 -bottom-1 h-7 bg-gradient-to-t from-token-main-surface-primary to-transparent"
+                         data-fixture-id="changed-files-fade-outside-portal" />
+                  </div>
+                </div>
+              </div>
+
+              <div data-codex-composer-root="">
+                <div data-above-composer-portal="">
+                  <div>
+                    <div class="absolute inset-x-0 bottom-1 flex min-h-7 items-center justify-center gap-2 pb-1">
+                      <div class="pointer-events-none absolute inset-x-0 -bottom-1 h-7 bg-gradient-to-t from-token-main-surface-primary to-transparent"
+                           data-fixture-id="changed-files-fade-without-in-progress" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="thread-scroll-container">
+                <div class="bg-gradient-to-t from-token-main-surface-primary via-token-main-surface-primary"
+                     data-fixture-id="composer-via-gradient" />
+              </div>
+            </main>
           </body>
         </html>
         """;

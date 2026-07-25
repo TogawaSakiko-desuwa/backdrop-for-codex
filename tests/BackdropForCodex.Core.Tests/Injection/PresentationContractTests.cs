@@ -337,6 +337,104 @@ public sealed class PresentationContractTests
     }
 
     [Fact]
+    public void BuildInstall_OwnsRouteStylesAsGlassAndChangedFilesAsAdvanced()
+    {
+        var options = new WallpaperInjectionOptions(
+            generation: 3,
+            source: new Uri("file:///C:/Wallpapers/wallpaper.png"),
+            localMediaPath: @"C:\Wallpapers\wallpaper.png",
+            expectedContentLength: 4096,
+            WallpaperMediaKind.Image);
+        var declared = PresentationContractCatalog.CreateFullySupportedCapabilities();
+        var glassDisabled = declared.DowngradeWith(
+            new CompatibilityCapabilities(
+                declared.Global,
+                declared.Regions,
+                CompatibilityCapability.Disabled(
+                    CompatibilityCapabilityReasonCode.StructuralProbeFailed),
+                declared.Audio,
+                declared.Advanced));
+        var advancedDisabled = declared.DowngradeWith(
+            new CompatibilityCapabilities(
+                declared.Global,
+                declared.Regions,
+                declared.Glass,
+                declared.Audio,
+                CompatibilityCapability.Disabled(
+                    CompatibilityCapabilityReasonCode.StructuralProbeFailed)));
+        var installScript = InjectionScriptBuilder.BuildInstall(options, declared);
+        var degradedScript = InjectionScriptBuilder.BuildInstall(options, glassDisabled);
+        var advancedDegradedScript = InjectionScriptBuilder.BuildInstall(
+            options,
+            advancedDisabled);
+        string[] glassRuleAnchors =
+        [
+            "plugins-page-search",
+            "scheduled-page-search",
+            "appgen-site-search",
+            "pull-request-inbox-search",
+            "data-settings-panel-slug",
+        ];
+
+        foreach (var anchor in glassRuleAnchors)
+        {
+            AssertEveryOccurrenceIsInsideOwnedStyleBlocks(
+                installScript,
+                anchor,
+                "glass");
+        }
+
+        AssertEveryOccurrenceIsInsideOwnedStyleBlocks(
+            installScript,
+            "[data-above-composer-portal]",
+            "advanced");
+
+        var baseline = RemoveOwnedStyleBlocks(
+            installScript,
+            "glass",
+            "advanced");
+        Assert.All(
+            glassRuleAnchors,
+            anchor => Assert.DoesNotContain(
+                anchor,
+                baseline,
+                StringComparison.Ordinal));
+
+        var degradedGlassStyles = string.Join(
+            "\n",
+            ExtractOwnedStyleBlocks(degradedScript, "glass"));
+        foreach (var anchor in glassRuleAnchors)
+        {
+            AssertEveryOccurrenceUsesGuard(
+                degradedGlassStyles,
+                anchor,
+                "body[data-codex-wallpaper-glass-disabled]");
+        }
+
+        const string ChangedFilesRule =
+            "body main [data-codex-composer-root] [data-above-composer-portal]";
+        Assert.Contains(ChangedFilesRule, degradedScript, StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "body[data-codex-wallpaper-glass-disabled] main " +
+            "[data-codex-composer-root] [data-above-composer-portal]",
+            degradedScript,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "body[data-codex-wallpaper-advanced-disabled] main " +
+            "[data-codex-composer-root] [data-above-composer-portal]",
+            degradedScript,
+            StringComparison.Ordinal);
+
+        var degradedAdvancedStyles = string.Join(
+            "\n",
+            ExtractOwnedStyleBlocks(advancedDegradedScript, "advanced"));
+        AssertEveryOccurrenceUsesGuard(
+            degradedAdvancedStyles,
+            "[data-above-composer-portal]",
+            "body[data-codex-wallpaper-advanced-disabled]");
+    }
+
+    [Fact]
     public void BuildCapabilityDowngrade_RemovesOwnedOptionalStyleBlocksInPlace()
     {
         var declared = PresentationContractCatalog.CreateFullySupportedCapabilities();
@@ -377,5 +475,207 @@ public sealed class PresentationContractTests
         Assert.False(PuppeteerWallpaperSession.RequiresOwnedStyleDowngrade(
             degraded,
             declared));
+    }
+
+    private static void AssertEveryOccurrenceIsInsideOwnedStyleBlocks(
+        string source,
+        string token,
+        string capability)
+    {
+        var sourceCount = CountOccurrences(source, token);
+        var ownedCount = ExtractOwnedStyleBlocks(source, capability)
+            .Sum(block => CountOccurrences(block, token));
+
+        Assert.True(sourceCount > 0, $"Expected '{token}' in the generated script.");
+        Assert.Equal(sourceCount, ownedCount);
+    }
+
+    private static void AssertEveryOccurrenceUsesGuard(
+        string source,
+        string token,
+        string guard)
+    {
+        var searchIndex = 0;
+        var occurrenceCount = 0;
+        while (true)
+        {
+            var occurrenceIndex = source.IndexOf(
+                token,
+                searchIndex,
+                StringComparison.Ordinal);
+            if (occurrenceIndex < 0)
+            {
+                break;
+            }
+
+            var precedingRuleEnd = source.LastIndexOf('}', occurrenceIndex);
+            var selectorStart = precedingRuleEnd >= 0
+                ? precedingRuleEnd + 1
+                : 0;
+            var declarationStart = source.IndexOf('{', selectorStart);
+            Assert.True(
+                declarationStart > occurrenceIndex,
+                $"Expected '{token}' to occur in a selector.");
+            var selectorGroup = source[selectorStart..declarationStart];
+            var matchingSelector = ExtractTopLevelSelectorAt(
+                selectorGroup,
+                occurrenceIndex - selectorStart);
+            Assert.Contains(
+                guard,
+                matchingSelector,
+                StringComparison.Ordinal);
+            occurrenceCount++;
+            searchIndex = occurrenceIndex + token.Length;
+        }
+
+        Assert.True(occurrenceCount > 0, $"Expected '{token}' in the owned style block.");
+    }
+
+    private static string ExtractTopLevelSelectorAt(string selectorGroup, int offset)
+    {
+        Assert.InRange(offset, 0, selectorGroup.Length - 1);
+        var segmentStart = 0;
+        var segmentEnd = selectorGroup.Length;
+        var parentheses = 0;
+        var brackets = 0;
+        var quote = '\0';
+
+        for (var index = 0; index < selectorGroup.Length; index++)
+        {
+            var character = selectorGroup[index];
+            if (quote != '\0')
+            {
+                if (character == quote)
+                {
+                    quote = '\0';
+                }
+
+                continue;
+            }
+
+            if (character is '"' or '\'')
+            {
+                quote = character;
+                continue;
+            }
+
+            switch (character)
+            {
+                case '(':
+                    parentheses++;
+                    break;
+                case ')':
+                    parentheses--;
+                    break;
+                case '[':
+                    brackets++;
+                    break;
+                case ']':
+                    brackets--;
+                    break;
+                case ',' when parentheses == 0 && brackets == 0:
+                    if (offset < index)
+                    {
+                        segmentEnd = index;
+                        index = selectorGroup.Length;
+                    }
+                    else
+                    {
+                        segmentStart = index + 1;
+                    }
+
+                    break;
+            }
+        }
+
+        Assert.InRange(offset, segmentStart, segmentEnd - 1);
+        return selectorGroup[segmentStart..segmentEnd].Trim();
+    }
+
+    private static List<string> ExtractOwnedStyleBlocks(
+        string source,
+        string capability)
+    {
+        var startMarker = $"/* codex-wallpaper-{capability}:start */";
+        var endMarker = $"/* codex-wallpaper-{capability}:end */";
+        var blocks = new List<string>();
+        var searchIndex = 0;
+
+        while (true)
+        {
+            var startIndex = source.IndexOf(
+                startMarker,
+                searchIndex,
+                StringComparison.Ordinal);
+            if (startIndex < 0)
+            {
+                break;
+            }
+
+            var contentStart = startIndex + startMarker.Length;
+            var endIndex = source.IndexOf(
+                endMarker,
+                contentStart,
+                StringComparison.Ordinal);
+            Assert.True(endIndex >= 0, $"Missing end marker for '{capability}'.");
+            blocks.Add(source[contentStart..endIndex]);
+            searchIndex = endIndex + endMarker.Length;
+        }
+
+        Assert.NotEmpty(blocks);
+        return blocks;
+    }
+
+    private static string RemoveOwnedStyleBlocks(
+        string source,
+        params string[] capabilities)
+    {
+        var result = source;
+        foreach (var capability in capabilities)
+        {
+            var startMarker = $"/* codex-wallpaper-{capability}:start */";
+            var endMarker = $"/* codex-wallpaper-{capability}:end */";
+            while (true)
+            {
+                var startIndex = result.IndexOf(
+                    startMarker,
+                    StringComparison.Ordinal);
+                if (startIndex < 0)
+                {
+                    break;
+                }
+
+                var endIndex = result.IndexOf(
+                    endMarker,
+                    startIndex + startMarker.Length,
+                    StringComparison.Ordinal);
+                Assert.True(endIndex >= 0, $"Missing end marker for '{capability}'.");
+                result = string.Concat(
+                    result.AsSpan(0, startIndex),
+                    result.AsSpan(endIndex + endMarker.Length));
+            }
+        }
+
+        return result;
+    }
+
+    private static int CountOccurrences(string source, string token)
+    {
+        var count = 0;
+        var searchIndex = 0;
+        while (true)
+        {
+            var occurrenceIndex = source.IndexOf(
+                token,
+                searchIndex,
+                StringComparison.Ordinal);
+            if (occurrenceIndex < 0)
+            {
+                return count;
+            }
+
+            count++;
+            searchIndex = occurrenceIndex + token.Length;
+        }
     }
 }

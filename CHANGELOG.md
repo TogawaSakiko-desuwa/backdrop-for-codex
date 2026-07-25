@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 
+## [1.3.4] - 2026-07-26
+
+### Fixed
+
+- 修复当前 Codex 插件、已安排任务、站点、拉取请求和设置页面新增的不透明主表面与 sticky 搜索渐变遮住壁纸的问题；这些页面现在只在经审核的路由外壳上使用一层既有毛玻璃效果，卡片、控件、代码、diff 和编辑器继续保留原生承载层。
+- 修复对话输入框上方显示进行中的文件更改摘要时出现整条黑色渐变的问题；仅清除摘要 portal 的独立渐变遮罩，文件统计按钮和输入框表面保持不变。
+
 ## [1.3.3] - 2026-07-25
 
 ### Changed
@@ -164,7 +171,8 @@
 - 复验完整 MSIX 包名、激活 PID、进程启动时间、Windows 会话和监听器所有权；媒体服务保持已校验文件的只读句柄。
 - 明确禁止 CSP bypass；关闭、更换或 lease 到期时移除媒体 `src`、撤销 `blob:` URL，并仅删除带有本项目 owner/generation 的节点和样式。
 
-[Unreleased]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.3.3...HEAD
+[Unreleased]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.3.4...HEAD
+[1.3.4]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.3.3...v1.3.4
 [1.3.3]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.3.2...v1.3.3
 [1.3.2]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.3.1...v1.3.2
 [1.3.1]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.3.0...v1.3.1
