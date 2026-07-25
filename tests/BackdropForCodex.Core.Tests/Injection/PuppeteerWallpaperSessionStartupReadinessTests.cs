@@ -100,6 +100,55 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
             Assert.NotEqual("0px", conversation.AssistantBorderWidth);
             Assert.NotEqual("0px", conversation.UserBorderWidth);
             Assert.NotEqual("none", conversation.AssistantBackdropFilter);
+
+            var shellSurfaces = await AddShellSurfacesAndReadRenderingAsync(endpoint);
+            var launcher = shellSurfaces.EmptyLauncher;
+            Assert.Equal(1, launcher.Generation);
+            Assert.Equal(1, launcher.OwnedStyleCount);
+            Assert.Equal(1, launcher.EmptyStateMatchCount);
+            Assert.NotEqual("rgba(0, 0, 0, 0)", launcher.ShellBackground);
+            Assert.NotEqual("rgb(24, 24, 24)", launcher.ShellBackground);
+            Assert.Contains("blur(", launcher.ShellBackdropFilter, StringComparison.Ordinal);
+            Assert.Equal("rgb(24, 24, 24)", launcher.PrimarySiblingBackground);
+            Assert.Equal("none", launcher.PrimarySiblingBackdropFilter);
+            Assert.Equal("rgba(0, 0, 0, 0)", launcher.TabsBackground);
+            Assert.Equal("rgba(0, 0, 0, 0)", launcher.ToolbarBackground);
+            Assert.Equal("rgba(0, 0, 0, 0)", launcher.ZeroSizeStickyBackground);
+            Assert.Equal("rgba(0, 0, 0, 0)", launcher.ScrollBackground);
+            Assert.Equal("rgba(0, 0, 0, 0)", launcher.CenterStickyBackground);
+            Assert.All(
+                launcher.ChromeBackdropFilters,
+                backdropFilter => Assert.Equal("none", backdropFilter));
+            Assert.Equal(5, launcher.ActionCardBackgrounds.Length);
+            Assert.All(
+                launcher.ActionCardBackgrounds,
+                background => Assert.Equal("rgb(41, 42, 43)", background));
+
+            var populatedPanel = shellSurfaces.PopulatedPanel;
+            Assert.Equal(1, populatedPanel.Generation);
+            Assert.Equal(1, populatedPanel.OwnedStyleCount);
+            Assert.Equal(0, populatedPanel.EmptyStateMatchCount);
+            Assert.Equal(1, populatedPanel.RightControllerCount);
+            Assert.NotEqual("rgba(0, 0, 0, 0)", populatedPanel.ShellBackground);
+            Assert.Contains("blur(", populatedPanel.ShellBackdropFilter, StringComparison.Ordinal);
+            Assert.Equal("rgba(0, 0, 0, 0)", populatedPanel.TabsBackground);
+            Assert.Equal("rgba(0, 0, 0, 0)", populatedPanel.ToolbarBackground);
+            Assert.Equal("rgba(0, 0, 0, 0)", populatedPanel.FileLayoutBackground);
+            Assert.Equal("rgb(24, 24, 24)", populatedPanel.EditorBackground);
+            Assert.Equal("auto", populatedPanel.CloseButtonPointerEvents);
+
+            var headers = shellSurfaces.Headers;
+            Assert.NotEqual("rgba(0, 0, 0, 0)", headers.GlobalBackground);
+            Assert.Contains("blur(", headers.GlobalBackdropFilter, StringComparison.Ordinal);
+            Assert.Equal("rgba(0, 0, 0, 0)", headers.EdgeBackground);
+            Assert.Equal("none", headers.EdgeBackdropFilter);
+            Assert.Equal("rgba(0, 0, 0, 0)", headers.ContextBackground);
+            Assert.Equal("none", headers.ContextBackdropFilter);
+            Assert.Equal("rgba(0, 0, 0, 0)", headers.ContextBorderColor);
+            Assert.Equal("rgb(52, 53, 54)", headers.RightSlotBackground);
+            Assert.Equal("rgb(71, 72, 73)", headers.CloseButtonBackground);
+            Assert.Equal("auto", headers.CloseButtonPointerEvents);
+            Assert.True(shellSurfaces.StyleElementPreserved);
         }
         finally
         {
@@ -476,6 +525,248 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
         }
     }
 
+    private static async Task<ShellSurfaceTransitionRendering>
+        AddShellSurfacesAndReadRenderingAsync(VerifiedCdpEndpoint endpoint)
+    {
+        var browser = await Puppeteer.ConnectAsync(new ConnectOptions
+        {
+            BrowserWSEndpoint = endpoint.BrowserWebSocketUri.AbsoluteUri,
+            DefaultViewport = null,
+            ProtocolTimeout = 5_000,
+            AcceptInsecureCerts = false,
+            NetworkEnabled = false,
+        });
+        try
+        {
+            var reviewedTarget = Assert.Single(endpoint.InjectableTargets);
+            var pages = await browser.PagesAsync(includeAll: true);
+            var page = Assert.Single(
+                pages,
+                candidate =>
+                    !candidate.IsClosed &&
+                    Uri.TryCreate(candidate.Url, UriKind.Absolute, out var candidateUri) &&
+                    VerifiedCodexPageSelector.IsSameReviewedDocument(
+                        candidateUri,
+                        reviewedTarget.Url));
+
+            return await page.EvaluateExpressionAsync<ShellSurfaceTransitionRendering>(
+                $$"""
+                (async () => {
+                  const host = document.querySelector("#root");
+                  if (!host) throw new Error("Missing fixture root element.");
+
+                  const nativeStyles = document.createElement("style");
+                  nativeStyles.textContent = `
+                    .bg-token-main-surface-primary {
+                      background-color: rgb(24 24 24);
+                    }
+                    .launcher-action-card {
+                      background-color: rgb(41 42 43);
+                    }
+                    #edge-header,
+                    #header-context {
+                      background-color: rgb(24 24 24);
+                      -webkit-backdrop-filter: blur(2px);
+                      backdrop-filter: blur(2px);
+                    }
+                    #header-context {
+                      border: 1px solid rgb(90 91 92);
+                    }
+                    #right-header-slot {
+                      background-color: rgb(52 53 54);
+                    }
+                    #right-header-close-button,
+                    #right-tab-close-button {
+                      background-color: rgb(71 72 73);
+                      pointer-events: auto;
+                    }
+                  `;
+                  document.head.append(nativeStyles);
+
+                  const globalHeader = document.querySelector("header.app-header-tint");
+                  if (!globalHeader) throw new Error("Missing fixture global header.");
+                  globalHeader.id = "global-header";
+
+                  const edgeHeader = document.createElement("header");
+                  edgeHeader.id = "edge-header";
+                  edgeHeader.className = "app-header-tint";
+                  edgeHeader.dataset.appShellHeaderEdgeScroll = "false";
+                  const headerContext = document.createElement("div");
+                  headerContext.id = "header-context";
+                  headerContext.dataset.testid = "app-shell-header-context-menu-surface";
+                  const headerMenuButton = document.createElement("button");
+                  headerMenuButton.textContent = "Plan";
+                  headerContext.append(headerMenuButton);
+                  const rightHeaderSlot = document.createElement("div");
+                  rightHeaderSlot.id = "right-header-slot";
+                  const rightHeaderCloseButton = document.createElement("button");
+                  rightHeaderCloseButton.id = "right-header-close-button";
+                  rightHeaderCloseButton.textContent = "Close";
+                  rightHeaderSlot.append(rightHeaderCloseButton);
+                  edgeHeader.append(headerContext, rightHeaderSlot);
+
+                  const rightAside = document.createElement("aside");
+                  rightAside.dataset.appShellFocusArea = "right-panel";
+                  const positioner = document.createElement("div");
+                  const primarySibling = document.createElement("div");
+                  primarySibling.id = "launcher-primary-sibling";
+                  primarySibling.className = "bg-token-main-surface-primary";
+                  const shell = document.createElement("div");
+                  shell.id = "launcher-shell";
+                  shell.className = "bg-token-main-surface-primary";
+                  const shellLayout = document.createElement("div");
+                  const tabs = document.createElement("div");
+                  tabs.id = "launcher-tabs";
+                  tabs.className = "bg-token-main-surface-primary";
+                  tabs.dataset.appShellTabs = "true";
+                  const toolbar = document.createElement("div");
+                  toolbar.id = "launcher-toolbar";
+                  toolbar.className = "bg-token-main-surface-primary";
+                  const tabStrip = document.createElement("div");
+                  tabStrip.dataset.appShellTabStripController = "right";
+                  const closeButton = document.createElement("button");
+                  closeButton.id = "right-tab-close-button";
+                  closeButton.dataset.appShellTabCloseButton = "true";
+                  closeButton.textContent = "Close tab";
+                  tabStrip.append(closeButton);
+                  const zeroSizeSticky = document.createElement("div");
+                  zeroSizeSticky.id = "launcher-zero-size-sticky";
+                  zeroSizeSticky.className = "bg-token-main-surface-primary";
+                  toolbar.append(tabStrip, zeroSizeSticky);
+
+                  const launcherContent = document.createElement("div");
+                  launcherContent.id = "launcher-content";
+                  const scrollContent = document.createElement("div");
+                  scrollContent.id = "launcher-scroll-content";
+                  scrollContent.className = "bg-token-main-surface-primary";
+                  const centerLayout = document.createElement("div");
+                  const centerSticky = document.createElement("div");
+                  centerSticky.id = "launcher-center-sticky";
+                  centerSticky.className = "bg-token-main-surface-primary";
+                  for (const name of ["Review", "Terminal", "Browser", "Files", "Tasks"]) {
+                    const card = document.createElement("button");
+                    card.className = "launcher-action-card";
+                    card.textContent = name;
+                    centerSticky.append(card);
+                  }
+                  centerLayout.append(centerSticky);
+                  scrollContent.append(centerLayout);
+                  launcherContent.append(scrollContent);
+                  tabs.append(toolbar, launcherContent);
+                  shellLayout.append(tabs);
+                  shell.append(shellLayout);
+                  positioner.append(primarySibling, shell);
+                  rightAside.append(positioner);
+                  host.append(edgeHeader, rightAside);
+
+                  const style = element => getComputedStyle(element);
+                  const background = element => style(element).backgroundColor;
+                  const filter = element => style(element).backdropFilter;
+                  const generation = () => Number(document.querySelector(
+                    "#{{InjectionScriptBuilder.RootElementId}}"
+                  )?.dataset.codexWallpaperGeneration ?? 0);
+                  const ownedStyleCount = () => document.querySelectorAll(
+                    "#{{InjectionScriptBuilder.StyleElementId}}"
+                  ).length;
+                  const emptyStateMatchCount = () => document.querySelectorAll(
+                    'aside[data-app-shell-focus-area="right-panel"] ' +
+                    '[data-app-shell-tabs="true"]' +
+                    ':not(:has([data-app-shell-tab-panel-controller]))'
+                  ).length;
+                  const ownedStyle = document.querySelector(
+                    "#{{InjectionScriptBuilder.StyleElementId}}"
+                  );
+
+                  await new Promise(resolve => requestAnimationFrame(resolve));
+                  const emptyLauncher = {
+                    generation: generation(),
+                    ownedStyleCount: ownedStyleCount(),
+                    emptyStateMatchCount: emptyStateMatchCount(),
+                    shellBackground: background(shell),
+                    shellBackdropFilter: filter(shell),
+                    primarySiblingBackground: background(primarySibling),
+                    primarySiblingBackdropFilter: filter(primarySibling),
+                    tabsBackground: background(tabs),
+                    toolbarBackground: background(toolbar),
+                    zeroSizeStickyBackground: background(zeroSizeSticky),
+                    scrollBackground: background(scrollContent),
+                    centerStickyBackground: background(centerSticky),
+                    chromeBackdropFilters: [
+                      tabs,
+                      toolbar,
+                      zeroSizeSticky,
+                      scrollContent,
+                      centerSticky
+                    ].map(filter),
+                    actionCardBackgrounds: Array.from(
+                      centerSticky.querySelectorAll(".launcher-action-card"),
+                      background)
+                  };
+                  const headers = {
+                    globalBackground: background(globalHeader),
+                    globalBackdropFilter: filter(globalHeader),
+                    edgeBackground: background(edgeHeader),
+                    edgeBackdropFilter: filter(edgeHeader),
+                    contextBackground: background(headerContext),
+                    contextBackdropFilter: filter(headerContext),
+                    contextBorderColor: style(headerContext).borderTopColor,
+                    rightSlotBackground: background(rightHeaderSlot),
+                    closeButtonBackground: background(rightHeaderCloseButton),
+                    closeButtonPointerEvents: style(rightHeaderCloseButton).pointerEvents
+                  };
+
+                  launcherContent.remove();
+                  const tabpanel = document.createElement("div");
+                  tabpanel.setAttribute("role", "tabpanel");
+                  tabpanel.dataset.appShellTabPanelController = "right";
+                  const fileLayout = document.createElement("div");
+                  fileLayout.id = "right-file-layout";
+                  fileLayout.className = "bg-token-main-surface-primary";
+                  const editor = document.createElement("div");
+                  editor.id = "right-editor";
+                  editor.className = "monaco-editor bg-token-main-surface-primary";
+                  fileLayout.append(editor);
+                  tabpanel.append(fileLayout);
+                  tabs.append(tabpanel);
+
+                  await new Promise(resolve => requestAnimationFrame(
+                    () => requestAnimationFrame(resolve)
+                  ));
+                  const populatedPanel = {
+                    generation: generation(),
+                    ownedStyleCount: ownedStyleCount(),
+                    emptyStateMatchCount: emptyStateMatchCount(),
+                    rightControllerCount: document.querySelectorAll(
+                      '[data-app-shell-tab-panel-controller="right"]'
+                    ).length,
+                    shellBackground: background(shell),
+                    shellBackdropFilter: filter(shell),
+                    tabsBackground: background(tabs),
+                    toolbarBackground: background(toolbar),
+                    fileLayoutBackground: background(fileLayout),
+                    editorBackground: background(editor),
+                    closeButtonPointerEvents: style(closeButton).pointerEvents
+                  };
+
+                  return {
+                    emptyLauncher,
+                    populatedPanel,
+                    headers,
+                    styleElementPreserved:
+                      ownedStyle !== null &&
+                      document.querySelector(
+                        "#{{InjectionScriptBuilder.StyleElementId}}"
+                      ) === ownedStyle
+                  };
+                })()
+                """);
+        }
+        finally
+        {
+            browser.Disconnect();
+        }
+    }
+
     private static async Task<HomeSuggestionRendering> ReadHomeSuggestionRenderingAsync(
         IPage page)
     {
@@ -632,6 +923,53 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
         string AssistantBorderWidth,
         string UserBorderWidth,
         string AssistantBackdropFilter);
+
+    private sealed record ShellSurfaceTransitionRendering(
+        EmptyLauncherRendering EmptyLauncher,
+        PopulatedRightPanelRendering PopulatedPanel,
+        HeaderSurfaceRendering Headers,
+        bool StyleElementPreserved);
+
+    private sealed record EmptyLauncherRendering(
+        long Generation,
+        int OwnedStyleCount,
+        int EmptyStateMatchCount,
+        string ShellBackground,
+        string ShellBackdropFilter,
+        string PrimarySiblingBackground,
+        string PrimarySiblingBackdropFilter,
+        string TabsBackground,
+        string ToolbarBackground,
+        string ZeroSizeStickyBackground,
+        string ScrollBackground,
+        string CenterStickyBackground,
+        string[] ChromeBackdropFilters,
+        string[] ActionCardBackgrounds);
+
+    private sealed record PopulatedRightPanelRendering(
+        long Generation,
+        int OwnedStyleCount,
+        int EmptyStateMatchCount,
+        int RightControllerCount,
+        string ShellBackground,
+        string ShellBackdropFilter,
+        string TabsBackground,
+        string ToolbarBackground,
+        string FileLayoutBackground,
+        string EditorBackground,
+        string CloseButtonPointerEvents);
+
+    private sealed record HeaderSurfaceRendering(
+        string GlobalBackground,
+        string GlobalBackdropFilter,
+        string EdgeBackground,
+        string EdgeBackdropFilter,
+        string ContextBackground,
+        string ContextBackdropFilter,
+        string ContextBorderColor,
+        string RightSlotBackground,
+        string CloseButtonBackground,
+        string CloseButtonPointerEvents);
 
     private static int ReserveLoopbackPort()
     {

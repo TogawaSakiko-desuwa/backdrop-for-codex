@@ -133,7 +133,73 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
     }
 
     [Fact]
-    public void ReviewedHeaderSelectors_MoveGlassInsideTheEdgeScrollHeader()
+    public void ReviewedSelectors_GlassOnlyTheEmptyRightLauncherShellAndClearItsPrimaryChrome()
+    {
+        var styleSheet = ExtractGeneratedStyleSheet();
+        var forcedColorsNone = ExtractBlock(styleSheet, "@media (forced-colors: none)");
+        var rules = ParseLeafRules(forcedColorsNone);
+        var fixture = XDocument.Parse(CurrentRightPanelLauncherFixture);
+
+        var launcherGlassRule = Assert.Single(rules, IsReviewedRightLauncherGlassRule);
+        var launcherClearRule = Assert.Single(rules, IsReviewedRightLauncherClearRule);
+
+        Assert.Equal(
+            [
+                CanonicalizeSelector(
+                    """
+                    body aside[data-app-shell-focus-area="right-panel"]:not(:has([data-app-shell-tab-panel-controller]))
+                      > div
+                      > div[class~="bg-token-main-surface-primary"]:has([data-app-shell-tabs="true"])
+                    """),
+            ],
+            launcherGlassRule.Selectors);
+        Assert.Equal(
+            [
+                CanonicalizeSelector(
+                    """
+                    body aside[data-app-shell-focus-area="right-panel"]
+                      [data-app-shell-tabs="true"][class~="bg-token-main-surface-primary"]:not(:has([data-app-shell-tab-panel-controller]))
+                    """),
+                CanonicalizeSelector(
+                    """
+                    body aside[data-app-shell-focus-area="right-panel"]
+                      [data-app-shell-tabs="true"]:not(:has([data-app-shell-tab-panel-controller]))
+                      [class~="bg-token-main-surface-primary"]
+                    """),
+            ],
+            launcherClearRule.Selectors);
+
+        Assert.Equal(
+            ["launcher-glass-shell"],
+            SelectFixtureIds(fixture, launcherGlassRule.Selectors));
+        Assert.Equal(
+            [
+                "launcher-center-sticky",
+                "launcher-scroll-content",
+                "launcher-tabs-root",
+                "launcher-toolbar",
+                "launcher-zero-size-sticky",
+            ],
+            SelectFixtureIds(fixture, launcherClearRule.Selectors));
+
+        var changedIds = SelectFixtureIds(
+            fixture,
+            [.. launcherGlassRule.Selectors, .. launcherClearRule.Selectors]);
+        Assert.DoesNotContain("launcher-review-card", changedIds);
+        Assert.DoesNotContain("launcher-terminal-card", changedIds);
+        Assert.DoesNotContain("launcher-primary-sibling", changedIds);
+        Assert.DoesNotContain("left-launcher-glass-shell", changedIds);
+        Assert.DoesNotContain("left-launcher-tabs-root", changedIds);
+        Assert.DoesNotContain("wrong-controller-glass-shell", changedIds);
+        Assert.DoesNotContain("wrong-controller-tabs-root", changedIds);
+        Assert.DoesNotContain("populated-glass-shell", changedIds);
+        Assert.DoesNotContain("populated-tabs-root", changedIds);
+        Assert.DoesNotContain("populated-tabpanel", changedIds);
+        Assert.DoesNotContain("editor-surface", changedIds);
+    }
+
+    [Fact]
+    public void ReviewedHeaderSelectors_KeepOnlyTheGlobalHeaderSurfaced()
     {
         var styleSheet = ExtractGeneratedStyleSheet();
         var forcedColorsNone = ExtractBlock(styleSheet, "@media (forced-colors: none)");
@@ -142,7 +208,7 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
 
         var generalGlassRule = Assert.Single(rules, IsGeneralGlassRule);
         var edgeHeaderResetRule = Assert.Single(rules, IsReviewedEdgeHeaderResetRule);
-        var contextGlassRule = Assert.Single(rules, IsReviewedHeaderContextGlassRule);
+        var contextClearRule = Assert.Single(rules, IsReviewedHeaderContextClearRule);
 
         Assert.Equal(
             [
@@ -160,7 +226,7 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
                       > [data-testid="app-shell-header-context-menu-surface"]
                     """),
             ],
-            contextGlassRule.Selectors);
+            contextClearRule.Selectors);
 
         Assert.Equal(
             ["top-app-bar"],
@@ -170,15 +236,16 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
             SelectFixtureIds(fixture, edgeHeaderResetRule.Selectors));
         Assert.Equal(
             ["main-header-context"],
-            SelectFixtureIds(fixture, contextGlassRule.Selectors));
+            SelectFixtureIds(fixture, contextClearRule.Selectors));
 
         var changedIds = SelectFixtureIds(
             fixture,
             [
                 .. generalGlassRule.Selectors,
                 .. edgeHeaderResetRule.Selectors,
-                .. contextGlassRule.Selectors,
+                .. contextClearRule.Selectors,
             ]);
+        Assert.DoesNotContain("main-header-menu-button", changedIds);
         Assert.DoesNotContain("right-header-slot", changedIds);
         Assert.DoesNotContain("right-tab-close-button", changedIds);
         Assert.DoesNotContain("right-panel", changedIds);
@@ -219,8 +286,30 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
             selector => selector.Contains(
                 "aside[data-app-shell-focus-area=\"right-panel\"]",
                 StringComparison.Ordinal) &&
+                selector.Contains(
+                    "[data-app-shell-tab-panel-controller=\"right\"]",
+                    StringComparison.Ordinal) &&
                 selector.Contains(":has(", StringComparison.Ordinal) &&
                 selector.Contains('>'));
+
+    private static bool IsReviewedRightLauncherGlassRule(CssRule rule) =>
+        rule.Declarations.Contains(
+            "background-color: var(--codex-wallpaper-glass) !important",
+            StringComparison.Ordinal) &&
+        rule.Declarations.Contains(
+            "backdrop-filter: blur(var(--codex-wallpaper-blur))",
+            StringComparison.Ordinal) &&
+        rule.Selectors.Any(
+            selector =>
+                selector.Contains(
+                    "aside[data-app-shell-focus-area=\"right-panel\"]",
+                    StringComparison.Ordinal) &&
+                selector.Contains(
+                    ":has([data-app-shell-tabs=\"true\"])",
+                    StringComparison.Ordinal) &&
+                selector.Contains(
+                    ":not(:has([data-app-shell-tab-panel-controller]))",
+                    StringComparison.Ordinal));
 
     private static bool IsReviewedRightPanelClearRule(CssRule rule) =>
         CanonicalizeWhitespace(rule.Declarations) ==
@@ -238,9 +327,25 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
         CanonicalizeWhitespace(rule.Declarations) ==
         "background-color: transparent !important;" &&
         rule.Selectors.Any(
-            selector => selector.Contains(
-                "[data-app-shell-tabs=\"true\"]",
-                StringComparison.Ordinal));
+            selector =>
+                selector.Contains(
+                    "[data-app-shell-tabs=\"true\"]",
+                    StringComparison.Ordinal) &&
+                selector.Contains(
+                    "[data-app-shell-tab-panel-controller=\"right\"]",
+                    StringComparison.Ordinal));
+
+    private static bool IsReviewedRightLauncherClearRule(CssRule rule) =>
+        CanonicalizeWhitespace(rule.Declarations) ==
+        "background-color: transparent !important;" &&
+        rule.Selectors.Any(
+            selector =>
+                selector.Contains(
+                    "aside[data-app-shell-focus-area=\"right-panel\"]",
+                    StringComparison.Ordinal) &&
+                selector.Contains(
+                    ":not(:has([data-app-shell-tab-panel-controller]))",
+                    StringComparison.Ordinal));
 
     private static bool IsReviewedEdgeHeaderResetRule(CssRule rule) =>
         CanonicalizeWhitespace(rule.Declarations) ==
@@ -250,13 +355,9 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
                 ".app-header-tint[data-app-shell-header-edge-scroll]",
                 StringComparison.Ordinal));
 
-    private static bool IsReviewedHeaderContextGlassRule(CssRule rule) =>
-        rule.Declarations.Contains(
-            "background-color: var(--codex-wallpaper-glass) !important",
-            StringComparison.Ordinal) &&
-        rule.Declarations.Contains(
-            "backdrop-filter: blur(var(--codex-wallpaper-blur))",
-            StringComparison.Ordinal) &&
+    private static bool IsReviewedHeaderContextClearRule(CssRule rule) =>
+        CanonicalizeWhitespace(rule.Declarations) ==
+        "background: transparent !important; -webkit-backdrop-filter: none !important; backdrop-filter: none !important; border-color: transparent !important;" &&
         rule.Selectors.Any(
             selector => selector.Contains(
                 "[data-testid=\"app-shell-header-context-menu-surface\"]",
@@ -463,7 +564,7 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
                 .Any(alternative => MatchesSimpleSelector(element, alternative));
         }
 
-        var notIndex = selector.IndexOf(":not(", StringComparison.Ordinal);
+        var notIndex = FindTopLevelPseudo(selector, ":not(");
         if (notIndex >= 0)
         {
             var closingParenthesis = FindMatchingParenthesis(selector, notIndex + 4);
@@ -482,7 +583,7 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
             selector = selector[..notIndex];
         }
 
-        var hasIndex = selector.IndexOf(":has(", StringComparison.Ordinal);
+        var hasIndex = FindTopLevelPseudo(selector, ":has(");
         if (hasIndex >= 0)
         {
             var closingParenthesis = FindMatchingParenthesis(selector, hasIndex + 4);
@@ -559,6 +660,58 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
         return typeSelector.Length == 0 ||
             typeSelector == "*" ||
             element.Name.LocalName.Equals(typeSelector, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static int FindTopLevelPseudo(string selector, string pseudo)
+    {
+        var parentheses = 0;
+        var brackets = 0;
+        var quote = '\0';
+
+        for (var index = 0; index < selector.Length; index++)
+        {
+            var character = selector[index];
+            if (quote != '\0')
+            {
+                if (character == quote)
+                {
+                    quote = '\0';
+                }
+
+                continue;
+            }
+
+            if (character is '"' or '\'')
+            {
+                quote = character;
+                continue;
+            }
+
+            if (parentheses == 0 &&
+                brackets == 0 &&
+                selector.IndexOf(pseudo, index, StringComparison.Ordinal) == index)
+            {
+                return index;
+            }
+
+            switch (character)
+            {
+                case '(':
+                    parentheses++;
+                    break;
+                case ')':
+                    parentheses--;
+                    break;
+                case '[':
+                    brackets++;
+                    break;
+                case ']':
+                    brackets--;
+                    break;
+            }
+        }
+
+        return -1;
     }
 
     private static int FindMatchingParenthesis(string source, int openingParenthesis)
@@ -821,6 +974,97 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
                    data-fixture-id="wrong-controller-tabs-root">
                 <div role="tabpanel"
                      data-app-shell-tab-panel-controller="left" />
+              </div>
+            </aside>
+          </body>
+        </html>
+        """;
+
+    private const string CurrentRightPanelLauncherFixture =
+        """
+        <html class="electron-dark">
+          <body>
+            <aside data-app-shell-focus-area="right-panel">
+              <div data-fixture-id="launcher-positioner">
+                <div class="bg-token-main-surface-primary"
+                     data-fixture-id="launcher-primary-sibling" />
+                <div class="absolute bg-token-main-surface-primary"
+                     data-fixture-id="launcher-glass-shell">
+                  <div class="h-full">
+                    <div class="isolate bg-token-main-surface-primary"
+                         data-app-shell-tabs="true"
+                         data-fixture-id="launcher-tabs-root">
+                      <div class="h-toolbar bg-token-main-surface-primary"
+                           data-fixture-id="launcher-toolbar">
+                        <div class="sticky bg-token-main-surface-primary"
+                             data-fixture-id="launcher-zero-size-sticky" />
+                      </div>
+                      <div class="relative flex-1">
+                        <div class="overflow-y-auto bg-token-main-surface-primary"
+                             data-fixture-id="launcher-scroll-content">
+                          <div class="launcher-center-layout">
+                            <div class="sticky bg-token-main-surface-primary"
+                                 data-fixture-id="launcher-center-sticky">
+                              <button class="bg-token-main-surface-secondary"
+                                      data-fixture-id="launcher-review-card">
+                                Review
+                              </button>
+                              <button class="bg-token-main-surface-secondary"
+                                      data-fixture-id="launcher-terminal-card">
+                                Terminal
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </aside>
+
+            <aside data-app-shell-focus-area="left-panel">
+              <div>
+                <div class="bg-token-main-surface-primary"
+                     data-fixture-id="left-launcher-glass-shell">
+                  <div class="bg-token-main-surface-primary"
+                       data-app-shell-tabs="true"
+                       data-fixture-id="left-launcher-tabs-root">
+                    <div class="bg-token-main-surface-primary" />
+                  </div>
+                </div>
+              </div>
+            </aside>
+
+            <aside data-app-shell-focus-area="right-panel">
+              <div>
+                <div class="bg-token-main-surface-primary"
+                     data-fixture-id="wrong-controller-glass-shell">
+                  <div class="bg-token-main-surface-primary"
+                       data-app-shell-tabs="true"
+                       data-fixture-id="wrong-controller-tabs-root">
+                    <div role="tabpanel"
+                         data-app-shell-tab-panel-controller="left" />
+                  </div>
+                </div>
+              </div>
+            </aside>
+
+            <aside data-app-shell-focus-area="right-panel">
+              <div>
+                <div class="bg-token-main-surface-primary"
+                     data-fixture-id="populated-glass-shell">
+                  <div class="bg-token-main-surface-primary"
+                       data-app-shell-tabs="true"
+                       data-fixture-id="populated-tabs-root">
+                    <div role="tabpanel"
+                         data-app-shell-tab-panel-controller="right"
+                         data-fixture-id="populated-tabpanel">
+                      <div class="monaco-editor bg-token-main-surface-primary"
+                           data-fixture-id="editor-surface" />
+                    </div>
+                  </div>
+                </div>
               </div>
             </aside>
           </body>

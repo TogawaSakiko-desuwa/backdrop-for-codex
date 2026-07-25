@@ -4,6 +4,14 @@
 
 ## [Unreleased]
 
+## [1.3.2] - 2026-07-25
+
+### Fixed
+
+- 修复右侧 launcher 尚未创建 tabpanel 时仍由多层不透明 primary surface 遮住壁纸的问题。空态现在只为经审核的最外壳添加一层玻璃，并清除 tabs root 及其 primary chrome 后代背景；审阅、终端、浏览器、文件和侧边任务入口卡片继续保留原生深色表面。
+- 打开任意受控右栏 tabpanel 后，空态规则会立即停止匹配并由现有内容态规则接管，无需重新应用壁纸；同级非 launcher primary surface、左栏、错误 controller、编辑器和内容表面均保持隔离。
+- 修复 edge-scroll 下层 context 标题行的突兀黑色玻璃条，使其背景、滤镜和边框透明并与主体连续；上层全局标题栏、右侧槽位和关闭按钮继续保留原有表面与交互。
+
 ## [1.3.1] - 2026-07-25
 
 ### Fixed
@@ -127,7 +135,8 @@
 - 复验完整 MSIX 包名、激活 PID、进程启动时间、Windows 会话和监听器所有权；媒体服务保持已校验文件的只读句柄。
 - 明确禁止 CSP bypass；关闭、更换或 lease 到期时移除媒体 `src`、撤销 `blob:` URL，并仅删除带有本项目 owner/generation 的节点和样式。
 
-[Unreleased]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.3.1...HEAD
+[Unreleased]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.3.2...HEAD
+[1.3.2]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.3.1...v1.3.2
 [1.3.1]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.2.1...v1.3.0
 [1.2.1]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.2.0...v1.2.1
