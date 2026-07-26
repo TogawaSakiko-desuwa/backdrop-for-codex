@@ -1123,8 +1123,16 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
                       -webkit-backdrop-filter: none;
                       backdrop-filter: none;
                     }
+                    [data-route-sticky] {
+                      position: sticky;
+                    }
                     [data-route-sticky]::after {
                       content: "";
+                      position: absolute;
+                      top: 100%;
+                      right: 0;
+                      left: 0;
+                      height: 32px;
                       background-image: linear-gradient(
                         to bottom,
                         rgb(24 24 24),
@@ -1284,20 +1292,52 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
                     const layout = create(
                       "div",
                       "settings-layout",
-                      "flex h-full min-h-0"
+                      "relative isolate flex max-h-full min-h-0 w-full flex-1"
                     );
                     const navigation = create(
-                      "div",
+                      "aside",
                       "settings-navigation",
                       "app-shell-left-panel"
                     );
                     const navigationItem = create("button", "settings-general");
                     navigationItem.dataset.settingsPanelSlug = "general";
                     navigation.append(navigationItem);
-                    const slot = create(
+                    const outerMain = create(
+                      "main",
+                      "settings-outer-main",
+                      "main-surface relative isolate flex min-h-0 flex-1 flex-col"
+                    );
+                    const contentBoundary = create(
                       "div",
-                      "settings-content-slot",
-                      "relative isolate min-w-0 flex-1 overflow-visible"
+                      "settings-content-boundary",
+                      "relative isolate flex min-h-0 flex-1 overflow-hidden"
+                    );
+                    const viewport = create(
+                      "div",
+                      "settings-content-viewport",
+                      "app-shell-main-content-viewport relative flex min-h-0 " +
+                        "min-w-0 flex-col flex-1"
+                    );
+                    const frame = create(
+                      "div",
+                      "settings-content-frame",
+                      "app-shell-main-content-frame relative flex min-h-0 " +
+                        "flex-1 flex-col"
+                    );
+                    const flexBoundary = create(
+                      "div",
+                      "settings-flex-boundary",
+                      "relative flex min-h-0 flex-1"
+                    );
+                    const sizeBoundary = create(
+                      "div",
+                      "settings-size-boundary",
+                      "h-full min-h-0 min-w-0 flex-1"
+                    );
+                    const visibleBoundary = create(
+                      "div",
+                      "settings-visible-boundary",
+                      "h-full min-w-0 overflow-visible"
                     );
                     const canvas = create(
                       "div",
@@ -1307,8 +1347,14 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
                     canvas.append(
                       createProtectedSurface("settings-card", "settings-card")
                     );
-                    slot.append(canvas);
-                    layout.append(navigation, slot);
+                    visibleBoundary.append(canvas);
+                    sizeBoundary.append(visibleBoundary);
+                    flexBoundary.append(sizeBoundary);
+                    frame.append(flexBoundary);
+                    viewport.append(frame);
+                    contentBoundary.append(viewport);
+                    outerMain.append(contentBoundary);
+                    layout.append(navigation, outerMain);
                     return layout;
                   };
                   const createChangedFiles = () => {
@@ -1393,6 +1439,7 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
                     filter(id).includes("saturate(");
                   const isTransparent = id =>
                     background(id) === "rgba(0, 0, 0, 0)";
+                  const hasNoBackdrop = id => filter(id) === "none";
                   const hasGlassGradient = id => {
                     const image = afterBackgroundImage(id);
                     return image.includes("linear-gradient(") &&
@@ -1405,8 +1452,9 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
                         return isGlass("plugins-sticky") &&
                           hasGlassGradient("plugins-sticky");
                       case "scheduled":
-                        return isGlass("scheduled-sticky") &&
-                          hasGlassGradient("scheduled-sticky");
+                        return isTransparent("scheduled-sticky") &&
+                          hasNoBackdrop("scheduled-sticky") &&
+                          afterBackgroundImage("scheduled-sticky") === "none";
                       case "sites":
                         return isGlass("sites-route") &&
                           isTransparent("sites-sticky") &&
@@ -1560,10 +1608,12 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
                 initialSnapshot.PluginStickyBackdropFilter);
             AssertGlassPseudoGradient(
                 initialSnapshot.PluginStickyAfterBackgroundImage);
-            AssertGlassSurface(
-                initialSnapshot.ScheduledStickyBackground,
-                initialSnapshot.ScheduledStickyBackdropFilter);
-            AssertGlassPseudoGradient(
+            Assert.Equal(
+                "rgba(0, 0, 0, 0)",
+                initialSnapshot.ScheduledStickyBackground);
+            Assert.Equal("none", initialSnapshot.ScheduledStickyBackdropFilter);
+            Assert.Equal(
+                "none",
                 initialSnapshot.ScheduledStickyAfterBackgroundImage);
             AssertGlassSurface(
                 initialSnapshot.SitesRootBackground,

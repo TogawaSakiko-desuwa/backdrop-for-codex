@@ -328,14 +328,14 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
     }
 
     [Fact]
-    public void ReviewedScheduledPageSelectors_GlassOnlyTheSearchStickyShell()
+    public void ReviewedScheduledPageSelectors_ClearOnlyTheSearchStickyShell()
     {
         var styleSheet = ExtractGeneratedStyleSheet();
         var forcedColorsNone = ExtractBlock(styleSheet, "@media (forced-colors: none)");
         var rules = ParseLeafRules(forcedColorsNone);
         var fixture = XDocument.Parse(CurrentScheduledPageFixture);
 
-        var stickyGlassRule = Assert.Single(rules, IsReviewedScheduledPageStickyGlassRule);
+        var stickyClearRule = Assert.Single(rules, IsReviewedScheduledPageStickyClearRule);
 
         Assert.Equal(
             [
@@ -344,12 +344,12 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
                     body [class~="sticky"][class~="z-30"][class~="bg-token-main-surface-primary"]:has([id="scheduled-page-search"])
                     """),
             ],
-            stickyGlassRule.Selectors);
+            stickyClearRule.Selectors);
         Assert.Equal(
             ["scheduled-search-sticky"],
-            SelectFixtureIds(fixture, stickyGlassRule.Selectors));
+            SelectFixtureIds(fixture, stickyClearRule.Selectors));
 
-        var changedIds = SelectFixtureIds(fixture, stickyGlassRule.Selectors);
+        var changedIds = SelectFixtureIds(fixture, stickyClearRule.Selectors);
         Assert.DoesNotContain("scheduled-search-sticky-wrong-id", changedIds);
         Assert.DoesNotContain("scheduled-task-row", changedIds);
     }
@@ -509,8 +509,14 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
             [
                 CanonicalizeSelector(
                     """
-                    body [class~="flex"][class~="h-full"][class~="min-h-0"]:has([class~="app-shell-left-panel"] [data-settings-panel-slug])
-                      > [class~="relative"][class~="isolate"][class~="min-w-0"][class~="flex-1"][class~="overflow-visible"]
+                    body [class~="relative"][class~="isolate"][class~="flex"][class~="max-h-full"][class~="min-h-0"][class~="w-full"][class~="flex-1"]:has([class~="app-shell-left-panel"] [data-settings-panel-slug])
+                      > main[class~="main-surface"][class~="relative"][class~="isolate"][class~="flex"][class~="min-h-0"][class~="flex-1"][class~="flex-col"]
+                      > [class~="relative"][class~="isolate"][class~="flex"][class~="min-h-0"][class~="flex-1"][class~="overflow-hidden"]
+                      > [class~="app-shell-main-content-viewport"][class~="relative"][class~="flex"][class~="min-h-0"][class~="min-w-0"][class~="flex-col"][class~="flex-1"]
+                      > [class~="app-shell-main-content-frame"][class~="relative"][class~="flex"][class~="min-h-0"][class~="flex-1"][class~="flex-col"]
+                      > [class~="relative"][class~="flex"][class~="min-h-0"][class~="flex-1"]
+                      > [class~="h-full"][class~="min-h-0"][class~="min-w-0"][class~="flex-1"]
+                      > [class~="h-full"][class~="min-w-0"][class~="overflow-visible"]
                       > div[class~="main-surface"][class~="flex"][class~="h-full"][class~="min-h-0"][class~="flex-col"]
                     """),
             ],
@@ -521,6 +527,7 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
 
         var changedIds = SelectFixtureIds(fixture, canvasGlassRule.Selectors);
         Assert.DoesNotContain("ordinary-div-main-surface", changedIds);
+        Assert.DoesNotContain("settings-outer-main-surface", changedIds);
         Assert.DoesNotContain("settings-main-main-surface", changedIds);
         Assert.DoesNotContain("settings-canvas-without-data-anchor", changedIds);
         Assert.DoesNotContain("settings-permissions-card", changedIds);
@@ -704,12 +711,12 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
                     ":has([id=\"plugins-page-search\"])",
                     StringComparison.Ordinal));
 
-    private static bool IsReviewedScheduledPageStickyGlassRule(CssRule rule) =>
+    private static bool IsReviewedScheduledPageStickyClearRule(CssRule rule) =>
         rule.Declarations.Contains(
-            "background-color: var(--codex-wallpaper-glass) !important",
+            "background-color: transparent !important",
             StringComparison.Ordinal) &&
         rule.Declarations.Contains(
-            "backdrop-filter: blur(var(--codex-wallpaper-blur))",
+            "backdrop-filter: none !important",
             StringComparison.Ordinal) &&
         rule.Selectors.Any(
             selector =>
@@ -853,14 +860,20 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
         rule.Selectors.Any(
             selector =>
                 selector.Contains(
-                    "[class~=\"flex\"][class~=\"h-full\"][class~=\"min-h-0\"]" +
+                    "[class~=\"relative\"][class~=\"isolate\"][class~=\"flex\"]" +
+                    "[class~=\"max-h-full\"][class~=\"min-h-0\"]" +
+                    "[class~=\"w-full\"][class~=\"flex-1\"]" +
                     ":has([class~=\"app-shell-left-panel\"] [data-settings-panel-slug])",
                     StringComparison.Ordinal) &&
                 selector.Contains(
-                    "> [class~=\"relative\"][class~=\"isolate\"][class~=\"min-w-0\"]" +
-                    "[class~=\"flex-1\"][class~=\"overflow-visible\"]",
+                    "> main[class~=\"main-surface\"][class~=\"relative\"]" +
+                    "[class~=\"isolate\"][class~=\"flex\"][class~=\"min-h-0\"]" +
+                    "[class~=\"flex-1\"][class~=\"flex-col\"]",
                     StringComparison.Ordinal) &&
                 selector.Contains(
+                    "> [class~=\"app-shell-main-content-frame\"]",
+                    StringComparison.Ordinal) &&
+                selector.EndsWith(
                     "> div[class~=\"main-surface\"][class~=\"flex\"]" +
                     "[class~=\"h-full\"][class~=\"min-h-0\"][class~=\"flex-col\"]",
                     StringComparison.Ordinal));
@@ -1833,29 +1846,42 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
         """
         <html class="electron-dark">
           <body>
-            <div class="flex h-full min-h-0">
+            <div class="relative isolate flex max-h-full min-h-0 w-full flex-1">
               <aside class="app-shell-left-panel">
                 <button data-settings-panel-slug="general" />
               </aside>
-              <div class="relative isolate min-w-0 flex-1 overflow-visible">
-                <div class="main-surface flex h-full min-h-0 flex-col"
-                     data-fixture-id="settings-content-canvas">
-                  <section class="rounded-xl bg-token-main-surface-primary"
-                           data-fixture-id="settings-permissions-card">
-                    Permissions
-                  </section>
-                  <section class="rounded-xl bg-token-main-surface-primary"
-                           data-fixture-id="settings-general-card">
-                    <select class="bg-token-main-surface-primary"
-                            data-fixture-id="settings-dropdown">
-                      <option>English</option>
-                    </select>
-                    <button class="bg-token-main-surface-primary"
-                            role="switch"
-                            data-fixture-id="settings-switch" />
-                  </section>
+              <main class="main-surface relative isolate flex min-h-0 flex-1 flex-col"
+                    data-fixture-id="settings-outer-main-surface">
+                <div class="relative isolate flex min-h-0 flex-1 overflow-hidden">
+                  <div class="app-shell-main-content-viewport relative flex min-h-0 min-w-0 flex-col flex-1">
+                    <div class="app-shell-main-content-frame relative flex min-h-0 flex-1 flex-col">
+                      <div class="relative flex min-h-0 flex-1">
+                        <div class="h-full min-h-0 min-w-0 flex-1">
+                          <div class="h-full min-w-0 overflow-visible">
+                            <div class="main-surface flex h-full min-h-0 flex-col"
+                                 data-fixture-id="settings-content-canvas">
+                              <section class="rounded-xl bg-token-main-surface-primary"
+                                       data-fixture-id="settings-permissions-card">
+                                Permissions
+                              </section>
+                              <section class="rounded-xl bg-token-main-surface-primary"
+                                       data-fixture-id="settings-general-card">
+                                <select class="bg-token-main-surface-primary"
+                                        data-fixture-id="settings-dropdown">
+                                  <option>English</option>
+                                </select>
+                                <button class="bg-token-main-surface-primary"
+                                        role="switch"
+                                        data-fixture-id="settings-switch" />
+                              </section>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              </div>
+              </main>
             </div>
 
             <div class="main-surface flex h-full min-h-0 flex-col"

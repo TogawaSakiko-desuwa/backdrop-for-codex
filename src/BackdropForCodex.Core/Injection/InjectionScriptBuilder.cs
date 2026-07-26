@@ -221,17 +221,17 @@ public static class InjectionScriptBuilder
                     background-image: linear-gradient(to bottom, var(--codex-wallpaper-glass), transparent) !important;
                   }
                   /*
-                   * Scheduled tasks uses the same page chrome but a distinct stable search
-                   * anchor. Keep task rows and their status surfaces outside this rule.
+                   * Scheduled tasks keeps its search control surfaced, but the full-width
+                   * sticky shell and its 32px fade must not form a second dark band.
                    */
                   {{glassBodySelector}} [class~="sticky"][class~="z-30"][class~="bg-token-main-surface-primary"]:has([id="scheduled-page-search"]) {
-                    background-color: var(--codex-wallpaper-glass) !important;
-                    -webkit-backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
-                    backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
-                    border-color: var(--codex-wallpaper-border);
+                    background-color: transparent !important;
+                    -webkit-backdrop-filter: none !important;
+                    backdrop-filter: none !important;
+                    border-color: transparent;
                   }
                   {{glassBodySelector}} [class~="sticky"][class~="z-30"][class~="bg-token-main-surface-primary"]:has([id="scheduled-page-search"])::after {
-                    background-image: linear-gradient(to bottom, var(--codex-wallpaper-glass), transparent) !important;
+                    background-image: none !important;
                   }
                   /*
                    * Sites has an opaque route root around the shared page chrome. Glass
@@ -303,12 +303,18 @@ public static class InjectionScriptBuilder
                     background-image: none !important;
                   }
                   /*
-                   * Settings now renders its right canvas as a div.main-surface. Anchor
-                   * through the settings navigation and exact content slot so unrelated
-                   * main surfaces and nested settings cards remain untouched.
+                   * Settings renders its opaque div.main-surface inside the reviewed
+                   * app-shell viewport stack. Anchor through the settings navigation and
+                   * exact current wrappers so the outer main and nested cards stay native.
                    */
-                  {{glassBodySelector}} [class~="flex"][class~="h-full"][class~="min-h-0"]:has([class~="app-shell-left-panel"] [data-settings-panel-slug])
-                    > [class~="relative"][class~="isolate"][class~="min-w-0"][class~="flex-1"][class~="overflow-visible"]
+                  {{glassBodySelector}} [class~="relative"][class~="isolate"][class~="flex"][class~="max-h-full"][class~="min-h-0"][class~="w-full"][class~="flex-1"]:has([class~="app-shell-left-panel"] [data-settings-panel-slug])
+                    > main[class~="main-surface"][class~="relative"][class~="isolate"][class~="flex"][class~="min-h-0"][class~="flex-1"][class~="flex-col"]
+                    > [class~="relative"][class~="isolate"][class~="flex"][class~="min-h-0"][class~="flex-1"][class~="overflow-hidden"]
+                    > [class~="app-shell-main-content-viewport"][class~="relative"][class~="flex"][class~="min-h-0"][class~="min-w-0"][class~="flex-col"][class~="flex-1"]
+                    > [class~="app-shell-main-content-frame"][class~="relative"][class~="flex"][class~="min-h-0"][class~="flex-1"][class~="flex-col"]
+                    > [class~="relative"][class~="flex"][class~="min-h-0"][class~="flex-1"]
+                    > [class~="h-full"][class~="min-h-0"][class~="min-w-0"][class~="flex-1"]
+                    > [class~="h-full"][class~="min-w-0"][class~="overflow-visible"]
                     > div[class~="main-surface"][class~="flex"][class~="h-full"][class~="min-h-0"][class~="flex-col"] {
                     background-color: var(--codex-wallpaper-glass) !important;
                     -webkit-backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));

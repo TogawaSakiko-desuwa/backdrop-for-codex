@@ -180,7 +180,7 @@ public sealed class InjectionScriptBuilderTests
     }
 
     [Fact]
-    public void BuildInstall_ReplacesOnlyReviewedPageStickyFadesWithGlassGradients()
+    public void BuildInstall_GlassesPluginStickyFadeAndClearsScheduledSticky()
     {
         var script = InjectionScriptBuilder.BuildInstall(CreateOptions());
         var compactScript = string.Concat(script.Where(character => !char.IsWhiteSpace(character)));
@@ -190,7 +190,7 @@ public sealed class InjectionScriptBuilderTests
             GradientDeclaration.Where(character => !char.IsWhiteSpace(character)));
 
         Assert.Equal(
-            2,
+            1,
             script.Split(GradientDeclaration, StringSplitOptions.None).Length - 1);
 
         Assert.Contains(
@@ -201,12 +201,29 @@ public sealed class InjectionScriptBuilderTests
             "}",
             compactScript,
             StringComparison.Ordinal);
-        Assert.Contains(
+        Assert.DoesNotContain(
             "body[class~=\"sticky\"][class~=\"z-30\"]" +
             "[class~=\"bg-token-main-surface-primary\"]" +
             ":has([id=\"scheduled-page-search\"])::after{" +
             compactGradientDeclaration +
             "}",
+            compactScript,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "body[class~=\"sticky\"][class~=\"z-30\"]" +
+            "[class~=\"bg-token-main-surface-primary\"]" +
+            ":has([id=\"scheduled-page-search\"])" +
+            "{background-color:transparent!important;" +
+            "-webkit-backdrop-filter:none!important;" +
+            "backdrop-filter:none!important;" +
+            "border-color:transparent;}",
+            compactScript,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "body[class~=\"sticky\"][class~=\"z-30\"]" +
+            "[class~=\"bg-token-main-surface-primary\"]" +
+            ":has([id=\"scheduled-page-search\"])::after{" +
+            "background-image:none!important;}",
             compactScript,
             StringComparison.Ordinal);
         Assert.DoesNotContain(
