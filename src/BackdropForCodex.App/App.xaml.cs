@@ -68,8 +68,7 @@ public partial class App : System.Windows.Application
             var text = new AppTextProvider();
             _errorMapper = new UserFacingErrorMapper(text);
             _preferencesStore = AppPreferencesStore.CreateForCurrentUser();
-            _wallpaperService = new WallpaperApplicationService(
-                WallpaperCoordinator.CreateDefault(settingsPath));
+            _wallpaperService = WallpaperApplicationService.CreateDefault(settingsPath);
             var viewModel = new MainWindowViewModel(
                 _wallpaperService,
                 _preferencesStore,
@@ -82,7 +81,7 @@ public partial class App : System.Windows.Application
             _trayController = new TrayController(
                 _mainWindow,
                 viewModel.DisableAsync,
-                ShutdownSafelyAsync,
+                () => _mainWindow.RequestShutdownAsync(ShutdownSafelyAsync),
                 text);
 
             if (HasLaunchArgument(e.Args))
@@ -211,7 +210,11 @@ public partial class App : System.Windows.Application
             {
                 var wallpaperService = _wallpaperService;
                 _wallpaperService = null;
-                await AttemptAsync(() => wallpaperService.DisableAsync());
+                await AttemptAsync(
+                    async () =>
+                    {
+                        _ = await wallpaperService.RestoreOfficialAsync();
+                    });
                 await AttemptAsync(async () => await wallpaperService.DisposeAsync());
             }
         }

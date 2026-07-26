@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 2,
+  "profiles": [
+    {
+      "profileId": "0198f1a2-1234-7abc-8def-1234567890ab",
+      "name": "Global",
+      "mediaId": "0198f1a2-5678-7abc-8def-1234567890ab",
+      "fit": "Contain",
+      "focusX": 0.25,
+      "focusY": 0.75,
+      "panelOpacity": 0.8,
+      "blurPx": 12,
+      "darkOverlay": 0.4,
+      "lightOverlay": 0.2,
+      "soundEnabled": true,
+      "volume": 0.65,
+      "performancePolicy": "PreferQuality"
+    },
+    {
+      "profileId": "0198f1a2-9abc-7abc-8def-1234567890ab",
+      "name": "Hidden region",
+      "mediaId": "0198f1a2-5678-7abc-8def-1234567890ab",
+      "fit": "Cover",
+      "focusX": 0.5,
+      "focusY": 0.5,
+      "panelOpacity": 0.78,
+      "blurPx": 14,
+      "darkOverlay": 0.3,
+      "lightOverlay": 0.18,
+      "soundEnabled": false,
+      "volume": 0.5,
+      "performancePolicy": "Automatic"
+    }
+  ],
+  "mediaCatalog": [
+    {
+      "mediaId": "0198f1a2-5678-7abc-8def-1234567890ab",
+      "sourceKind": "LocalFile",
+      "sourceIdentifier": "C:\\Wallpapers\\stable.png",
+      "lastKnownKind": "Image"
+    },
+    {
+      "mediaId": "0198f1a2-def0-7abc-8def-1234567890ab",
+      "sourceKind": "LocalFile",
+      "sourceIdentifier": "C:\\Wallpapers\\orphan.webm",
+      "lastKnownKind": "Video"
+    }
+  ],
+  "recentMediaIds": [
+    "0198f1a2-5678-7abc-8def-1234567890ab"
+  ],
+  "regionBindings": {
+    "Global": "0198f1a2-1234-7abc-8def-1234567890ab",
+    "Conversation": "0198f1a2-9abc-7abc-8def-1234567890ab"
+  },
+  "acceptedCdpRisk": true,
+  "lastCompatibilityProfileId": "stable-v1.3.5-marker"
+}

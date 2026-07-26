@@ -23,15 +23,22 @@
             <StackPanel>
               <TextBlock Style="{StaticResource SectionHeadingStyle}"
                          Text="{localization:Loc Section_Wallpaper, Fallback=Wallpaper}" />
-              <TextBlock Margin="0,3,105,0"
+              <TextBlock Margin="0,3,220,0"
                          Style="{StaticResource CaptionTextStyle}"
                          Text="{localization:Loc Hint_SupportedFormats, Fallback='PNG, JPEG, WebP, MP4, or WebM'}" />
             </StackPanel>
-            <ui:Button HorizontalAlignment="Right"
-                       VerticalAlignment="Top"
-                       Content="{localization:Loc Action_SelectMedia, Fallback='Choose media'}"
-                       IsEnabled="{Binding CanEdit}"
-                       Click="ChooseMedia_Click" />
+            <StackPanel HorizontalAlignment="Right"
+                        VerticalAlignment="Top"
+                        Orientation="Horizontal">
+              <ui:Button Margin="0,0,8,0"
+                         Appearance="Secondary"
+                         Content="{localization:Loc Action_ClearMedia, Fallback='Clear media'}"
+                         IsEnabled="{Binding CanClearSelectedMedia}"
+                         Click="ClearMedia_Click" />
+              <ui:Button Content="{localization:Loc Action_SelectMedia, Fallback='Choose media'}"
+                         IsEnabled="{Binding CanEditDraft}"
+                         Click="ChooseMedia_Click" />
+            </StackPanel>
           </Grid>
           <Border Margin="0,14,0,0"
                   Padding="11,9"

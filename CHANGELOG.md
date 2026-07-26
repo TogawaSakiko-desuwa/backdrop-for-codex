@@ -4,6 +4,35 @@
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-07-26
+
+### Added
+
+- 正式开放 schema 2 的多方案工作区：可新建、复制、重命名、删除和切换方案，方案卡片只编辑 `Draft` 的 `Global` 绑定；不新增序列化字段，也不引入 Settings V3。
+- 新增空媒体方案。手动应用空方案会保存目标并清理本应用拥有的媒体资源，显示官方背景；增强启动遇到空方案时以普通参数启动 Codex，不启用 CDP。
+- 新增完整的工作区三态与类型化运行表面：`Draft`、`SavedDesired`、`ActiveSnapshot` 分别表示当前编辑、已原子提交和实际激活快照；运行表面明确区分 `Official`、`MediaActive`、`Faulted` 与 `Disconnected`。
+- 新增带 revision 的类型化应用结果与进度：`MediaActive`、`Official`、`SavedButNotActivated`、`Superseded`、`Canceled` 和 `Failed`，旧 revision 的事件不能覆盖较新的界面状态。
+
+### Changed
+
+- 正常 Workspace、Application 与 runtime 链路全部改用经验证、规范化和深复制的 `SettingsV2` 快照；`SettingsV1` 只保留在迁移、原始 V1 备份恢复、降级兼容和对应测试中。
+- 设置写入、Codex 会话和单槽播放池现在由单一 latest-wins actor 排序。Apply 保留一个运行项和最多一个待处理项；新请求替换旧待处理项并请求取消运行项，但会等旧任务安全退出后再触碰 runtime。
+- 原子保存成功返回即成为持久化提交点。即使该 revision 随后被替代，`SavedDesired` 仍反映已提交快照；过期请求不得再激活、发布成功、释放新 lease 或清理新 generation。
+- activation revision 与 injection generation 使用独立计数器。运行时等价的 Apply 可以提升 `ActiveSnapshot` 而不创建新 generation；运行时等价只由实际 Global 媒体与 fit/focus/glass/overlay 决定，空媒体方案的样式不改变官方背景状态。
+- 单槽播放资源增加所有权 token。待处理 lease 直接释放，旧 revision 只能条件释放自己持有的 token；只有显式恢复官方背景、重置或退出可以无条件清空本应用资源。
+- 顶部方案栏支持水平滚动、键盘选择、上下文菜单、自动化名称/选中状态、焦点恢复、高对比度、减少动态效果及 125%–200% 缩放；激活期间仍可编辑草稿、切换方案并再次应用。
+
+### Security
+
+- 继续保持既有安全验证顺序：官方包、进程、当前会话、严格 IPv4 回环端点、CDP browser/socket/target、唯一页面，再执行版本无关结构契约。安全失败或持续多目标歧义仍为零 DOM 探针。
+- 媒体激活从已保存的同一 `MediaReference` 重新获取固定只读 lease；安全验证或注入开始后的失败继续失败关闭并报告真实清理结果。注入前文件失效且尚未触碰 Codex 时保留旧活动背景。
+- schema 仍为 2；1.3.5 reader/writer 兼容 fixture 验证 1.4.0 不增加字段，并保留多方案、隐藏区域绑定、共享或孤立媒体引用及废弃兼容标识。
+
+### Verification
+
+- 非集成自动化套件扩展到 521 个，覆盖 V2 深快照和三种 equality、方案 CRUD/删除重绑、latest-wins checkpoint 与压力、提交点语义、lease 所有权、旧 revision/generation 过滤、空方案、类型化状态和关键 UI/可访问性边界。
+- 环境相关 Edge/CDP、当前机器 Codex 身份、通知区域和 UI Automation 冒烟仍须在满足条件的 Windows 11 交互桌面逐项执行；未运行或缺少先决条件时必须记录为“未验证”，不得计为通过。
+
 ## [1.3.5] - 2026-07-26
 
 ### Fixed
@@ -178,7 +207,9 @@
 - 复验完整 MSIX 包名、激活 PID、进程启动时间、Windows 会话和监听器所有权；媒体服务保持已校验文件的只读句柄。
 - 明确禁止 CSP bypass；关闭、更换或 lease 到期时移除媒体 `src`、撤销 `blob:` URL，并仅删除带有本项目 owner/generation 的节点和样式。
 
-[Unreleased]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.3.4...HEAD
+[Unreleased]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.3.5...v1.4.0
+[1.3.5]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.3.4...v1.3.5
 [1.3.4]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.3.3...v1.3.4
 [1.3.3]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.3.2...v1.3.3
 [1.3.2]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.3.1...v1.3.2

@@ -8,6 +8,7 @@ using BackdropForCodex.App.Services.Diagnostics;
 using BackdropForCodex.App.Services.Localization;
 using BackdropForCodex.App.ViewModels;
 using BackdropForCodex.App.Views;
+using BackdropForCodex.Core.Settings;
 using Microsoft.Win32;
 using Wpf.Ui.Controls;
 using TextBlock = System.Windows.Controls.TextBlock;
@@ -41,6 +42,9 @@ public partial class MainWindow : FluentWindow
             diagnosticReports ?? throw new ArgumentNullException(nameof(diagnosticReports));
         InitializeComponent();
         DataContext = _viewModel;
+        _viewModel.RenameProfilePromptAsync = ShowRenameProfileDialogAsync;
+        _viewModel.DeleteProfilePromptAsync = ShowDeleteProfileDialogAsync;
+        _viewModel.RestoreProfileFocus = ProfileStrip.FocusSelectedProfile;
         _themeController = new ThemeController(this);
         Loaded += MainWindow_Loaded;
         Closed += MainWindow_Closed;
@@ -60,7 +64,7 @@ public partial class MainWindow : FluentWindow
                 return;
             }
 
-            if (!_viewModel.AcceptedCdpRisk &&
+            if (_viewModel.RequiresCdpRisk &&
                 !await ShowRiskDialogAsync(allowRevoke: false))
             {
                 return;
@@ -92,6 +96,27 @@ public partial class MainWindow : FluentWindow
         Close();
     }
 
+    internal async Task RequestShutdownAsync(Func<Task> shutdown)
+    {
+        ArgumentNullException.ThrowIfNull(shutdown);
+        if (_viewModel.IsDraftDirty)
+        {
+            Show();
+            Activate();
+            if (!await ConfirmDiscardDraftAsync(
+                    Text("Exit_DirtyTitle", "Discard draft and exit?"),
+                    Text(
+                        "Exit_DirtyMessage",
+                        "The current profile draft has unsaved changes. Exit will discard them without applying."),
+                    Text("Exit_DiscardAction", "Discard and exit")))
+            {
+                return;
+            }
+        }
+
+        await shutdown();
+    }
+
     private async Task InitializeCoreAsync()
     {
         await _viewModel.InitializeAsync();
@@ -115,6 +140,7 @@ public partial class MainWindow : FluentWindow
     private void MainWindow_Closed(object? sender, EventArgs e)
     {
         _viewModel.PropertyChanged -= ViewModel_PropertyChanged;
+        _viewModel.RestoreProfileFocus = null;
         _viewModel.Dispose();
         _themeController.Dispose();
         PreviewView.ReleaseMedia();
@@ -153,11 +179,117 @@ public partial class MainWindow : FluentWindow
         }
     }
 
+    private void ClearMedia_Click(object sender, RoutedEventArgs e)
+    {
+        _ = sender;
+        _ = e;
+        try
+        {
+            _viewModel.ClearSelectedMedia();
+        }
+        catch (Exception exception)
+        {
+            ReportUnexpectedError(exception);
+        }
+    }
+
+    private async Task<string?> ShowRenameProfileDialogAsync(
+        ProfileRenameRequestedEventArgs request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var showValidation = false;
+        while (true)
+        {
+            var input = new System.Windows.Controls.TextBox
+            {
+                Text = request.CurrentName,
+                MaxLength = WallpaperProfile.MaximumNameLength,
+                MinWidth = 360,
+                Margin = new Thickness(0, 8, 0, 0),
+            };
+            input.SelectAll();
+            var content = new StackPanel();
+            _ = content.Children.Add(
+                new TextBlock
+                {
+                    Text = Text(
+                        "Profile_RenamePrompt",
+                        "Enter a profile name (1–128 characters)."),
+                    TextWrapping = TextWrapping.Wrap,
+                });
+            _ = content.Children.Add(input);
+            if (showValidation)
+            {
+                _ = content.Children.Add(
+                    new TextBlock
+                    {
+                        Text = Text(
+                            "Profile_NameRequired",
+                            "The profile name cannot be empty."),
+                        Margin = new Thickness(0, 8, 0, 0),
+                        Foreground = System.Windows.Media.Brushes.IndianRed,
+                        TextWrapping = TextWrapping.Wrap,
+                    });
+            }
+
+            var dialog = new ContentDialog(DialogHost)
+            {
+                Title = Text("Action_RenameProfile", "Rename profile"),
+                Content = content,
+                PrimaryButtonText = Text("Action_Confirm", "Confirm"),
+                CloseButtonText = Text("Action_Cancel", "Cancel"),
+                PrimaryButtonAppearance = ControlAppearance.Primary,
+                DialogMaxWidth = 520,
+            };
+            if (await dialog.ShowAsync(CancellationToken.None) !=
+                ContentDialogResult.Primary)
+            {
+                return null;
+            }
+
+            var trimmed = input.Text.Trim();
+            if (trimmed.Length > 0)
+            {
+                return trimmed;
+            }
+
+            showValidation = true;
+        }
+    }
+
+    private async Task<bool> ShowDeleteProfileDialogAsync(
+        ProfileDeleteRequestedEventArgs request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var dialog = new ContentDialog(DialogHost)
+        {
+            Title = Text("Profile_DeleteTitle", "Delete profile?"),
+            Content = new TextBlock
+            {
+                Text = string.Format(
+                    System.Globalization.CultureInfo.CurrentCulture,
+                    Text(
+                        "Profile_DeleteMessage",
+                        "\"{0}\" will be deleted. Regions using it will be rebound to \"{1}\". Media remains in the catalog."),
+                    request.ProfileName,
+                    request.ReplacementProfileName),
+                MaxWidth = 500,
+                TextWrapping = TextWrapping.Wrap,
+            },
+            PrimaryButtonText = Text("Action_DeleteProfile", "Delete"),
+            CloseButtonText = Text("Action_Cancel", "Cancel"),
+            PrimaryButtonAppearance = ControlAppearance.Danger,
+            DialogMaxWidth = 580,
+        };
+        return await dialog.ShowAsync(CancellationToken.None) ==
+            ContentDialogResult.Primary;
+    }
+
     private async void Apply_Click(object sender, RoutedEventArgs e)
     {
         try
         {
-            if (!_viewModel.AcceptedCdpRisk &&
+            if (_viewModel.RequiresCdpRisk &&
                 !await ShowRiskDialogAsync(allowRevoke: false))
             {
                 return;
@@ -246,7 +378,7 @@ public partial class MainWindow : FluentWindow
             await _viewModel.AcceptRiskAsync();
         }
 
-        return true;
+        return _viewModel.AcceptedCdpRisk;
     }
 
     private async void Settings_Click(object sender, RoutedEventArgs e)
@@ -321,7 +453,16 @@ public partial class MainWindow : FluentWindow
 
         if (restoreBackupRequested)
         {
-            await _viewModel.RestoreVersion1BackupAsync();
+            if (!_viewModel.IsDraftDirty ||
+                await ConfirmDiscardDraftAsync(
+                    Text("Restore_DirtyTitle", "Discard draft and restore backup?"),
+                    Text(
+                        "Restore_DirtyMessage",
+                        "Restoring the preserved backup will discard the current unsaved draft without applying it."),
+                    Text("Restore_DiscardAction", "Discard and restore")))
+            {
+                await _viewModel.RestoreVersion1BackupAsync();
+            }
         }
         else if (resetRequested)
         {
@@ -413,7 +554,9 @@ public partial class MainWindow : FluentWindow
                 MaxWidth = 520,
                 TextWrapping = TextWrapping.Wrap,
             },
-            PrimaryButtonText = Text("Action_Reset", "Reset"),
+            PrimaryButtonText = _viewModel.IsDraftDirty
+                ? Text("Reset_DiscardAction", "Discard and reset")
+                : Text("Action_Reset", "Reset"),
             CloseButtonText = Text("Action_Cancel", "Cancel"),
             PrimaryButtonAppearance = ControlAppearance.Danger,
             DialogMaxWidth = 600,
@@ -423,6 +566,29 @@ public partial class MainWindow : FluentWindow
             await _viewModel.ResetEverythingAsync();
             _themeController.Apply(_viewModel.ThemeMode);
         }
+    }
+
+    private async Task<bool> ConfirmDiscardDraftAsync(
+        string title,
+        string message,
+        string continueAction)
+    {
+        var dialog = new ContentDialog(DialogHost)
+        {
+            Title = title,
+            Content = new TextBlock
+            {
+                Text = message,
+                MaxWidth = 500,
+                TextWrapping = TextWrapping.Wrap,
+            },
+            PrimaryButtonText = continueAction,
+            CloseButtonText = Text("Action_Cancel", "Cancel"),
+            PrimaryButtonAppearance = ControlAppearance.Danger,
+            DialogMaxWidth = 580,
+        };
+        return await dialog.ShowAsync(CancellationToken.None) ==
+            ContentDialogResult.Primary;
     }
 
     private async void RemoveRecent_Click(object sender, RoutedEventArgs e)
@@ -556,6 +722,9 @@ public partial class MainWindow : FluentWindow
     {
         if (_allowClose)
         {
+            // Release the native theme watcher while the HWND still exists.
+            // Closed is too late for Wpf.Ui.SystemThemeWatcher.UnWatch.
+            _themeController.Dispose();
             return;
         }
 
@@ -613,7 +782,7 @@ public partial class MainWindow : FluentWindow
 
     private void UpdateResponsiveLayout(double width)
     {
-        var isNarrow = width < ResponsiveBreakpoint;
+        var isNarrow = UsesStackedLayout(width);
         if (!isNarrow)
         {
             PreviewColumn.Width = new GridLength(3, GridUnitType.Star);
@@ -648,6 +817,9 @@ public partial class MainWindow : FluentWindow
         PreviewView.SurfaceMinimumHeight = 120;
         RecentMediaCard.Visibility = Visibility.Collapsed;
     }
+
+    internal static bool UsesStackedLayout(double width) =>
+        width < ResponsiveBreakpoint;
 
     private void ClampInitialSizeToWorkArea()
     {

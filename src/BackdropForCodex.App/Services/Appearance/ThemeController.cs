@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Windows;
+using System.Windows.Interop;
 using BackdropForCodex.App.Services.Preferences;
 using Wpf.Ui.Appearance;
 using Wpf.Ui.Controls;
@@ -64,7 +65,11 @@ public sealed class ThemeController : IDisposable
         }
 
         SystemParameters.StaticPropertyChanged -= SystemParameters_StaticPropertyChanged;
-        SystemThemeWatcher.UnWatch(_window);
+        if (new WindowInteropHelper(_window).Handle != IntPtr.Zero)
+        {
+            SystemThemeWatcher.UnWatch(_window);
+        }
+
         GC.SuppressFinalize(this);
     }
 

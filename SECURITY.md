@@ -2,6 +2,8 @@
 
 Backdrop for Codex 会连接高权限的本地调试接口。请先阅读[威胁模型](THREAT_MODEL.md)，不要把“仅回环”理解为完整隔离。
 
+当前安全基线为 1.4.0 Stable（2026-07-26）。设置 schema 继续为 2；多方案 V2 Workspace、latest-wins actor、播放槽所有权 token 和类型化 runtime surface 属于并发与资源所有权加固，不放宽既有包、进程、会话、回环 CDP、唯一页面或版本无关结构契约验证。
+
 ## 支持的版本
 
 | 版本 | 安全更新 |
@@ -10,7 +12,7 @@ Backdrop for Codex 会连接高权限的本地调试接口。请先阅读[威胁
 | `main` 分支 | 尽力支持，可能包含未发布变更 |
 | 旧版本、Fork、自行修改的构建 | 不保证 |
 
-项目尚未发布稳定版本时，仅对 `main` 分支提供尽力响应。发布新稳定版后，通常只修复最新稳定版；若漏洞影响范围不同，公告会另行说明。
+通常只为最新稳定版发布安全修复；`main` 分支包含尚未发布的变更，仅提供尽力支持。若漏洞影响范围不同，公告会另行说明。
 
 ## 私下报告漏洞
 
@@ -33,6 +35,8 @@ Backdrop for Codex 会连接高权限的本地调试接口。请先阅读[威胁
 - 能够读取或导出 Codex 聊天、凭据或会话状态的非预期代码路径；
 - 诊断导出包含白名单之外的路径、标题、URL、DOM、聊天、设置、标识符或散列，或未经用户主动操作发送数据；
 - 设置迁移未先保留并核验原始 V1 字节、自动覆盖恢复/未来 schema 状态，或让损坏设置进入运行时；
+- 并发 Apply、Cancel、恢复官方背景、重置或恢复备份导致旧 revision 覆盖新 `SavedDesired`/`ActiveSnapshot`、发布错误成功状态或越过排他 barrier；
+- playback ownership 失效，导致旧 revision 释放较新的媒体 lease/槽位或清理不属于自己的 injection generation；
 - 提权、任意命令执行、任意文件写入或不安全自动启动；
 - 构建、依赖、GitHub Actions、发布物、SBOM 或 attestations 的供应链问题；
 - 租约清理失败，导致注入内容在伴侣退出后继续存在。Codex 自身的调试端口按设计会持续到 Codex 完全退出，这一点本身不是漏洞。
@@ -51,12 +55,16 @@ Backdrop for Codex 会连接高权限的本地调试接口。请先阅读[威胁
 - 只接受严格的 IPv4 `127.0.0.1` CDP 端点，拒绝非回环、重定向和形态异常的调试 URL；伴侣不得为媒体启动 HTTP 或其他网络监听器；
 - 不要求管理员权限，不写入 Codex 包或系统保护目录；
 - 媒体只来自用户明确选择的本地普通文件：通过已打开句柄解析最终目标、核验本地卷/文件身份/扩展名/文件头或容器签名/大小，并在完整使用期间保持同一只读 lease；
+- runtime 必须从已经原子保存的 canonical `SettingsV2` 快照中的同一 `MediaReference` 重新获取固定 lease，不得使用调用方拼装的 profile/media 副本或临时媒体 ID；
+- 设置写入、Codex session 和单槽播放池只有一个排序 owner；Apply 遵循一项 running、最多一项 pending 的 latest-wins 模型，旧任务必须安全退出后新任务才可触碰 runtime。每个外部 await 后复核 revision，保存成功返回是明确持久化提交点；
+- activation revision 与 injection generation 是独立计数器。活动播放槽必须绑定所有权 token；pending lease 直接释放，旧 revision 只能条件释放自己的 token，不能清理新 generation。无条件清空只允许显式 Official、完整重置或 Dispose；
 - 不把任意本地路径拼入可执行脚本或不受控 URL；
 - Codex 版本号本身不是安全准入条件；官方包身份、架构、应用 ID、完整包名一致性、进程、当前会话、PID、启动时间、监听器所有权、端点和目标元数据仍必须全部通过，否则关闭所有能力并拒绝连接；
 - 表现能力只由程序内置、只读且与版本无关的结构契约决定：`global-baseline-v1` 独立验证最小全局结构，`codex-shell-v1` 验证受审壳层锚点；高级契约零匹配或多重匹配时只能保留 Global，同一 generation 内契约不得切换且能力只能降级。结构证据不能提升或替代安全判定；
 - 初始注入最长等待 10 秒且只接受唯一合格工作页；持续多目标歧义必须拒绝并清理；
 - MSIX `file:` 目标必须精确匹配系统实际报告包根目录下的受审入口；远程目标必须匹配受审主机及具有完整路径段边界的工作区路由，并拒绝认证、路径穿越和反斜杠歧义。不得仅凭标题、路径片段或任意回环内容端口授权页面。文件输入必须由同一次准备求值直接返回句柄，并在上传前重新核验页面，不能重新按可预测选择器拾取新 document 的元素；
-- schema 1 迁移必须先保留并核验原始字节只读备份；损坏、迁移失败、备份冲突和未来 schema 不得被隐式默认值或自动保存覆盖；
+- schema 仍为 2，1.4.0 不得新增序列化字段或引入 Settings V3；正常 Workspace、Application 与 runtime 接口只接受经验证和深复制的 `SettingsV2`。`SettingsV1` 只保留在迁移、V1 原始备份恢复、降级兼容和对应测试中。schema 1 迁移必须先保留并核验原始字节只读备份；损坏、迁移失败、备份冲突和未来 schema 不得被隐式默认值或自动保存覆盖；
+- UI 和控制流必须明确区分 `Draft`、`SavedDesired`、`ActiveSnapshot` 以及 `Official`、`MediaActive`、`Faulted`、`Disconnected`；不得靠异常或单一 `IsActive` 猜测。进度和类型化终态必须携带 revision，过期事件不能覆盖较新状态；
 - 不读取聊天内容，不添加遥测或项目自有云服务；
 - 日志默认不包含聊天或媒体绝对路径；诊断报告只能由用户主动导出，并严格限制为公开说明的类型化白名单字段，不得自动上传；
 - 第三方 Actions 使用完整提交 SHA，发布物提供散列、SBOM 与 GitHub 来源证明。

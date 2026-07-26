@@ -23,4 +23,7 @@
     <ProjectReference Include="../../src/BackdropForCodex.Core/BackdropForCodex.Core.csproj" />
     <ProjectReference Include="../../src/BackdropForCodex.App/BackdropForCodex.App.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Settings/Fixtures/settings-v1.3.5-schema2.json" />
+  </ItemGroup>
 </Project>

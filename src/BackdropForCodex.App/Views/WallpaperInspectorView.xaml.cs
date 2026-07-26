@@ -12,12 +12,17 @@ public partial class WallpaperInspectorView : UserControl
 
     public event RoutedEventHandler? ChooseMediaRequested;
 
+    public event RoutedEventHandler? ClearMediaRequested;
+
     public event RoutedEventHandler? CenterFocusRequested;
 
     public event RoutedEventHandler? ReviewRiskRequested;
 
     private void ChooseMedia_Click(object sender, RoutedEventArgs e) =>
         ChooseMediaRequested?.Invoke(this, e);
+
+    private void ClearMedia_Click(object sender, RoutedEventArgs e) =>
+        ClearMediaRequested?.Invoke(this, e);
 
     private void CenterFocus_Click(object sender, RoutedEventArgs e) =>
         CenterFocusRequested?.Invoke(this, e);

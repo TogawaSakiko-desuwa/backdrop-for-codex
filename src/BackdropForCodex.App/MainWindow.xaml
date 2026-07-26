@@ -30,6 +30,7 @@
   <Grid>
     <Grid.RowDefinitions>
       <RowDefinition Height="48" />
+      <RowDefinition Height="Auto" />
       <RowDefinition Height="*" />
       <RowDefinition Height="Auto" />
     </Grid.RowDefinitions>
@@ -53,7 +54,18 @@
       </ui:TitleBar.TrailingContent>
     </ui:TitleBar>
 
-    <Grid x:Name="MainContentGrid" Grid.Row="1" Margin="24,14,24,14">
+    <views:WallpaperProfileStripView x:Name="ProfileStrip"
+                                       Grid.Row="1"
+                                       Margin="24,10,24,0"
+                                       ItemsSource="{Binding ProfileCards}"
+                                       SelectedItem="{Binding SelectedProfileCard, Mode=TwoWay}"
+                                       CreateProfileCommand="{Binding CreateProfileCommand}"
+                                       DuplicateProfileCommand="{Binding DuplicateProfileCommand}"
+                                       RenameProfileCommand="{Binding RenameProfileCommand}"
+                                       DeleteProfileCommand="{Binding DeleteProfileCommand}"
+                                       CanEditProfiles="{Binding CanEditDraft}" />
+
+    <Grid x:Name="MainContentGrid" Grid.Row="2" Margin="24,12,24,14">
       <Grid.RowDefinitions>
         <RowDefinition x:Name="MainTopRow" Height="*" />
         <RowDefinition x:Name="MainGapRow" Height="0" />
@@ -214,11 +226,12 @@
                                     Grid.Row="0"
                                     Grid.Column="2"
                                     ChooseMediaRequested="ChooseMedia_Click"
+                                    ClearMediaRequested="ClearMedia_Click"
                                     CenterFocusRequested="CenterFocus_Click"
                                     ReviewRiskRequested="ReviewRisk_Click" />
     </Grid>
 
-    <Border Grid.Row="2"
+    <Border Grid.Row="3"
             Padding="24,12,24,16"
             Background="{DynamicResource ApplicationBackgroundBrush}"
             BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
@@ -251,7 +264,8 @@
                              IsIndeterminate="True"
                              Visibility="{Binding IsBusy, Converter={StaticResource BooleanToVisibilityConverter}}" />
             <TextBlock VerticalAlignment="Center"
-                       Text="{Binding OperationStage}"
+                       Text="{Binding FooterStatusText}"
+                       AutomationProperties.LiveSetting="Polite"
                        Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
             <ui:Button Margin="10,0,0,0"
                        Appearance="Transparent"
@@ -275,7 +289,7 @@
             <ui:Button MinWidth="154"
                        Appearance="Primary"
                        Content="{Binding ApplyButtonText}"
-                       IsEnabled="{Binding CanEdit}"
+                       IsEnabled="{Binding CanSubmitApply}"
                        Click="Apply_Click" />
           </WrapPanel>
         </Grid>
@@ -283,14 +297,14 @@
     </Border>
 
     <ui:SnackbarPresenter x:Name="SnackbarPresenter"
-                          Grid.Row="1"
+                          Grid.Row="2"
                           Grid.RowSpan="2"
                           HorizontalAlignment="Right"
                           VerticalAlignment="Bottom"
                           Margin="24,24,24,88" />
     <ui:ContentDialogHost x:Name="DialogHost"
                           Grid.Row="0"
-                          Grid.RowSpan="3"
+                          Grid.RowSpan="4"
                           IsDisableSiblingsEnabled="True" />
   </Grid>
 </ui:FluentWindow>

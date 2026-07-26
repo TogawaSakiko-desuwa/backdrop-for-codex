@@ -10,14 +10,11 @@ public sealed class WallpaperUiStateTests
     [Fact]
     public void ConfigurationStateKeepsDraftSavedAndActiveSnapshotsDistinct()
     {
-        var mediaPath = Path.GetFullPath("wallpaper.png");
-        var persisted = SettingsV1.CreateDefault() with
-        {
-            MediaPath = mediaPath,
-            MediaKind = MediaKind.Image,
-            AcceptedCdpRisk = true,
-            RecentMediaPaths = [mediaPath],
-        };
+        var persisted = CreateSettings(
+            Path.GetFullPath("wallpaper.png"),
+            MediaKind.Image,
+            acceptedCdpRisk: true,
+            includeRecent: true);
         var initial = WallpaperConfigurationState.FromPersisted(persisted);
 
         Assert.False(initial.HasUnsavedChanges);
@@ -25,15 +22,19 @@ public sealed class WallpaperUiStateTests
         Assert.True(initial.IsSavedButNotActive);
 
         var edited = initial.WithDraft(
-            persisted with
-            {
-                Fit = WallpaperFit.Contain,
-                BlurPx = 8,
-            });
+            UpdateGlobal(
+                persisted,
+                profile => profile with
+                {
+                    Fit = WallpaperFit.Contain,
+                    BlurPx = 8,
+                }));
 
         Assert.True(edited.HasUnsavedChanges);
         Assert.True(edited.HasPendingApply);
-        Assert.Equal(WallpaperFit.Cover, edited.SavedDesired.Fit);
+        Assert.Equal(
+            WallpaperFit.Cover,
+            edited.SavedDesired.ResolveProfile(SemanticRegion.Global).Fit);
 
         var saved = edited.WithPersisted(edited.Draft);
         Assert.False(saved.HasUnsavedChanges);
@@ -50,43 +51,47 @@ public sealed class WallpaperUiStateTests
     }
 
     [Fact]
-    public void ConfigurationComparisonUsesWindowsPathSemanticsAndSequenceValues()
+    public void DurableComparisonPreservesExactPathsWhileRuntimeUsesWindowsSemantics()
     {
         var mediaPath = Path.GetFullPath("wallpaper.png");
         var recentPath = Path.GetFullPath("recent.png");
-        var first = SettingsV1.CreateDefault() with
-        {
-            MediaPath = mediaPath,
-            MediaKind = MediaKind.Image,
-            RecentMediaPaths = [mediaPath, recentPath],
-        };
-        var second = first with
-        {
-            MediaPath = mediaPath.ToUpperInvariant(),
-            RecentMediaPaths = [mediaPath.ToUpperInvariant(), recentPath.ToUpperInvariant()],
-        };
+        var first = CreateSettings(
+            mediaPath,
+            MediaKind.Image,
+            additionalRecentPath: recentPath);
+        var upperCatalog = first.MediaCatalog
+            .Select(
+                media => media with
+                {
+                    SourceIdentifier = media.SourceIdentifier.ToUpperInvariant(),
+                })
+            .ToArray();
+        var second = (first with { MediaCatalog = upperCatalog }).CreateSnapshot();
 
-        Assert.True(WallpaperConfigurationState.AreEquivalent(first, second));
+        Assert.False(WallpaperConfigurationState.AreEquivalent(first, second));
+        Assert.True(
+            WallpaperConfigurationState.AreRuntimeEquivalent(first, second));
 
-        var changed = second with { PanelOpacity = 0.80 };
+        var changed = UpdateGlobal(
+            second,
+            profile => profile with { PanelOpacity = 0.80 });
         Assert.False(WallpaperConfigurationState.AreEquivalent(first, changed));
     }
 
     [Fact]
-    public void RuntimeComparisonIgnoresMetadataThatDoesNotChangeInjectedContent()
+    public void RuntimeComparisonIgnoresNonRuntimeMetadata()
     {
         var mediaPath = Path.GetFullPath("wallpaper.png");
-        var active = SettingsV1.CreateDefault() with
-        {
-            MediaPath = mediaPath,
-            MediaKind = MediaKind.Image,
-            AcceptedCdpRisk = true,
-        };
-        var saved = active with
+        var active = CreateSettings(
+            mediaPath,
+            MediaKind.Image,
+            acceptedCdpRisk: true);
+        var mediaId = active.ResolveProfile(SemanticRegion.Global).MediaId!.Value;
+        var saved = (active with
         {
             AcceptedCdpRisk = false,
-            RecentMediaPaths = [mediaPath],
-        };
+            RecentMediaIds = [mediaId],
+        }).CreateSnapshot();
 
         Assert.False(WallpaperConfigurationState.AreEquivalent(active, saved));
         Assert.True(WallpaperConfigurationState.AreRuntimeEquivalent(active, saved));
@@ -98,9 +103,30 @@ public sealed class WallpaperUiStateTests
     }
 
     [Fact]
+    public void RuntimeComparisonTreatsAllEmptyProfilesAsOfficial()
+    {
+        var official = SettingsV2.CreateDefault();
+        var restyled = UpdateGlobal(
+            official,
+            profile => profile with
+            {
+                Fit = WallpaperFit.Contain,
+                FocusX = 0.1,
+                FocusY = 0.9,
+                PanelOpacity = 0.93,
+                BlurPx = 2,
+                DarkOverlay = 0.5,
+            });
+
+        Assert.False(WallpaperConfigurationState.AreEquivalent(official, restyled));
+        Assert.True(
+            WallpaperConfigurationState.AreRuntimeEquivalent(official, restyled));
+    }
+
+    [Fact]
     public void ConfigurationComparisonIgnoresDeprecatedCompatibilityProfileMetadata()
     {
-        var persisted = SettingsV1.CreateDefault();
+        var persisted = SettingsV2.CreateDefault();
 #pragma warning disable CS0618 // Exercise the deprecated persistence field's UI semantics.
         var legacyMetadataChanged = persisted with
         {
@@ -108,7 +134,7 @@ public sealed class WallpaperUiStateTests
         };
 #pragma warning restore CS0618
 
-        Assert.True(
+        Assert.False(
             WallpaperConfigurationState.AreEquivalent(
                 persisted,
                 legacyMetadataChanged));
@@ -160,4 +186,65 @@ public sealed class WallpaperUiStateTests
             () => WallpaperOperationProgress.Idle.AdvanceTo(
                 WallpaperOperationStage.Validating));
     }
+
+    private static SettingsV2 CreateSettings(
+        string mediaPath,
+        MediaKind mediaKind,
+        bool acceptedCdpRisk = false,
+        bool includeRecent = false,
+        string? additionalRecentPath = null)
+    {
+        var baseline = SettingsV2.CreateDefault();
+        var selected = CreateMedia(mediaPath, mediaKind);
+        var catalog = new List<MediaReference> { selected };
+        var recents = new List<Guid>();
+        if (includeRecent)
+        {
+            recents.Add(selected.MediaId);
+        }
+
+        if (additionalRecentPath is not null)
+        {
+            var additional = CreateMedia(additionalRecentPath, MediaKind.Image);
+            catalog.Add(additional);
+            recents.Add(additional.MediaId);
+        }
+
+        var global = baseline.ResolveProfile(SemanticRegion.Global) with
+        {
+            MediaId = selected.MediaId,
+        };
+        return (baseline with
+        {
+            Profiles = [global],
+            MediaCatalog = catalog,
+            RecentMediaIds = recents,
+            AcceptedCdpRisk = acceptedCdpRisk,
+        }).CreateSnapshot();
+    }
+
+    private static SettingsV2 UpdateGlobal(
+        SettingsV2 settings,
+        Func<WallpaperProfile, WallpaperProfile> update)
+    {
+        var global = settings.ResolveProfile(SemanticRegion.Global);
+        return (settings with
+        {
+            Profiles = settings.Profiles
+                .Select(
+                    profile => profile.ProfileId == global.ProfileId
+                        ? update(profile)
+                        : profile)
+                .ToArray(),
+        }).CreateSnapshot();
+    }
+
+    private static MediaReference CreateMedia(string path, MediaKind kind) =>
+        new()
+        {
+            MediaId = Guid.CreateVersion7(),
+            SourceKind = MediaSourceKind.LocalFile,
+            SourceIdentifier = Path.GetFullPath(path),
+            LastKnownKind = kind,
+        };
 }

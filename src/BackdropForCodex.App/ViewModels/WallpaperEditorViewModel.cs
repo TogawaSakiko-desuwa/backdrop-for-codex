@@ -228,37 +228,76 @@ public sealed class WallpaperEditorViewModel : ObservableObject
             });
     }
 
-    public void ApplySettings(SettingsV1 settings)
+    public void ApplySettings(SettingsV2 settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
+        var snapshot = settings.CreateSnapshot();
+        var profile = snapshot.ResolveProfile(SemanticRegion.Global);
+        var media = profile.MediaId is { } mediaId
+            ? snapshot.FindMedia(mediaId)
+            : null;
 
         RunBatch(
             () =>
             {
-                SelectedMediaKind = settings.MediaKind;
-                SelectedMediaPath = settings.MediaPath;
-                Fit = settings.Fit;
-                FocusX = settings.FocusX;
-                FocusY = settings.FocusY;
-                PanelOpacity = settings.PanelOpacity;
-                BlurPx = settings.BlurPx;
-                DarkOverlay = settings.DarkOverlay;
-                LightOverlay = settings.LightOverlay;
-                AcceptedCdpRisk = settings.AcceptedCdpRisk;
+                SelectedMediaKind = media?.LastKnownKind ?? MediaKind.None;
+                SelectedMediaPath = media?.SourceIdentifier;
+                Fit = profile.Fit;
+                FocusX = profile.FocusX;
+                FocusY = profile.FocusY;
+                PanelOpacity = profile.PanelOpacity;
+                BlurPx = profile.BlurPx;
+                DarkOverlay = profile.DarkOverlay;
+                LightOverlay = profile.LightOverlay;
+                AcceptedCdpRisk = snapshot.AcceptedCdpRisk;
                 IsMediaMissing =
-                    settings.MediaPath is not null &&
-                    !_previewMedia.IsAvailable(settings.MediaPath);
+                    media is not null &&
+                    !_previewMedia.IsAvailable(media.SourceIdentifier);
             });
     }
 
-    public SettingsV1 ProjectOnto(SettingsV1 baseline)
+    public SettingsV2 ProjectOnto(SettingsV2 baseline)
     {
         ArgumentNullException.ThrowIfNull(baseline);
+        var snapshot = baseline.CreateSnapshot();
+        var selectedProfile = snapshot.ResolveProfile(SemanticRegion.Global);
+        var mediaCatalog = snapshot.MediaCatalog.ToList();
+        Guid? mediaId = null;
 
-        return baseline with
+        if (SelectedMediaPath is { } selectedPath)
         {
-            MediaPath = SelectedMediaPath,
-            MediaKind = SelectedMediaPath is null ? MediaKind.None : SelectedMediaKind,
+            var normalizedPath = Path.GetFullPath(selectedPath);
+            var existing = mediaCatalog.FirstOrDefault(
+                media =>
+                    media.SourceKind == MediaSourceKind.LocalFile &&
+                    string.Equals(
+                        media.SourceIdentifier,
+                        normalizedPath,
+                        StringComparison.OrdinalIgnoreCase));
+            if (existing is null)
+            {
+                existing = new MediaReference
+                {
+                    MediaId = Guid.CreateVersion7(),
+                    SourceKind = MediaSourceKind.LocalFile,
+                    SourceIdentifier = normalizedPath,
+                    LastKnownKind = SelectedMediaKind,
+                };
+                mediaCatalog.Add(existing);
+            }
+            else if (existing.LastKnownKind != SelectedMediaKind)
+            {
+                var index = mediaCatalog.IndexOf(existing);
+                existing = existing with { LastKnownKind = SelectedMediaKind };
+                mediaCatalog[index] = existing;
+            }
+
+            mediaId = existing.MediaId;
+        }
+
+        var updatedProfile = selectedProfile with
+        {
+            MediaId = mediaId,
             Fit = Fit,
             FocusX = FocusX,
             FocusY = FocusY,
@@ -266,8 +305,19 @@ public sealed class WallpaperEditorViewModel : ObservableObject
             BlurPx = BlurPx,
             DarkOverlay = DarkOverlay,
             LightOverlay = LightOverlay,
+        };
+        var candidate = snapshot with
+        {
+            Profiles = snapshot.Profiles
+                .Select(
+                    profile => profile.ProfileId == selectedProfile.ProfileId
+                        ? updatedProfile
+                        : profile)
+                .ToArray(),
+            MediaCatalog = mediaCatalog.ToArray(),
             AcceptedCdpRisk = AcceptedCdpRisk,
         };
+        return candidate.CreateSnapshot();
     }
 
     public void SetFocus(double focusX, double focusY)
@@ -305,17 +355,6 @@ public sealed class WallpaperEditorViewModel : ObservableObject
         return VideoExtensions.Contains(extension, StringComparer.OrdinalIgnoreCase)
             ? MediaKind.Video
             : MediaKind.None;
-    }
-
-    internal static SettingsV1 ClampLegacyOverlays(SettingsV1 settings)
-    {
-        ArgumentNullException.ThrowIfNull(settings);
-
-        return settings with
-        {
-            DarkOverlay = ClampOverlay(settings.DarkOverlay),
-            LightOverlay = ClampOverlay(settings.LightOverlay),
-        };
     }
 
     private static double ClampOverlay(double value) =>

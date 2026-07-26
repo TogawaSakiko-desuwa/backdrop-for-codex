@@ -133,7 +133,7 @@ public sealed record SettingsV2
 {
     public const int CurrentSchemaVersion = 2;
 
-    public const int MaximumRecentMediaIds = SettingsV1.MaximumRecentMediaPaths;
+    public const int MaximumRecentMediaIds = 8;
 
     public int SchemaVersion { get; init; } = CurrentSchemaVersion;
 
@@ -232,7 +232,12 @@ public sealed record SettingsV2
         return new ReadOnlyCollection<string>(errors);
     }
 
-    internal SettingsV2 Snapshot()
+    /// <summary>
+    /// Validates this document and returns a normalized, deeply isolated snapshot.
+    /// Callers may safely retain the returned value even when the source collections
+    /// were backed by mutable arrays, lists, or dictionaries.
+    /// </summary>
+    public SettingsV2 CreateSnapshot()
     {
         Validate();
 
@@ -257,6 +262,8 @@ public sealed record SettingsV2
         snapshot.Validate();
         return snapshot;
     }
+
+    internal SettingsV2 Snapshot() => CreateSnapshot();
 
     private HashSet<Guid> ValidateProfiles(List<string> errors)
     {

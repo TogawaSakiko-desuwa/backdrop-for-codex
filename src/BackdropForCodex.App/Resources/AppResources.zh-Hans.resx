@@ -15,6 +15,7 @@
   <data name="App_Title" xml:space="preserve"><value>Backdrop for Codex</value></data>
   <data name="App_Description" xml:space="preserve"><value>为 Codex 添加仅在本机运行的私密背景层。</value></data>
   <data name="Action_SelectMedia" xml:space="preserve"><value>选择媒体</value></data>
+  <data name="Action_ClearMedia" xml:space="preserve"><value>清除媒体</value></data>
   <data name="Action_ApplyChanges" xml:space="preserve"><value>应用更改</value></data>
   <data name="Action_ApplyAndLaunch" xml:space="preserve"><value>应用并启动 Codex</value></data>
   <data name="Action_Cancel" xml:space="preserve"><value>取消</value></data>
@@ -25,12 +26,17 @@
   <data name="Action_Settings" xml:space="preserve"><value>设置</value></data>
   <data name="Action_Remove" xml:space="preserve"><value>移除</value></data>
   <data name="Action_ClearRecent" xml:space="preserve"><value>清空最近使用</value></data>
+  <data name="Action_NewProfile" xml:space="preserve"><value>新建方案</value></data>
+  <data name="Action_DuplicateProfile" xml:space="preserve"><value>复制</value></data>
+  <data name="Action_RenameProfile" xml:space="preserve"><value>重命名</value></data>
+  <data name="Action_DeleteProfile" xml:space="preserve"><value>删除</value></data>
   <data name="Action_Close" xml:space="preserve"><value>关闭</value></data>
   <data name="Action_Confirm" xml:space="preserve"><value>确认</value></data>
   <data name="Action_Reset" xml:space="preserve"><value>重置</value></data>
   <data name="Action_RevokeRisk" xml:space="preserve"><value>撤销风险确认</value></data>
   <data name="Action_LearnMore" xml:space="preserve"><value>了解详情</value></data>
   <data name="Section_Preview" xml:space="preserve"><value>预览</value></data>
+  <data name="Section_Profiles" xml:space="preserve"><value>背景方案</value></data>
   <data name="Section_Wallpaper" xml:space="preserve"><value>壁纸</value></data>
   <data name="Section_RecentMedia" xml:space="preserve"><value>最近使用</value></data>
   <data name="Section_Appearance" xml:space="preserve"><value>外观</value></data>
@@ -57,6 +63,23 @@
   <data name="Media_Image" xml:space="preserve"><value>图片</value></data>
   <data name="Media_Video" xml:space="preserve"><value>视频</value></data>
   <data name="Media_None" xml:space="preserve"><value>未选择媒体</value></data>
+  <data name="Profile_Official" xml:space="preserve"><value>官方背景</value></data>
+  <data name="Profile_Media" xml:space="preserve"><value>媒体</value></data>
+  <data name="Profile_MediaMissing" xml:space="preserve"><value>媒体不可用</value></data>
+  <data name="Profile_AutomationName" xml:space="preserve"><value>{0}，{1}</value></data>
+  <data name="Profile_ActionsAutomationName" xml:space="preserve"><value>{0} 的更多操作</value></data>
+  <data name="Profile_CopySuffix" xml:space="preserve"><value>副本</value></data>
+  <data name="Profile_RenamePrompt" xml:space="preserve"><value>输入方案名称（1–128 个字符）。</value></data>
+  <data name="Profile_NameRequired" xml:space="preserve"><value>方案名称不能为空。</value></data>
+  <data name="Profile_DeleteTitle" xml:space="preserve"><value>删除方案？</value></data>
+  <data name="Profile_DeleteMessage" xml:space="preserve"><value>将删除“{0}”。引用它的区域会原子重绑到“{1}”；媒体仍保留在目录中。</value></data>
+  <data name="Workspace_DraftUnsaved" xml:space="preserve"><value>草稿有未保存更改</value></data>
+  <data name="Workspace_SavedNotActive" xml:space="preserve"><value>已保存但未激活</value></data>
+  <data name="Workspace_MediaActive" xml:space="preserve"><value>媒体运行中</value></data>
+  <data name="Workspace_Official" xml:space="preserve"><value>官方背景</value></data>
+  <data name="Workspace_ActivationFailed" xml:space="preserve"><value>激活失败</value></data>
+  <data name="Workspace_Disconnected" xml:space="preserve"><value>Codex 已断开</value></data>
+  <data name="Hint_ProfileStrip" xml:space="preserve"><value>选择要预览和编辑的草稿方案。</value></data>
   <data name="Hint_DropMedia" xml:space="preserve"><value>将一张图片或一个视频拖到这里</value></data>
   <data name="Hint_SupportedFormats" xml:space="preserve"><value>支持 PNG、JPEG、WebP、MP4 或 WebM</value></data>
   <data name="Hint_NoMedia" xml:space="preserve"><value>选择媒体后即可开始设计壁纸。</value></data>
@@ -108,6 +131,8 @@
   <data name="Status_ResetCompleteMessage" xml:space="preserve"><value>设置、最近媒体、风险确认、界面偏好和自有快捷方式均已重置。</value></data>
   <data name="Status_RestoredTitle" xml:space="preserve"><value>官方背景已恢复</value></data>
   <data name="Status_RestoredMessage" xml:space="preserve"><value>已保存的壁纸设置仍可用于下次启动。</value></data>
+  <data name="Status_RestoreFailedTitle" xml:space="preserve"><value>无法恢复官方背景</value></data>
+  <data name="Status_RestoreFailedMessage" xml:space="preserve"><value>无法确认清理完成。下方运行状态会如实显示此应用仍持有的资源。</value></data>
   <data name="Status_ResumedTitle" xml:space="preserve"><value>视频已继续</value></data>
   <data name="Status_ResumedMessage" xml:space="preserve"><value>Codex 与本地预览均在播放。</value></data>
   <data name="Status_RiskAcceptedTitle" xml:space="preserve"><value>增强启动已启用</value></data>

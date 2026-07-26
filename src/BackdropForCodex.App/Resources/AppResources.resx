@@ -15,6 +15,7 @@
   <data name="App_Title" xml:space="preserve"><value>Backdrop for Codex</value></data>
   <data name="App_Description" xml:space="preserve"><value>A private, local wallpaper layer for Codex.</value></data>
   <data name="Action_SelectMedia" xml:space="preserve"><value>Choose media</value></data>
+  <data name="Action_ClearMedia" xml:space="preserve"><value>Clear media</value></data>
   <data name="Action_ApplyChanges" xml:space="preserve"><value>Apply changes</value></data>
   <data name="Action_ApplyAndLaunch" xml:space="preserve"><value>Apply &amp; launch Codex</value></data>
   <data name="Action_Cancel" xml:space="preserve"><value>Cancel</value></data>
@@ -25,12 +26,17 @@
   <data name="Action_Settings" xml:space="preserve"><value>Settings</value></data>
   <data name="Action_Remove" xml:space="preserve"><value>Remove</value></data>
   <data name="Action_ClearRecent" xml:space="preserve"><value>Clear recent</value></data>
+  <data name="Action_NewProfile" xml:space="preserve"><value>New profile</value></data>
+  <data name="Action_DuplicateProfile" xml:space="preserve"><value>Duplicate</value></data>
+  <data name="Action_RenameProfile" xml:space="preserve"><value>Rename</value></data>
+  <data name="Action_DeleteProfile" xml:space="preserve"><value>Delete</value></data>
   <data name="Action_Close" xml:space="preserve"><value>Close</value></data>
   <data name="Action_Confirm" xml:space="preserve"><value>Confirm</value></data>
   <data name="Action_Reset" xml:space="preserve"><value>Reset</value></data>
   <data name="Action_RevokeRisk" xml:space="preserve"><value>Revoke acknowledgement</value></data>
   <data name="Action_LearnMore" xml:space="preserve"><value>Learn more</value></data>
   <data name="Section_Preview" xml:space="preserve"><value>Preview</value></data>
+  <data name="Section_Profiles" xml:space="preserve"><value>Wallpaper profiles</value></data>
   <data name="Section_Wallpaper" xml:space="preserve"><value>Wallpaper</value></data>
   <data name="Section_RecentMedia" xml:space="preserve"><value>Recent media</value></data>
   <data name="Section_Appearance" xml:space="preserve"><value>Appearance</value></data>
@@ -57,6 +63,23 @@
   <data name="Media_Image" xml:space="preserve"><value>Image</value></data>
   <data name="Media_Video" xml:space="preserve"><value>Video</value></data>
   <data name="Media_None" xml:space="preserve"><value>No media selected</value></data>
+  <data name="Profile_Official" xml:space="preserve"><value>Official background</value></data>
+  <data name="Profile_Media" xml:space="preserve"><value>Media</value></data>
+  <data name="Profile_MediaMissing" xml:space="preserve"><value>Media missing</value></data>
+  <data name="Profile_AutomationName" xml:space="preserve"><value>{0}, {1}</value></data>
+  <data name="Profile_ActionsAutomationName" xml:space="preserve"><value>More actions for {0}</value></data>
+  <data name="Profile_CopySuffix" xml:space="preserve"><value>Copy</value></data>
+  <data name="Profile_RenamePrompt" xml:space="preserve"><value>Enter a profile name (1–128 characters).</value></data>
+  <data name="Profile_NameRequired" xml:space="preserve"><value>The profile name cannot be empty.</value></data>
+  <data name="Profile_DeleteTitle" xml:space="preserve"><value>Delete profile?</value></data>
+  <data name="Profile_DeleteMessage" xml:space="preserve"><value>"{0}" will be deleted. Regions using it will be rebound to "{1}". Media remains in the catalog.</value></data>
+  <data name="Workspace_DraftUnsaved" xml:space="preserve"><value>Draft has unsaved changes</value></data>
+  <data name="Workspace_SavedNotActive" xml:space="preserve"><value>Saved, not activated</value></data>
+  <data name="Workspace_MediaActive" xml:space="preserve"><value>Media running</value></data>
+  <data name="Workspace_Official" xml:space="preserve"><value>Official background</value></data>
+  <data name="Workspace_ActivationFailed" xml:space="preserve"><value>Activation failed</value></data>
+  <data name="Workspace_Disconnected" xml:space="preserve"><value>Codex disconnected</value></data>
+  <data name="Hint_ProfileStrip" xml:space="preserve"><value>Choose the draft profile to preview and edit.</value></data>
   <data name="Hint_DropMedia" xml:space="preserve"><value>Drop one image or video here</value></data>
   <data name="Hint_SupportedFormats" xml:space="preserve"><value>PNG, JPEG, WebP, MP4, or WebM</value></data>
   <data name="Hint_NoMedia" xml:space="preserve"><value>Choose media to start designing your wallpaper.</value></data>
@@ -108,6 +131,8 @@
   <data name="Status_ResetCompleteMessage" xml:space="preserve"><value>Settings, recent media, acknowledgement, UI preferences, and the owned shortcut were reset.</value></data>
   <data name="Status_RestoredTitle" xml:space="preserve"><value>Official background restored</value></data>
   <data name="Status_RestoredMessage" xml:space="preserve"><value>Saved wallpaper settings remain available for the next launch.</value></data>
+  <data name="Status_RestoreFailedTitle" xml:space="preserve"><value>Official background could not be restored</value></data>
+  <data name="Status_RestoreFailedMessage" xml:space="preserve"><value>Cleanup could not be confirmed. The runtime state shown below reflects the resources still owned by this app.</value></data>
   <data name="Status_ResumedTitle" xml:space="preserve"><value>Video resumed</value></data>
   <data name="Status_ResumedMessage" xml:space="preserve"><value>Codex and the local preview are playing.</value></data>
   <data name="Status_RiskAcceptedTitle" xml:space="preserve"><value>Enhanced launch enabled</value></data>

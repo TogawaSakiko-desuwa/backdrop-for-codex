@@ -11,7 +11,7 @@ public enum ThemeMode
 }
 
 /// <summary>
-/// Versioned UI-only preferences. Wallpaper settings intentionally remain in SettingsV1.
+/// Versioned UI-only preferences. Wallpaper settings are owned by the SettingsV2 workspace.
 /// </summary>
 public sealed record AppPreferencesV1
 {

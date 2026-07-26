@@ -10,22 +10,23 @@ namespace BackdropForCodex.Core.Tests.AppSupport;
 public sealed class WallpaperEditorViewModelTests
 {
     [Fact]
-    public void ApplySettingsHydratesOneDraftAndProjectsOnlyEditableFields()
+    public void ApplySettingsHydratesGlobalDraftAndProjectsOnlyEditableFields()
     {
+        var settings = CreateSettings(
+            @"C:\wallpapers\sky.png",
+            MediaKind.Image,
+            profile => profile with
+            {
+                Fit = WallpaperFit.Contain,
+                FocusX = 0.2,
+                FocusY = 0.8,
+                PanelOpacity = 0.9,
+                BlurPx = 6,
+                DarkOverlay = 0.9,
+                LightOverlay = 0.7,
+            },
+            acceptedCdpRisk: true);
         var editor = new WallpaperEditorViewModel(new FallbackTextProvider());
-        var settings = SettingsV1.CreateDefault() with
-        {
-            MediaPath = @"C:\wallpapers\sky.png",
-            MediaKind = MediaKind.Image,
-            Fit = WallpaperFit.Contain,
-            FocusX = 0.2,
-            FocusY = 0.8,
-            PanelOpacity = 0.9,
-            BlurPx = 6,
-            DarkOverlay = 0.9,
-            LightOverlay = 0.7,
-            AcceptedCdpRisk = true,
-        };
         var draftChangedCount = 0;
         editor.DraftChanged += (_, _) => draftChangedCount++;
 
@@ -35,23 +36,36 @@ public sealed class WallpaperEditorViewModelTests
         Assert.Equal(WallpaperEditorViewModel.MaximumOverlay, editor.DarkOverlay);
         Assert.Equal(WallpaperEditorViewModel.MaximumOverlay, editor.LightOverlay);
 
-        var baseline = SettingsV1.CreateDefault() with
+        var recentMedia = CreateMedia(
+            @"C:\wallpapers\recent.webp",
+            MediaKind.Image);
+        var baseline = SettingsV2.CreateDefault() with
         {
-            RecentMediaPaths = [@"C:\wallpapers\recent.webp"],
+            MediaCatalog = [recentMedia],
+            RecentMediaIds = [recentMedia.MediaId],
         };
         var projected = editor.ProjectOnto(baseline);
+        var projectedProfile = projected.ResolveProfile(SemanticRegion.Global);
+        var projectedMedia = projected.FindMedia(projectedProfile.MediaId!.Value);
 
-        Assert.Equal(settings.MediaPath, projected.MediaPath);
-        Assert.Equal(settings.MediaKind, projected.MediaKind);
-        Assert.Equal(settings.Fit, projected.Fit);
-        Assert.Equal(settings.FocusX, projected.FocusX);
-        Assert.Equal(settings.FocusY, projected.FocusY);
-        Assert.Equal(settings.PanelOpacity, projected.PanelOpacity);
-        Assert.Equal(settings.BlurPx, projected.BlurPx);
-        Assert.Equal(WallpaperEditorViewModel.MaximumOverlay, projected.DarkOverlay);
-        Assert.Equal(WallpaperEditorViewModel.MaximumOverlay, projected.LightOverlay);
+        Assert.Equal(
+            Path.GetFullPath(@"C:\wallpapers\sky.png"),
+            projectedMedia?.SourceIdentifier);
+        Assert.Equal(MediaKind.Image, projectedMedia?.LastKnownKind);
+        Assert.Equal(WallpaperFit.Contain, projectedProfile.Fit);
+        Assert.Equal(0.2, projectedProfile.FocusX);
+        Assert.Equal(0.8, projectedProfile.FocusY);
+        Assert.Equal(0.9, projectedProfile.PanelOpacity);
+        Assert.Equal(6, projectedProfile.BlurPx);
+        Assert.Equal(
+            WallpaperEditorViewModel.MaximumOverlay,
+            projectedProfile.DarkOverlay);
+        Assert.Equal(
+            WallpaperEditorViewModel.MaximumOverlay,
+            projectedProfile.LightOverlay);
         Assert.True(projected.AcceptedCdpRisk);
-        Assert.Equal(baseline.RecentMediaPaths, projected.RecentMediaPaths);
+        Assert.Contains(recentMedia.MediaId, projected.RecentMediaIds);
+        Assert.NotNull(projected.FindMedia(recentMedia.MediaId));
     }
 
     [Fact]
@@ -94,11 +108,7 @@ public sealed class WallpaperEditorViewModelTests
         var editor = new WallpaperEditorViewModel(
             new FallbackTextProvider(),
             previewMedia);
-        var settings = SettingsV1.CreateDefault() with
-        {
-            MediaPath = networkPath,
-            MediaKind = MediaKind.Image,
-        };
+        var settings = CreateSettings(networkPath, MediaKind.Image);
 
         editor.ApplySettings(settings);
         editor.SelectMedia(networkPath);
@@ -124,6 +134,40 @@ public sealed class WallpaperEditorViewModelTests
         Assert.Equal(0.5, editor.FocusY);
     }
 
+    private static SettingsV2 CreateSettings(
+        string? mediaPath,
+        MediaKind mediaKind,
+        Func<WallpaperProfile, WallpaperProfile>? updateProfile = null,
+        bool acceptedCdpRisk = false)
+    {
+        var baseline = SettingsV2.CreateDefault();
+        var profile = baseline.ResolveProfile(SemanticRegion.Global);
+        MediaReference[] catalog = [];
+        if (mediaPath is not null)
+        {
+            var media = CreateMedia(mediaPath, mediaKind);
+            catalog = [media];
+            profile = profile with { MediaId = media.MediaId };
+        }
+
+        profile = updateProfile?.Invoke(profile) ?? profile;
+        return (baseline with
+        {
+            Profiles = [profile],
+            MediaCatalog = catalog,
+            AcceptedCdpRisk = acceptedCdpRisk,
+        }).CreateSnapshot();
+    }
+
+    private static MediaReference CreateMedia(string path, MediaKind kind) =>
+        new()
+        {
+            MediaId = Guid.CreateVersion7(),
+            SourceKind = MediaSourceKind.LocalFile,
+            SourceIdentifier = Path.GetFullPath(path),
+            LastKnownKind = kind,
+        };
+
     private sealed class FallbackTextProvider : IAppTextProvider
     {
         public string GetString(string key) => key;
@@ -135,7 +179,8 @@ public sealed class WallpaperEditorViewModelTests
         public List<string> ProbedPaths { get; } = [];
 
         public ISafeMediaPreviewLease Acquire(string mediaPath) =>
-            throw new InvalidOperationException("This test only exercises availability probes.");
+            throw new InvalidOperationException(
+                "This test only exercises availability probes.");
 
         public bool IsAvailable(string mediaPath)
         {

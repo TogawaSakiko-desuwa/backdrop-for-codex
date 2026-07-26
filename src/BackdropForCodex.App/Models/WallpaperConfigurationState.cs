@@ -1,155 +1,112 @@
+using BackdropForCodex.Core.Runtime;
 using BackdropForCodex.Core.Settings;
 
 namespace BackdropForCodex.App.Models;
 
 /// <summary>
-/// Keeps editable, persisted-desired, and currently active wallpaper settings distinct.
+/// UI-facing immutable projection of the canonical V2 workspace state.
 /// </summary>
 public sealed class WallpaperConfigurationState
 {
     private WallpaperConfigurationState(
-        SettingsV1 draft,
-        SettingsV1 savedDesired,
-        SettingsV1? activeSnapshot,
-        bool isRuntimeActive)
+        SettingsV2 draft,
+        SettingsV2 savedDesired,
+        SettingsV2? activeSnapshot,
+        WallpaperRuntimeSurface surface)
     {
-        Draft = Copy(draft);
-        SavedDesired = Copy(savedDesired);
-        ActiveSnapshot = activeSnapshot is null ? null : Copy(activeSnapshot);
-        IsRuntimeActive = isRuntimeActive;
+        Draft = draft.CreateSnapshot();
+        SavedDesired = savedDesired.CreateSnapshot();
+        ActiveSnapshot = activeSnapshot?.CreateSnapshot();
+        Surface = surface ?? throw new ArgumentNullException(nameof(surface));
     }
 
-    public SettingsV1 Draft { get; }
+    public SettingsV2 Draft { get; }
 
-    public SettingsV1 SavedDesired { get; }
+    public SettingsV2 SavedDesired { get; }
 
-    public SettingsV1? ActiveSnapshot { get; }
+    public SettingsV2? ActiveSnapshot { get; }
 
-    public bool IsRuntimeActive { get; }
+    public WallpaperRuntimeSurface Surface { get; }
 
-    public bool HasUnsavedChanges => !AreEquivalent(Draft, SavedDesired);
+    public bool IsRuntimeActive =>
+        Surface.Kind == WallpaperRuntimeSurfaceKind.MediaActive;
+
+    public bool HasUnsavedChanges =>
+        !SettingsV2Comparer.UiDirtyEquals(Draft, SavedDesired);
 
     public bool HasPendingApply =>
-        Draft.MediaPath is not null &&
-        (!IsRuntimeActive ||
-         ActiveSnapshot is null ||
-         !AreRuntimeEquivalent(Draft, ActiveSnapshot));
+        ActiveSnapshot is null ||
+        !SettingsV2Comparer.RuntimeEquivalent(Draft, ActiveSnapshot);
 
     public bool IsSavedButNotActive =>
-        SavedDesired.MediaPath is not null &&
-        (!IsRuntimeActive ||
-         ActiveSnapshot is null ||
-         !AreRuntimeEquivalent(SavedDesired, ActiveSnapshot));
+        ActiveSnapshot is null ||
+        !SettingsV2Comparer.RuntimeEquivalent(SavedDesired, ActiveSnapshot);
 
-    public static WallpaperConfigurationState FromPersisted(SettingsV1 persisted)
+    public static WallpaperConfigurationState FromPersisted(SettingsV2 persisted)
     {
         ArgumentNullException.ThrowIfNull(persisted);
         return new WallpaperConfigurationState(
             persisted,
             persisted,
             activeSnapshot: null,
-            isRuntimeActive: false);
+            WallpaperRuntimeSurface.Disconnected());
     }
 
-    public WallpaperConfigurationState WithDraft(SettingsV1 draft)
+    public static WallpaperConfigurationState FromWorkspace(
+        WallpaperWorkspaceState workspace)
     {
-        ArgumentNullException.ThrowIfNull(draft);
+        ArgumentNullException.ThrowIfNull(workspace);
         return new WallpaperConfigurationState(
-            draft,
-            SavedDesired,
-            ActiveSnapshot,
-            IsRuntimeActive);
+            workspace.Draft,
+            workspace.SavedDesired,
+            workspace.ActiveSnapshot,
+            workspace.RuntimeSurface);
     }
 
-    /// <summary>
-    /// Replaces the durable desired snapshot. Draft synchronization is useful after reloading the
-    /// settings file at the end of an apply attempt.
-    /// </summary>
+    public WallpaperConfigurationState WithDraft(SettingsV2 draft) =>
+        new(draft, SavedDesired, ActiveSnapshot, Surface);
+
     public WallpaperConfigurationState WithPersisted(
-        SettingsV1 persisted,
-        bool synchronizeDraft = true)
-    {
-        ArgumentNullException.ThrowIfNull(persisted);
-        return new WallpaperConfigurationState(
+        SettingsV2 persisted,
+        bool synchronizeDraft = true) =>
+        new(
             synchronizeDraft ? persisted : Draft,
             persisted,
             ActiveSnapshot,
-            IsRuntimeActive);
-    }
+            Surface);
 
-    public WallpaperConfigurationState WithActive(SettingsV1 active)
+    public WallpaperConfigurationState WithActive(
+        SettingsV2 active,
+        WallpaperRuntimeSurface? surface = null)
     {
         ArgumentNullException.ThrowIfNull(active);
+        var selectedProfile = active.ResolveProfile(SemanticRegion.Global);
+        var selectedMediaId = selectedProfile.MediaId;
+        var activeSurface = surface ??
+            (selectedMediaId is { } mediaId
+                ? WallpaperRuntimeSurface.MediaActive(
+                    generation: Math.Max(1, Surface.Generation ?? 1),
+                    mediaId,
+                    Surface.PlaybackOwnership ?? PlaybackOwnershipToken.Create())
+                : WallpaperRuntimeSurface.Official());
         return new WallpaperConfigurationState(
             Draft,
             SavedDesired,
             active,
-            isRuntimeActive: true);
+            activeSurface);
     }
 
-    public WallpaperConfigurationState WithRuntimeActive(bool isRuntimeActive) =>
+    public WallpaperConfigurationState WithoutActive(
+        WallpaperRuntimeSurface? surface = null) =>
         new(
             Draft,
             SavedDesired,
-            isRuntimeActive ? ActiveSnapshot : null,
-            isRuntimeActive);
+            activeSnapshot: null,
+            surface ?? WallpaperRuntimeSurface.Official());
 
-    public WallpaperConfigurationState WithoutActive() =>
-        new(Draft, SavedDesired, activeSnapshot: null, isRuntimeActive: false);
+    public static bool AreEquivalent(SettingsV2 left, SettingsV2 right) =>
+        SettingsV2Comparer.DurableEquals(left, right);
 
-    public static bool AreEquivalent(SettingsV1 left, SettingsV1 right)
-    {
-        ArgumentNullException.ThrowIfNull(left);
-        ArgumentNullException.ThrowIfNull(right);
-        left.Validate();
-        right.Validate();
-
-        return left.SchemaVersion == right.SchemaVersion &&
-               string.Equals(
-                   left.MediaPath,
-                   right.MediaPath,
-                   StringComparison.OrdinalIgnoreCase) &&
-               left.MediaKind == right.MediaKind &&
-               left.Fit == right.Fit &&
-               left.FocusX.Equals(right.FocusX) &&
-               left.FocusY.Equals(right.FocusY) &&
-               left.PanelOpacity.Equals(right.PanelOpacity) &&
-               left.BlurPx.Equals(right.BlurPx) &&
-               left.DarkOverlay.Equals(right.DarkOverlay) &&
-               left.LightOverlay.Equals(right.LightOverlay) &&
-               left.AcceptedCdpRisk == right.AcceptedCdpRisk &&
-               left.RecentMediaPaths.SequenceEqual(
-                   right.RecentMediaPaths,
-                   StringComparer.OrdinalIgnoreCase);
-    }
-
-    public static bool AreRuntimeEquivalent(SettingsV1 left, SettingsV1 right)
-    {
-        ArgumentNullException.ThrowIfNull(left);
-        ArgumentNullException.ThrowIfNull(right);
-        left.Validate();
-        right.Validate();
-
-        return string.Equals(
-                   left.MediaPath,
-                   right.MediaPath,
-                   StringComparison.OrdinalIgnoreCase) &&
-               left.MediaKind == right.MediaKind &&
-               left.Fit == right.Fit &&
-               left.FocusX.Equals(right.FocusX) &&
-               left.FocusY.Equals(right.FocusY) &&
-               left.PanelOpacity.Equals(right.PanelOpacity) &&
-               left.BlurPx.Equals(right.BlurPx) &&
-               left.DarkOverlay.Equals(right.DarkOverlay) &&
-               left.LightOverlay.Equals(right.LightOverlay);
-    }
-
-    private static SettingsV1 Copy(SettingsV1 settings)
-    {
-        settings.Validate();
-        return settings with
-        {
-            RecentMediaPaths = Array.AsReadOnly(settings.RecentMediaPaths.ToArray()),
-        };
-    }
+    public static bool AreRuntimeEquivalent(SettingsV2 left, SettingsV2 right) =>
+        SettingsV2Comparer.RuntimeEquivalent(left, right);
 }

@@ -1,9 +1,9 @@
+using BackdropForCodex.App.Models;
 using BackdropForCodex.App.Services.Errors;
 using BackdropForCodex.App.Services.Localization;
 using BackdropForCodex.App.Services.Preferences;
 using BackdropForCodex.App.Services.Wallpaper;
 using BackdropForCodex.App.ViewModels;
-using BackdropForCodex.App.Models;
 using BackdropForCodex.Core.Codex;
 using BackdropForCodex.Core.Injection;
 using BackdropForCodex.Core.Media;
@@ -24,7 +24,7 @@ public sealed class MainWindowViewModelTests
             CodexVersion = new Version(26, 805, 14, 3),
         };
         var wallpaper = new FakeCapabilityWallpaperApplicationService(
-            SettingsV1.CreateDefault(),
+            SettingsV2.CreateDefault(),
             compatibility);
         using var viewModel = CreateViewModel(
             wallpaper,
@@ -39,10 +39,8 @@ public sealed class MainWindowViewModelTests
         var mediaPath = CreateTemporaryMediaFile(".png");
         try
         {
-            var persisted = SettingsV1.CreateDefault() with
-            {
-                RecentMediaPaths = [mediaPath],
-            };
+            var persisted = CreateSettings(
+                recentMedia: [(mediaPath, MediaKind.Image)]);
             var wallpaper = new FakeWallpaperApplicationService(persisted);
             using var preferencesStore = new FakeAppPreferencesStore();
             using var viewModel = CreateViewModel(wallpaper, preferencesStore);
@@ -51,10 +49,15 @@ public sealed class MainWindowViewModelTests
             viewModel.SelectMedia(mediaPath);
             await viewModel.SetThemeModeAsync(ThemeMode.Dark);
 
-            Assert.Same(viewModel.Settings.ConfigurationState, viewModel.ConfigurationState);
+            Assert.Same(
+                viewModel.Settings.ConfigurationState,
+                viewModel.ConfigurationState);
             Assert.Same(viewModel.Settings.Preferences, viewModel.Preferences);
             Assert.Same(viewModel.Settings.Recents, viewModel.Recents);
-            Assert.Equal(mediaPath, viewModel.Settings.ConfigurationState.Draft.MediaPath);
+            Assert.Equal(
+                mediaPath,
+                SelectedMedia(viewModel.Settings.ConfigurationState.Draft)
+                    ?.SourceIdentifier);
             Assert.Equal(ThemeMode.Dark, viewModel.Settings.ThemeMode);
             Assert.Single(viewModel.Settings.Recents);
         }
@@ -73,20 +76,25 @@ public sealed class MainWindowViewModelTests
             var missingRecentPath = Path.Combine(
                 Path.GetTempPath(),
                 $"{Guid.NewGuid():N}.webm");
-            var settings = SettingsV1.CreateDefault() with
-            {
-                MediaPath = mediaPath,
-                MediaKind = MediaKind.Image,
-                Fit = WallpaperFit.Contain,
-                FocusX = 0.25,
-                FocusY = 0.75,
-                PanelOpacity = 0.84,
-                BlurPx = 7,
-                DarkOverlay = 0.42,
-                LightOverlay = 0.21,
-                AcceptedCdpRisk = true,
-                RecentMediaPaths = [mediaPath, missingRecentPath],
-            };
+            var settings = CreateSettings(
+                mediaPath,
+                MediaKind.Image,
+                profile => profile with
+                {
+                    Fit = WallpaperFit.Contain,
+                    FocusX = 0.25,
+                    FocusY = 0.75,
+                    PanelOpacity = 0.84,
+                    BlurPx = 7,
+                    DarkOverlay = 0.42,
+                    LightOverlay = 0.21,
+                },
+                acceptedCdpRisk: true,
+                recentMedia:
+                [
+                    (mediaPath, MediaKind.Image),
+                    (missingRecentPath, MediaKind.Video),
+                ]);
             var preferences = AppPreferencesV1.CreateDefault() with
             {
                 ThemeMode = ThemeMode.Dark,
@@ -94,7 +102,7 @@ public sealed class MainWindowViewModelTests
             };
             var wallpaper = new FakeWallpaperApplicationService(settings);
             using var preferencesStore = new FakeAppPreferencesStore(preferences);
-            var viewModel = CreateViewModel(wallpaper, preferencesStore);
+            using var viewModel = CreateViewModel(wallpaper, preferencesStore);
 
             await viewModel.InitializeAsync();
 
@@ -145,13 +153,10 @@ public sealed class MainWindowViewModelTests
         var mediaPath = CreateTemporaryMediaFile(".png");
         try
         {
-            var persisted = SettingsV1.CreateDefault() with
-            {
-                AcceptedCdpRisk = true,
-            };
+            var persisted = CreateSettings(acceptedCdpRisk: true);
             var wallpaper = new FakeWallpaperApplicationService(persisted);
             using var preferencesStore = new FakeAppPreferencesStore();
-            var viewModel = CreateViewModel(wallpaper, preferencesStore);
+            using var viewModel = CreateViewModel(wallpaper, preferencesStore);
             await viewModel.InitializeAsync();
 
             viewModel.SelectMedia(mediaPath);
@@ -174,19 +179,20 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
-    public async Task ApplyAsyncWhenRuntimeFailsAfterPersistenceReportsSavedButInactive()
+    public async Task ApplyFailureAfterCommitReportsSavedButInactive()
     {
         var mediaPath = CreateTemporaryMediaFile(".png");
         try
         {
             var wallpaper = new FakeWallpaperApplicationService(
-                SettingsV1.CreateDefault() with { AcceptedCdpRisk = true })
+                CreateSettings(acceptedCdpRisk: true))
             {
-                ApplyFailure = new IOException("Simulated runtime startup failure."),
+                ApplyFailure = new IOException(
+                    "Simulated runtime startup failure."),
                 PersistApplyRequestBeforeFailure = true,
             };
             using var preferencesStore = new FakeAppPreferencesStore();
-            var viewModel = CreateViewModel(wallpaper, preferencesStore);
+            using var viewModel = CreateViewModel(wallpaper, preferencesStore);
             await viewModel.InitializeAsync();
             viewModel.SelectMedia(mediaPath);
             viewModel.Fit = WallpaperFit.Contain;
@@ -198,20 +204,22 @@ public sealed class MainWindowViewModelTests
 
             var applied = await viewModel.ApplyAsync();
 
+            var savedProfile = Global(viewModel.SavedDesired);
+            var savedMedia = SelectedMedia(viewModel.SavedDesired);
             Assert.False(applied);
             Assert.Equal(1, wallpaper.ApplyCallCount);
             Assert.False(viewModel.IsActive);
             Assert.Null(viewModel.ActiveSnapshot);
             Assert.True(viewModel.IsSavedButInactive);
-            Assert.Equal(mediaPath, viewModel.SavedDesired.MediaPath);
-            Assert.Equal(MediaKind.Image, viewModel.SavedDesired.MediaKind);
-            Assert.Equal(WallpaperFit.Contain, viewModel.SavedDesired.Fit);
-            Assert.Equal(0.2, viewModel.SavedDesired.FocusX);
-            Assert.Equal(0.8, viewModel.SavedDesired.FocusY);
-            Assert.Equal(0.86, viewModel.SavedDesired.PanelOpacity);
-            Assert.Equal(6, viewModel.SavedDesired.BlurPx);
-            Assert.Equal(0.44, viewModel.SavedDesired.DarkOverlay);
-            Assert.Equal(0.16, viewModel.SavedDesired.LightOverlay);
+            Assert.Equal(mediaPath, savedMedia?.SourceIdentifier);
+            Assert.Equal(MediaKind.Image, savedMedia?.LastKnownKind);
+            Assert.Equal(WallpaperFit.Contain, savedProfile.Fit);
+            Assert.Equal(0.2, savedProfile.FocusX);
+            Assert.Equal(0.8, savedProfile.FocusY);
+            Assert.Equal(0.86, savedProfile.PanelOpacity);
+            Assert.Equal(6, savedProfile.BlurPx);
+            Assert.Equal(0.44, savedProfile.DarkOverlay);
+            Assert.Equal(0.16, savedProfile.LightOverlay);
             Assert.False(viewModel.IsDraftDirty);
             Assert.Equal(UiStatusTone.Error, viewModel.StatusTone);
             Assert.Equal("Wallpaper could not be applied", viewModel.StatusTitle);
@@ -224,12 +232,33 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public async Task PreflightFailureWithoutCommitIsNotReportedAsSaved()
+    {
+        var wallpaper = new FakeWallpaperApplicationService(
+            SettingsV2.CreateDefault())
+        {
+            ApplyFailure = new IOException("Simulated preflight failure."),
+        };
+        using var preferencesStore = new FakeAppPreferencesStore();
+        using var viewModel = CreateViewModel(wallpaper, preferencesStore);
+        await viewModel.InitializeAsync();
+
+        Assert.False(await viewModel.ApplyAsync());
+
+        Assert.Equal(
+            WallpaperWorkspaceErrorStage.Preflight,
+            wallpaper.Workspace.Error?.Stage);
+        Assert.Equal("Activation failed", viewModel.WorkspaceStatusText);
+        Assert.Equal(0, wallpaper.SaveCallCount);
+    }
+
+    [Fact]
     public async Task AcceptRiskAsyncPersistsAcknowledgementImmediately()
     {
         var wallpaper = new FakeWallpaperApplicationService(
-            SettingsV1.CreateDefault());
+            SettingsV2.CreateDefault());
         using var preferencesStore = new FakeAppPreferencesStore();
-        var viewModel = CreateViewModel(wallpaper, preferencesStore);
+        using var viewModel = CreateViewModel(wallpaper, preferencesStore);
 
         await viewModel.AcceptRiskAsync();
 
@@ -243,14 +272,49 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
-    public async Task LegacyOverlaysAreClampedInTheEditorAndNormalizedOnTheNextSave()
+    public async Task AcceptRiskDuringActivationAllowsMediaResubmission()
+    {
+        var mediaPath = CreateTemporaryMediaFile(".png");
+        try
+        {
+            var wallpaper = new FakeWallpaperApplicationService(
+                SettingsV2.CreateDefault())
+            {
+                BlockFirstApply = true,
+            };
+            using var preferencesStore = new FakeAppPreferencesStore();
+            using var viewModel = CreateViewModel(wallpaper, preferencesStore);
+            await viewModel.InitializeAsync();
+
+            var firstApply = viewModel.ApplyAsync();
+            await wallpaper.FirstApplyEntered.Task.WaitAsync(
+                TimeSpan.FromSeconds(5));
+            Assert.True(viewModel.IsBusy);
+
+            viewModel.SelectMedia(mediaPath);
+            await viewModel.AcceptRiskAsync();
+
+            Assert.True(viewModel.AcceptedCdpRisk);
+            Assert.True(await viewModel.ApplyAsync());
+            wallpaper.ReleaseFirstApply.TrySetResult();
+            Assert.False(await firstApply);
+        }
+        finally
+        {
+            File.Delete(mediaPath);
+        }
+    }
+
+    [Fact]
+    public async Task RiskSavePreservesDirtyStyleUntilFullApplyNormalizesIt()
     {
         var wallpaper = new FakeWallpaperApplicationService(
-            SettingsV1.CreateDefault() with
-            {
-                DarkOverlay = 0.90,
-                LightOverlay = 0.75,
-            });
+            CreateSettings(
+                updateProfile: profile => profile with
+                {
+                    DarkOverlay = 0.90,
+                    LightOverlay = 0.75,
+                }));
         using var preferencesStore = new FakeAppPreferencesStore();
         using var viewModel = CreateViewModel(wallpaper, preferencesStore);
 
@@ -258,25 +322,24 @@ public sealed class MainWindowViewModelTests
 
         Assert.Equal(MainWindowViewModel.MaximumOverlay, viewModel.DarkOverlay);
         Assert.Equal(MainWindowViewModel.MaximumOverlay, viewModel.LightOverlay);
-        Assert.Equal(0.90, viewModel.SavedDesired.DarkOverlay);
-        Assert.Equal(0.75, viewModel.SavedDesired.LightOverlay);
+        Assert.Equal(0.90, Global(viewModel.SavedDesired).DarkOverlay);
+        Assert.Equal(0.75, Global(viewModel.SavedDesired).LightOverlay);
         Assert.True(viewModel.IsDraftDirty);
 
         await viewModel.AcceptRiskAsync();
 
-        Assert.NotNull(wallpaper.LastSavedSettings);
+        Assert.Equal(0.90, Global(viewModel.SavedDesired).DarkOverlay);
+        Assert.Equal(0.75, Global(viewModel.SavedDesired).LightOverlay);
+        Assert.True(viewModel.IsDraftDirty);
+
+        Assert.True(await viewModel.ApplyAsync());
+
         Assert.Equal(
             MainWindowViewModel.MaximumOverlay,
-            wallpaper.LastSavedSettings.DarkOverlay);
+            Global(wallpaper.LastSavedSettings!).DarkOverlay);
         Assert.Equal(
             MainWindowViewModel.MaximumOverlay,
-            wallpaper.LastSavedSettings.LightOverlay);
-        Assert.Equal(
-            MainWindowViewModel.MaximumOverlay,
-            viewModel.SavedDesired.DarkOverlay);
-        Assert.Equal(
-            MainWindowViewModel.MaximumOverlay,
-            viewModel.SavedDesired.LightOverlay);
+            Global(wallpaper.LastSavedSettings!).LightOverlay);
         Assert.False(viewModel.IsDraftDirty);
     }
 
@@ -287,7 +350,7 @@ public sealed class MainWindowViewModelTests
         try
         {
             var wallpaper = new FakeWallpaperApplicationService(
-                SettingsV1.CreateDefault());
+                SettingsV2.CreateDefault());
             using var preferencesStore = new FakeAppPreferencesStore();
             using var viewModel = CreateViewModel(wallpaper, preferencesStore);
             await viewModel.InitializeAsync();
@@ -324,9 +387,9 @@ public sealed class MainWindowViewModelTests
         try
         {
             var wallpaper = new FakeWallpaperApplicationService(
-                SettingsV1.CreateDefault() with { AcceptedCdpRisk = true });
+                CreateSettings(acceptedCdpRisk: true));
             using var preferencesStore = new FakeAppPreferencesStore();
-            var viewModel = CreateViewModel(wallpaper, preferencesStore);
+            using var viewModel = CreateViewModel(wallpaper, preferencesStore);
             await viewModel.InitializeAsync();
             viewModel.SelectMedia(imagePath);
 
@@ -335,7 +398,9 @@ public sealed class MainWindowViewModelTests
             viewModel.SelectMedia(videoPath);
 
             Assert.True(viewModel.IsActive);
-            Assert.Equal(MediaKind.Image, viewModel.ActiveSnapshot?.MediaKind);
+            Assert.Equal(
+                MediaKind.Image,
+                SelectedMedia(viewModel.ActiveSnapshot!)?.LastKnownKind);
             Assert.False(viewModel.TogglePauseCommand.CanExecute(null));
         }
         finally
@@ -346,24 +411,23 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
-    public async Task DisableFailureKeepsTheRuntimeActiveWhenServiceReportsItActive()
+    public async Task RestoreFailureKeepsTheRuntimeActive()
     {
         var mediaPath = CreateTemporaryMediaFile(".png");
         try
         {
-            var settings = SettingsV1.CreateDefault() with
-            {
-                MediaPath = mediaPath,
-                MediaKind = MediaKind.Image,
-                AcceptedCdpRisk = true,
-            };
+            var settings = CreateSettings(
+                mediaPath,
+                MediaKind.Image,
+                acceptedCdpRisk: true);
             var wallpaper = new FakeWallpaperApplicationService(settings)
             {
-                IsActive = true,
-                DisableFailure = new IOException("Simulated restore failure."),
+                DisableFailure = new IOException(
+                    "Simulated restore failure."),
             };
+            wallpaper.SeedActive(settings);
             using var preferencesStore = new FakeAppPreferencesStore();
-            var viewModel = CreateViewModel(wallpaper, preferencesStore);
+            using var viewModel = CreateViewModel(wallpaper, preferencesStore);
             await viewModel.InitializeAsync();
 
             await viewModel.DisableAsync();
@@ -379,10 +443,45 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public async Task TypedRestoreFailureIsNotReportedAsSuccess()
+    {
+        var mediaPath = CreateTemporaryMediaFile(".png");
+        try
+        {
+            var settings = CreateSettings(
+                mediaPath,
+                MediaKind.Image,
+                acceptedCdpRisk: true);
+            var wallpaper = new FakeWallpaperApplicationService(settings)
+            {
+                ReturnTypedDisableFailure = true,
+            };
+            wallpaper.SeedActive(settings);
+            using var preferencesStore = new FakeAppPreferencesStore();
+            using var viewModel = CreateViewModel(wallpaper, preferencesStore);
+            await viewModel.InitializeAsync();
+
+            await viewModel.DisableAsync();
+
+            Assert.Equal(
+                WallpaperRuntimeSurfaceKind.Faulted,
+                wallpaper.Workspace.RuntimeSurface.Kind);
+            Assert.Equal(UiStatusTone.Error, viewModel.StatusTone);
+            Assert.Equal(
+                "Official background could not be restored",
+                viewModel.StatusTitle);
+        }
+        finally
+        {
+            File.Delete(mediaPath);
+        }
+    }
+
+    [Fact]
     public async Task ConcurrentPreferenceUpdatesPreserveThemeAndTrayTip()
     {
         var wallpaper = new FakeWallpaperApplicationService(
-            SettingsV1.CreateDefault());
+            SettingsV2.CreateDefault());
         using var preferencesStore = new FakeAppPreferencesStore
         {
             BlockFirstSave = true,
@@ -410,13 +509,12 @@ public sealed class MainWindowViewModelTests
         var mediaPath = CreateTemporaryMediaFile(".png");
         try
         {
-            var backupSettings = SettingsV1.CreateDefault() with
-            {
-                MediaPath = mediaPath,
-                MediaKind = MediaKind.Image,
-                AcceptedCdpRisk = true,
-            };
-            var wallpaper = new FakeWallpaperApplicationService(SettingsV1.CreateDefault())
+            var backupSettings = CreateSettings(
+                mediaPath,
+                MediaKind.Image,
+                acceptedCdpRisk: true);
+            var wallpaper = new FakeWallpaperApplicationService(
+                SettingsV2.CreateDefault())
             {
                 LoadFailure = new SettingsRecoveryRequiredException(
                     SettingsRecoveryReason.InvalidDocument,
@@ -458,7 +556,8 @@ public sealed class MainWindowViewModelTests
         var mediaPath = CreateTemporaryMediaFile(".png");
         try
         {
-            var wallpaper = new FakeWallpaperApplicationService(SettingsV1.CreateDefault())
+            var wallpaper = new FakeWallpaperApplicationService(
+                SettingsV2.CreateDefault())
             {
                 LoadFailure = new SettingsProjectionException(
                     "A non-local Global selection cannot be represented."),
@@ -487,7 +586,8 @@ public sealed class MainWindowViewModelTests
     [Fact]
     public async Task LaterReloadFailureTransitionsEditorIntoProtectedRecoveryState()
     {
-        var wallpaper = new FakeWallpaperApplicationService(SettingsV1.CreateDefault());
+        var wallpaper = new FakeWallpaperApplicationService(
+            SettingsV2.CreateDefault());
         using var preferencesStore = new FakeAppPreferencesStore();
         using var viewModel = CreateViewModel(wallpaper, preferencesStore);
         await viewModel.InitializeAsync();
@@ -498,12 +598,306 @@ public sealed class MainWindowViewModelTests
             hasVersion1Backup: true);
 
         await Assert.ThrowsAsync<FutureSettingsVersionException>(
-            () => viewModel.Settings.LoadWallpaperSettingsAsync(CancellationToken.None));
+            () => viewModel.Settings.LoadWallpaperSettingsAsync(
+                CancellationToken.None));
 
         Assert.True(viewModel.HasProtectedSettings);
         Assert.True(viewModel.HasVersion1Backup);
         Assert.False(viewModel.CanEdit);
         Assert.True(viewModel.CanRestoreVersion1Backup);
+    }
+
+    [Fact]
+    public async Task EmptyProfileAppliesOfficialWithoutRiskAcceptance()
+    {
+        var wallpaper = new FakeWallpaperApplicationService(
+            SettingsV2.CreateDefault());
+        using var preferencesStore = new FakeAppPreferencesStore();
+        using var viewModel = CreateViewModel(wallpaper, preferencesStore);
+        await viewModel.InitializeAsync();
+
+        var applied = await viewModel.ApplyAsync();
+
+        Assert.True(applied);
+        Assert.False(viewModel.AcceptedCdpRisk);
+        Assert.Equal(1, wallpaper.ApplyCallCount);
+        Assert.Equal(
+            WallpaperRuntimeSurfaceKind.Official,
+            wallpaper.Workspace.RuntimeSurface.Kind);
+        Assert.NotNull(viewModel.ActiveSnapshot);
+        Assert.Null(Global(viewModel.ActiveSnapshot!).MediaId);
+    }
+
+    [Fact]
+    public async Task ApplyingDoesNotBlockDraftEditingOrLatestWinsResubmission()
+    {
+        var firstPath = CreateTemporaryMediaFile(".png");
+        var secondPath = CreateTemporaryMediaFile(".png");
+        try
+        {
+            var wallpaper = new FakeWallpaperApplicationService(
+                CreateSettings(acceptedCdpRisk: true))
+            {
+                BlockFirstApply = true,
+            };
+            using var preferencesStore = new FakeAppPreferencesStore();
+            using var viewModel = CreateViewModel(wallpaper, preferencesStore);
+            await viewModel.InitializeAsync();
+            viewModel.SelectMedia(firstPath);
+
+            var firstApply = viewModel.ApplyAsync();
+            await wallpaper.FirstApplyEntered.Task.WaitAsync(
+                TimeSpan.FromSeconds(5));
+
+            Assert.True(viewModel.IsBusy);
+            Assert.True(viewModel.CanEditDraft);
+            Assert.True(viewModel.CanSubmitApply);
+
+            viewModel.SelectMedia(secondPath);
+            viewModel.BlurPx = 5;
+            var secondApply = viewModel.ApplyAsync();
+
+            Assert.True(await secondApply);
+            wallpaper.ReleaseFirstApply.TrySetResult();
+            Assert.False(await firstApply);
+
+            Assert.Equal(2, wallpaper.ApplyCallCount);
+            Assert.Equal(
+                secondPath,
+                SelectedMedia(viewModel.SavedDesired)?.SourceIdentifier);
+            Assert.Equal(5, Global(viewModel.SavedDesired).BlurPx);
+            Assert.True(
+                WallpaperConfigurationState.AreRuntimeEquivalent(
+                    viewModel.SavedDesired,
+                    viewModel.ActiveSnapshot!));
+        }
+        finally
+        {
+            File.Delete(firstPath);
+            File.Delete(secondPath);
+        }
+    }
+
+    [Fact]
+    public async Task SavedButNotActivatedHasDistinctWorkspaceStatus()
+    {
+        var firstPath = CreateTemporaryMediaFile(".png");
+        var secondPath = CreateTemporaryMediaFile(".png");
+        try
+        {
+            var wallpaper = new FakeWallpaperApplicationService(
+                CreateSettings(acceptedCdpRisk: true));
+            using var preferencesStore = new FakeAppPreferencesStore();
+            using var viewModel = CreateViewModel(wallpaper, preferencesStore);
+            await viewModel.InitializeAsync();
+            viewModel.SelectMedia(firstPath);
+            Assert.True(await viewModel.ApplyAsync());
+
+            viewModel.SelectMedia(secondPath);
+            wallpaper.NextApplyOutcome =
+                RuntimeActivationOutcome.SavedButNotActivated;
+
+            Assert.False(await viewModel.ApplyAsync());
+            Assert.Equal("Saved, not activated", viewModel.WorkspaceStatusText);
+            Assert.Equal("Saved, not activated", viewModel.FooterStatusText);
+        }
+        finally
+        {
+            File.Delete(firstPath);
+            File.Delete(secondPath);
+        }
+    }
+
+    [Fact]
+    public async Task ProfileCrudRequestsFocusForTheSelectedCard()
+    {
+        var wallpaper = new FakeWallpaperApplicationService(
+            SettingsV2.CreateDefault());
+        using var preferencesStore = new FakeAppPreferencesStore();
+        using var viewModel = CreateViewModel(wallpaper, preferencesStore);
+        await viewModel.InitializeAsync();
+        var focusRequests = 0;
+        viewModel.RestoreProfileFocus = () => focusRequests++;
+
+        viewModel.CreateProfileCommand.Execute(null);
+        Assert.Equal(1, focusRequests);
+
+        viewModel.DuplicateProfileCommand.Execute(viewModel.SelectedProfileCard);
+        Assert.Equal(2, focusRequests);
+
+        viewModel.RenameProfilePromptAsync =
+            _ => Task.FromResult<string?>("Renamed profile");
+        await viewModel.RenameProfileCommand.ExecuteAsync(
+            viewModel.SelectedProfileCard);
+        Assert.Equal(3, focusRequests);
+
+        viewModel.DeleteProfilePromptAsync = _ => Task.FromResult(true);
+        await viewModel.DeleteProfileCommand.ExecuteAsync(
+            viewModel.SelectedProfileCard);
+        Assert.Equal(4, focusRequests);
+    }
+
+    [Fact]
+    public async Task OlderRevisionStatusCannotOverwriteLatestUiState()
+    {
+        var wallpaper = new FakeWallpaperApplicationService(
+            SettingsV2.CreateDefault());
+        using var preferencesStore = new FakeAppPreferencesStore();
+        using var viewModel = CreateViewModel(wallpaper, preferencesStore);
+        await viewModel.InitializeAsync();
+        Assert.True(await viewModel.ApplyAsync());
+        Assert.True(await viewModel.ApplyAsync());
+
+        wallpaper.RaiseStatus(
+            WallpaperRuntimePhase.Active,
+            revision: wallpaper.Workspace.LatestRevision);
+        Assert.Equal(WallpaperRuntimePhase.Active, viewModel.RuntimePhase);
+
+        wallpaper.RaiseStatus(
+            WallpaperRuntimePhase.Stopping,
+            revision: wallpaper.Workspace.LatestRevision - 1);
+
+        Assert.Equal(WallpaperRuntimePhase.Active, viewModel.RuntimePhase);
+        Assert.NotEqual("Restoring the official Codex background…", viewModel.OperationStage);
+    }
+
+    [Fact]
+    public async Task QueuedOlderRevisionStatusIsRecheckedOnUiDispatch()
+    {
+        var wallpaper = new FakeWallpaperApplicationService(
+            SettingsV2.CreateDefault());
+        using var preferencesStore = new FakeAppPreferencesStore();
+        var uiContext = new QueuedSynchronizationContext();
+        var previousContext = SynchronizationContext.Current;
+        MainWindowViewModel viewModel;
+        try
+        {
+            SynchronizationContext.SetSynchronizationContext(uiContext);
+            viewModel = CreateViewModel(wallpaper, preferencesStore);
+            await viewModel.InitializeAsync();
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(previousContext);
+        }
+
+        using (viewModel)
+        {
+            Assert.True(await viewModel.ApplyAsync());
+            var olderRevision = wallpaper.Workspace.LatestRevision;
+            uiContext.HoldPosts = true;
+
+            await Task.Run(
+                () => wallpaper.RaiseStatus(
+                    WallpaperRuntimePhase.Stopping,
+                    olderRevision));
+            Assert.Equal(1, uiContext.PendingCount);
+
+            Assert.True(await viewModel.ApplyAsync());
+            Assert.True(wallpaper.Workspace.LatestRevision > olderRevision);
+
+            uiContext.Drain();
+
+            Assert.NotEqual(WallpaperRuntimePhase.Stopping, viewModel.RuntimePhase);
+            Assert.NotEqual(
+                "Restoring the official Codex background…",
+                viewModel.OperationStage);
+        }
+    }
+
+    [Fact]
+    public async Task QueuedOlderWorkspaceIsRecheckedOnUiDispatch()
+    {
+        var wallpaper = new FakeWallpaperApplicationService(
+            SettingsV2.CreateDefault());
+        using var preferencesStore = new FakeAppPreferencesStore();
+        var uiContext = new QueuedSynchronizationContext();
+        var previousContext = SynchronizationContext.Current;
+        MainWindowViewModel viewModel;
+        try
+        {
+            SynchronizationContext.SetSynchronizationContext(uiContext);
+            viewModel = CreateViewModel(wallpaper, preferencesStore);
+            await viewModel.InitializeAsync();
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(previousContext);
+        }
+
+        using (viewModel)
+        {
+            var olderWorkspace = wallpaper.Workspace;
+            uiContext.HoldPosts = true;
+            await Task.Run(() => wallpaper.RaiseWorkspace(olderWorkspace));
+            Assert.Equal(1, uiContext.PendingCount);
+
+            var currentDraft = (wallpaper.Workspace.Draft with
+            {
+                AcceptedCdpRisk = true,
+            }).CreateSnapshot();
+            try
+            {
+                SynchronizationContext.SetSynchronizationContext(uiContext);
+                wallpaper.ReplaceDraft(currentDraft);
+            }
+            finally
+            {
+                SynchronizationContext.SetSynchronizationContext(
+                    previousContext);
+            }
+
+            Assert.True(
+                viewModel.Settings.ConfigurationState.Draft.AcceptedCdpRisk);
+            uiContext.Drain();
+            Assert.True(
+                viewModel.Settings.ConfigurationState.Draft.AcceptedCdpRisk);
+        }
+    }
+
+    [Fact]
+    public async Task SavedButNotActivatedPreservesOlderActiveSnapshot()
+    {
+        var firstPath = CreateTemporaryMediaFile(".png");
+        var secondPath = CreateTemporaryMediaFile(".png");
+        try
+        {
+            var wallpaper = new FakeWallpaperApplicationService(
+                CreateSettings(acceptedCdpRisk: true));
+            using var preferencesStore = new FakeAppPreferencesStore();
+            using var viewModel = CreateViewModel(wallpaper, preferencesStore);
+            await viewModel.InitializeAsync();
+            viewModel.SelectMedia(firstPath);
+            Assert.True(await viewModel.ApplyAsync());
+            var firstActive = viewModel.ActiveSnapshot;
+
+            wallpaper.NextApplyOutcome =
+                RuntimeActivationOutcome.SavedButNotActivated;
+            viewModel.SelectMedia(secondPath);
+            Assert.False(await viewModel.ApplyAsync());
+
+            Assert.True(viewModel.IsActive);
+            Assert.True(viewModel.IsSavedButInactive);
+            Assert.Equal(
+                firstPath,
+                SelectedMedia(viewModel.ActiveSnapshot!)?.SourceIdentifier);
+            Assert.Equal(
+                secondPath,
+                SelectedMedia(viewModel.SavedDesired)?.SourceIdentifier);
+            Assert.True(
+                WallpaperConfigurationState.AreEquivalent(
+                    firstActive!,
+                    viewModel.ActiveSnapshot!));
+            Assert.False(
+                WallpaperConfigurationState.AreRuntimeEquivalent(
+                    viewModel.SavedDesired,
+                    viewModel.ActiveSnapshot!));
+        }
+        finally
+        {
+            File.Delete(firstPath);
+            File.Delete(secondPath);
+        }
     }
 
     private static MainWindowViewModel CreateViewModel(
@@ -514,6 +908,70 @@ public sealed class MainWindowViewModelTests
             preferencesStore,
             new StubErrorMapper(),
             new FallbackTextProvider());
+
+    private static SettingsV2 CreateSettings(
+        string? selectedMediaPath = null,
+        MediaKind selectedMediaKind = MediaKind.None,
+        Func<WallpaperProfile, WallpaperProfile>? updateProfile = null,
+        bool acceptedCdpRisk = false,
+        IReadOnlyList<(string Path, MediaKind Kind)>? recentMedia = null)
+    {
+        var baseline = SettingsV2.CreateDefault();
+        var catalog = new List<MediaReference>();
+        var byPath = new Dictionary<string, MediaReference>(
+            StringComparer.OrdinalIgnoreCase);
+
+        MediaReference AddMedia(string path, MediaKind kind)
+        {
+            var normalized = Path.GetFullPath(path);
+            if (byPath.TryGetValue(normalized, out var existing))
+            {
+                return existing;
+            }
+
+            var media = new MediaReference
+            {
+                MediaId = Guid.CreateVersion7(),
+                SourceKind = MediaSourceKind.LocalFile,
+                SourceIdentifier = normalized,
+                LastKnownKind = kind,
+            };
+            catalog.Add(media);
+            byPath.Add(normalized, media);
+            return media;
+        }
+
+        var global = baseline.ResolveProfile(SemanticRegion.Global);
+        if (selectedMediaPath is not null)
+        {
+            var selected = AddMedia(selectedMediaPath, selectedMediaKind);
+            global = global with { MediaId = selected.MediaId };
+        }
+
+        global = updateProfile?.Invoke(global) ?? global;
+        var recentIds = recentMedia?
+            .Select(item => AddMedia(item.Path, item.Kind).MediaId)
+            .Distinct()
+            .ToArray() ?? [];
+        return (baseline with
+        {
+            Profiles = [global],
+            MediaCatalog = catalog,
+            RecentMediaIds = recentIds,
+            AcceptedCdpRisk = acceptedCdpRisk,
+        }).CreateSnapshot();
+    }
+
+    private static WallpaperProfile Global(SettingsV2 settings) =>
+        settings.ResolveProfile(SemanticRegion.Global);
+
+    private static MediaReference? SelectedMedia(SettingsV2 settings)
+    {
+        var mediaId = Global(settings).MediaId;
+        return mediaId is { } actualMediaId
+            ? settings.FindMedia(actualMediaId)
+            : null;
+    }
 
     private static string CreateTemporaryMediaFile(string extension)
     {
@@ -541,90 +999,324 @@ public sealed class MainWindowViewModelTests
         return path;
     }
 
-    private class FakeWallpaperApplicationService :
-        IWallpaperApplicationService,
-        IWallpaperSettingsRecoveryService
+    private class FakeWallpaperApplicationService : IWallpaperApplicationService
     {
-        private SettingsV1 _persistedSettings;
+        private WallpaperWorkspace _workspace;
+        private SettingsV2 _persistedSettings;
+        private long _nextRevision;
+        private int _applyCallCount;
 
-        public FakeWallpaperApplicationService(SettingsV1 persistedSettings)
+        public FakeWallpaperApplicationService(SettingsV2 persistedSettings)
         {
-            _persistedSettings = persistedSettings;
+            _persistedSettings = persistedSettings.CreateSnapshot();
+            _workspace = new WallpaperWorkspace(
+                _persistedSettings,
+                WallpaperRuntimeSurface.Disconnected());
         }
 
-        public event EventHandler<WallpaperRuntimeStatusChangedEventArgs>? StatusChanged
-        {
-            add { }
-            remove { }
-        }
+        public event EventHandler<WallpaperRuntimeStatusChangedEventArgs>?
+            StatusChanged;
 
-        public bool IsActive { get; set; }
+        public event EventHandler<WallpaperWorkspaceStateChangedEventArgs>?
+            WorkspaceChanged;
 
-        public bool IsPaused { get; set; }
+        public WallpaperWorkspaceState Workspace => _workspace.State;
 
-        public Exception? ApplyFailure { get; init; }
+        public bool IsActive =>
+            Workspace.RuntimeSurface.Kind ==
+            WallpaperRuntimeSurfaceKind.MediaActive;
 
-        public Exception? DisableFailure { get; init; }
+        public bool IsPaused { get; private set; }
+
+        public bool HasVersion1Backup =>
+            BackupSettings is not null ||
+            LoadFailure is SettingsRecoveryRequiredException
+            {
+                HasVersion1Backup: true,
+            } ||
+            LoadFailure is FutureSettingsVersionException
+            {
+                HasVersion1Backup: true,
+            } ||
+            LoadFailure is SettingsProjectionException
+            {
+                HasVersion1Backup: true,
+            };
+
+        public Exception? ApplyFailure { get; set; }
+
+        public Exception? DisableFailure { get; set; }
+
+        public bool ReturnTypedDisableFailure { get; set; }
 
         public Exception? LoadFailure { get; set; }
 
-        public SettingsV1? BackupSettings { get; init; }
+        public SettingsV2? BackupSettings { get; set; }
 
-        public bool PersistApplyRequestBeforeFailure { get; init; }
+        public bool PersistApplyRequestBeforeFailure { get; set; }
+
+        public bool BlockFirstApply { get; set; }
+
+        public RuntimeActivationOutcome? NextApplyOutcome { get; set; }
+
+        public TaskCompletionSource FirstApplyEntered { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TaskCompletionSource ReleaseFirstApply { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public int SaveCallCount { get; private set; }
 
-        public int ApplyCallCount { get; private set; }
+        public int ApplyCallCount => Volatile.Read(ref _applyCallCount);
 
         public int RestoreBackupCallCount { get; private set; }
 
-        public SettingsV1? LastSavedSettings { get; private set; }
+        public SettingsV2? LastSavedSettings { get; private set; }
 
-        public Task<SettingsV1> LoadSettingsAsync(
+        public Task<WallpaperWorkspaceState> InitializeAsync(
             CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (LoadFailure is not null)
             {
-                return Task.FromException<SettingsV1>(LoadFailure);
+                return Task.FromException<WallpaperWorkspaceState>(LoadFailure);
             }
 
-            return Task.FromResult(_persistedSettings);
+            PublishWorkspace();
+            return Task.FromResult(Workspace);
         }
 
-        public Task<SettingsV1> SaveSettingsAsync(
-            SettingsV1 settings,
-            CancellationToken cancellationToken = default)
+        public void ReplaceDraft(SettingsV2 draft)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            settings.Validate();
-            SaveCallCount++;
-            LastSavedSettings = settings;
-            _persistedSettings = settings;
-            return Task.FromResult(settings);
+            _workspace.ReplaceDraft(draft);
+            PublishWorkspace();
         }
 
-        public Task<WallpaperApplyResult> ApplyAsync(
-            SettingsV1 settings,
+        public WallpaperProfile CreateProfile(string baseName = "New profile")
+        {
+            var profile = _workspace.CreateProfile(baseName);
+            PublishWorkspace();
+            return profile;
+        }
+
+        public WallpaperProfile DuplicateProfile(
+            Guid profileId,
+            string suffix = "Copy")
+        {
+            var profile = _workspace.DuplicateProfile(profileId, suffix);
+            PublishWorkspace();
+            return profile;
+        }
+
+        public WallpaperProfile RenameProfile(Guid profileId, string name)
+        {
+            var profile = _workspace.RenameProfile(profileId, name);
+            PublishWorkspace();
+            return profile;
+        }
+
+        public void DeleteProfile(
+            Guid profileId,
+            Guid? replacementProfileId = null)
+        {
+            _workspace.DeleteProfile(profileId, replacementProfileId);
+            PublishWorkspace();
+        }
+
+        public void SelectProfile(Guid profileId)
+        {
+            _workspace.SelectProfile(profileId);
+            PublishWorkspace();
+        }
+
+        public MediaReference SelectLocalMedia(
+            Guid profileId,
+            string path,
+            MediaKind mediaKind)
+        {
+            var media = _workspace.SelectLocalMedia(profileId, path, mediaKind);
+            PublishWorkspace();
+            return media;
+        }
+
+        public void ClearMedia(Guid profileId)
+        {
+            _workspace.ClearMedia(profileId);
+            PublishWorkspace();
+        }
+
+        public async Task<WallpaperApplyResult> ApplyAsync(
+            RuntimeLaunchMode launchMode = RuntimeLaunchMode.ManualApply,
             CancellationToken cancellationToken = default)
         {
+            _ = launchMode;
             cancellationToken.ThrowIfCancellationRequested();
-            settings.Validate();
-            ApplyCallCount++;
-            if (PersistApplyRequestBeforeFailure)
+            var call = Interlocked.Increment(ref _applyCallCount);
+            var revision = Interlocked.Increment(ref _nextRevision);
+            var requested = _workspace.CaptureDraft();
+            _workspace.BeginRevision(revision);
+            PublishWorkspace();
+
+            if (call == 1 && BlockFirstApply)
             {
-                _persistedSettings = settings.AddRecentMediaPath(settings.MediaPath!);
+                FirstApplyEntered.TrySetResult();
+                await ReleaseFirstApply.Task.ConfigureAwait(false);
+                var superseded = RuntimeActivationResult.Superseded(
+                    revision,
+                    Workspace.RuntimeSurface,
+                    Workspace.ActiveSnapshot);
+                return new WallpaperApplyResult(
+                    superseded,
+                    Workspace.SavedDesired,
+                    ShortcutReady: false);
+            }
+
+            var saved = PromoteSelectedRecent(requested);
+            if (ApplyFailure is null || PersistApplyRequestBeforeFailure)
+            {
+                CommitSaved(saved, requested, revision);
             }
 
             if (ApplyFailure is not null)
             {
-                return Task.FromException<WallpaperApplyResult>(ApplyFailure);
+                _ = _workspace.SetProgress(
+                    revision,
+                    WallpaperWorkspacePhase.Idle,
+                    WallpaperWorkspaceError.FromException(
+                        PersistApplyRequestBeforeFailure
+                            ? WallpaperWorkspaceErrorStage.Runtime
+                            : WallpaperWorkspaceErrorStage.Preflight,
+                        "apply-failed",
+                        ApplyFailure));
+                PublishWorkspace();
+                return await Task.FromException<WallpaperApplyResult>(
+                    ApplyFailure);
             }
 
-            IsActive = true;
-            _persistedSettings = settings.AddRecentMediaPath(settings.MediaPath!);
-            return Task.FromResult(
-                new WallpaperApplyResult(_persistedSettings, ShortcutReady: true));
+            var requestedOutcome = NextApplyOutcome;
+            NextApplyOutcome = null;
+            if (requestedOutcome == RuntimeActivationOutcome.SavedButNotActivated)
+            {
+                var error = new WallpaperRuntimeError(
+                    "lease-unavailable",
+                    "The saved media could not be acquired for activation.");
+                _ = _workspace.SetRuntimeSurface(
+                    Workspace.RuntimeSurface,
+                    clearActiveSnapshot: false,
+                    revision,
+                    new WallpaperWorkspaceError(
+                        WallpaperWorkspaceErrorStage.Runtime,
+                        error.Code,
+                        error.Message));
+                PublishWorkspace();
+                var inactive = RuntimeActivationResult.SavedButNotActivated(
+                    revision,
+                    Workspace.RuntimeSurface,
+                    Workspace.ActiveSnapshot,
+                    error);
+                return new WallpaperApplyResult(
+                    inactive,
+                    Workspace.SavedDesired,
+                    ShortcutReady: false);
+            }
+
+            if (requestedOutcome == RuntimeActivationOutcome.Failed)
+            {
+                var error = new WallpaperRuntimeError(
+                    "activation-failed",
+                    "The simulated activation failed after injection began.");
+                var faulted = WallpaperRuntimeSurface.Faulted(error);
+                _ = _workspace.SetRuntimeSurface(
+                    faulted,
+                    clearActiveSnapshot: true,
+                    revision,
+                    new WallpaperWorkspaceError(
+                        WallpaperWorkspaceErrorStage.Runtime,
+                        error.Code,
+                        error.Message));
+                PublishWorkspace();
+                var failed = RuntimeActivationResult.Failed(
+                    revision,
+                    faulted,
+                    activeSnapshot: null,
+                    error);
+                return new WallpaperApplyResult(
+                    failed,
+                    Workspace.SavedDesired,
+                    ShortcutReady: false);
+            }
+
+            var selectedMedia = SelectedMedia(saved);
+            RuntimeActivationResult activation;
+            if (selectedMedia is null)
+            {
+                var official = WallpaperRuntimeSurface.Official();
+                _ = _workspace.CommitActive(saved, official, revision);
+                activation = RuntimeActivationResult.Official(
+                    revision,
+                    saved,
+                    official);
+            }
+            else
+            {
+                var active = WallpaperRuntimeSurface.MediaActive(
+                    generation: revision,
+                    selectedMedia.MediaId,
+                    PlaybackOwnershipToken.Create());
+                _ = _workspace.CommitActive(saved, active, revision);
+                activation = RuntimeActivationResult.MediaActive(
+                    revision,
+                    saved,
+                    active);
+            }
+
+            IsPaused = false;
+            PublishWorkspace();
+            return new WallpaperApplyResult(
+                activation,
+                Workspace.SavedDesired,
+                ShortcutReady: true);
+        }
+
+        public void CancelLatestApply() => ReleaseFirstApply.TrySetResult();
+
+        public Task<SettingsV2> SetRiskAcceptanceAsync(
+            bool accepted,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            SaveCallCount++;
+            var saved = (_persistedSettings with
+            {
+                AcceptedCdpRisk = accepted,
+            }).CreateSnapshot();
+            var draft = (Workspace.Draft with
+            {
+                AcceptedCdpRisk = accepted,
+            }).CreateSnapshot();
+            _persistedSettings = saved;
+            LastSavedSettings = saved;
+            _workspace.CommitIndependentSettings(saved, draft);
+            PublishWorkspace();
+            return Task.FromResult(saved);
+        }
+
+        public Task<SettingsV2> RemoveRecentMediaAsync(
+            Guid mediaId,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return SaveRecentsAsync(
+                Workspace.SavedDesired.RecentMediaIds
+                    .Where(id => id != mediaId)
+                    .ToArray());
+        }
+
+        public Task<SettingsV2> ClearRecentMediaAsync(
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return SaveRecentsAsync([]);
         }
 
         public Task SetPausedAsync(
@@ -632,39 +1324,87 @@ public sealed class MainWindowViewModelTests
             CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            IsPaused = paused;
+            IsPaused = IsActive && paused;
             return Task.CompletedTask;
         }
 
-        public Task DisableAsync(CancellationToken cancellationToken = default)
+        public Task<RuntimeActivationResult> RestoreOfficialAsync(
+            CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (DisableFailure is not null)
             {
-                return Task.FromException(DisableFailure);
+                return Task.FromException<RuntimeActivationResult>(
+                    DisableFailure);
             }
 
-            IsActive = false;
+            var revision = Interlocked.Increment(ref _nextRevision);
+            _workspace.BeginRevision(
+                revision,
+                WallpaperWorkspacePhase.RestoringOfficial);
+            if (ReturnTypedDisableFailure)
+            {
+                var error = new WallpaperRuntimeError(
+                    "restore-official-failed",
+                    "Simulated typed restore failure.");
+                var faulted = WallpaperRuntimeSurface.Faulted(error);
+                _ = _workspace.SetRuntimeSurface(
+                    faulted,
+                    clearActiveSnapshot: true,
+                    revision,
+                    new WallpaperWorkspaceError(
+                        WallpaperWorkspaceErrorStage.Cleanup,
+                        error.Code,
+                        error.Message));
+                PublishWorkspace();
+                return Task.FromResult(
+                    RuntimeActivationResult.Failed(
+                        revision,
+                        faulted,
+                        activeSnapshot: null,
+                        error));
+            }
+
+            var official = WallpaperRuntimeSurface.Official();
+            _ = _workspace.SetRuntimeSurface(
+                official,
+                clearActiveSnapshot: true,
+                revision);
             IsPaused = false;
-            return Task.CompletedTask;
+            PublishWorkspace();
+            return Task.FromResult(
+                RuntimeActivationResult.Canceled(
+                    revision,
+                    official,
+                    activeSnapshot: null));
         }
 
-        public Task<SettingsV1> RestoreVersion1BackupAsync(
+        public Task<SettingsV2> RestoreVersion1BackupAsync(
             CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
             RestoreBackupCallCount++;
-            _persistedSettings = BackupSettings ?? SettingsV1.CreateDefault();
+            _persistedSettings =
+                (BackupSettings ?? SettingsV2.CreateDefault()).CreateSnapshot();
+            _workspace = new WallpaperWorkspace(
+                _persistedSettings,
+                WallpaperRuntimeSurface.Official());
             LoadFailure = null;
+            PublishWorkspace();
             return Task.FromResult(_persistedSettings);
         }
 
-        public Task<SettingsV1> ResetWallpaperSettingsAsync(
+        public Task<SettingsV2> ResetWallpaperSettingsAsync(
             CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            _persistedSettings = SettingsV1.CreateDefault();
+            _persistedSettings = SettingsV2.CreateDefault();
+            _workspace = new WallpaperWorkspace(
+                _persistedSettings,
+                WallpaperRuntimeSurface.Official(),
+                _persistedSettings);
             LoadFailure = null;
+            PublishWorkspace();
             return Task.FromResult(_persistedSettings);
         }
 
@@ -675,6 +1415,95 @@ public sealed class MainWindowViewModelTests
             throw new NotSupportedException();
 
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+
+        public void SeedActive(SettingsV2 settings)
+        {
+            var selected = SelectedMedia(settings) ??
+                throw new InvalidOperationException(
+                    "An active test fixture must select media.");
+            var surface = WallpaperRuntimeSurface.MediaActive(
+                generation: 1,
+                selected.MediaId,
+                PlaybackOwnershipToken.Create());
+            _persistedSettings = settings.CreateSnapshot();
+            _workspace = new WallpaperWorkspace(
+                _persistedSettings,
+                surface,
+                _persistedSettings);
+        }
+
+        public void RaiseStatus(WallpaperRuntimePhase phase, long revision) =>
+            StatusChanged?.Invoke(
+                this,
+                new WallpaperRuntimeStatusChangedEventArgs(
+                    phase,
+                    phase.ToString(),
+                    revision));
+
+        public void RaiseWorkspace(WallpaperWorkspaceState workspace) =>
+            WorkspaceChanged?.Invoke(
+                this,
+                new WallpaperWorkspaceStateChangedEventArgs(workspace));
+
+        private void CommitSaved(
+            SettingsV2 saved,
+            SettingsV2 requested,
+            long revision)
+        {
+            SaveCallCount++;
+            _persistedSettings = saved.CreateSnapshot();
+            LastSavedSettings = _persistedSettings;
+            _ = _workspace.CommitSavedDesired(_persistedSettings, revision);
+            if (SettingsV2Comparer.UiDirtyEquals(
+                    Workspace.Draft,
+                    requested))
+            {
+                _workspace.ReplaceDraft(_persistedSettings);
+            }
+
+            PublishWorkspace();
+        }
+
+        private Task<SettingsV2> SaveRecentsAsync(IReadOnlyList<Guid> recents)
+        {
+            SaveCallCount++;
+            var saved = (_persistedSettings with
+            {
+                RecentMediaIds = recents,
+            }).CreateSnapshot();
+            var draft = (Workspace.Draft with
+            {
+                RecentMediaIds = recents,
+            }).CreateSnapshot();
+            _persistedSettings = saved;
+            LastSavedSettings = saved;
+            _workspace.CommitIndependentSettings(saved, draft);
+            PublishWorkspace();
+            return Task.FromResult(saved);
+        }
+
+        private static SettingsV2 PromoteSelectedRecent(SettingsV2 settings)
+        {
+            var mediaId = Global(settings).MediaId;
+            if (mediaId is null)
+            {
+                return settings.CreateSnapshot();
+            }
+
+            return (settings with
+            {
+                RecentMediaIds = new[] { mediaId.Value }
+                    .Concat(
+                        settings.RecentMediaIds.Where(id => id != mediaId.Value))
+                    .Take(SettingsV2.MaximumRecentMediaIds)
+                    .ToArray(),
+            }).CreateSnapshot();
+        }
+
+        private void PublishWorkspace() =>
+            WorkspaceChanged?.Invoke(
+                this,
+                new WallpaperWorkspaceStateChangedEventArgs(Workspace));
     }
 
     private sealed class FakeCapabilityWallpaperApplicationService :
@@ -682,7 +1511,7 @@ public sealed class MainWindowViewModelTests
         IWallpaperApplicationCapabilitySource
     {
         public FakeCapabilityWallpaperApplicationService(
-            SettingsV1 persistedSettings,
+            SettingsV2 persistedSettings,
             WallpaperCompatibilitySnapshot compatibility)
             : base(persistedSettings)
         {
@@ -696,7 +1525,8 @@ public sealed class MainWindowViewModelTests
             remove { }
         }
 
-        public CompatibilityCapabilities Capabilities => Compatibility.Capabilities;
+        public CompatibilityCapabilities Capabilities =>
+            Compatibility.Capabilities;
 
         public WallpaperCompatibilitySnapshot Compatibility { get; }
     }
@@ -752,6 +1582,58 @@ public sealed class MainWindowViewModelTests
 
         public void Dispose()
         {
+        }
+    }
+
+    private sealed class QueuedSynchronizationContext : SynchronizationContext
+    {
+        private readonly Queue<(SendOrPostCallback Callback, object? State)> _pending =
+            new();
+
+        public bool HoldPosts { get; set; }
+
+        public int PendingCount
+        {
+            get
+            {
+                lock (_pending)
+                {
+                    return _pending.Count;
+                }
+            }
+        }
+
+        public override void Post(SendOrPostCallback callback, object? state)
+        {
+            ArgumentNullException.ThrowIfNull(callback);
+            lock (_pending)
+            {
+                if (HoldPosts)
+                {
+                    _pending.Enqueue((callback, state));
+                    return;
+                }
+            }
+
+            callback(state);
+        }
+
+        public void Drain()
+        {
+            HoldPosts = false;
+            while (true)
+            {
+                (SendOrPostCallback Callback, object? State) work;
+                lock (_pending)
+                {
+                    if (!_pending.TryDequeue(out work))
+                    {
+                        return;
+                    }
+                }
+
+                work.Callback(work.State);
+            }
         }
     }
 

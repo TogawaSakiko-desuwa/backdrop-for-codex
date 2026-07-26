@@ -15,15 +15,18 @@ public sealed record RecentMediaItem(
     string Path,
     string DisplayName,
     MediaKind Kind,
-    bool Exists);
+    bool Exists)
+{
+    public Guid MediaId { get; init; }
+}
 
 public sealed record WallpaperSettingsInitializationResult(
-    SettingsV1 Settings,
+    SettingsV2 Settings,
     Exception? Error);
 
 /// <summary>
-/// Owns management-side persisted state: UI preferences, recent media, and the
-/// read-only/recovery state used when Settings V2 cannot be projected safely.
+/// Projects the canonical V2 workspace into settings-management UI state.
+/// Persistence and activation remain serialized by <see cref="IWallpaperApplicationService"/>.
 /// </summary>
 public sealed class SettingsManagementViewModel : ObservableObject, IDisposable
 {
@@ -31,9 +34,10 @@ public sealed class SettingsManagementViewModel : ObservableObject, IDisposable
     private readonly IAppPreferencesStore _preferencesStore;
     private readonly WallpaperEditorViewModel _editor;
     private readonly ISafeMediaPreviewService _previewMedia;
+    private readonly SynchronizationContext? _uiContext;
     private readonly SemaphoreSlim _preferencesMutationGate = new(1, 1);
     private WallpaperConfigurationState _configurationState =
-        WallpaperConfigurationState.FromPersisted(SettingsV1.CreateDefault());
+        WallpaperConfigurationState.FromPersisted(SettingsV2.CreateDefault());
     private AppPreferencesV1 _preferences = AppPreferencesV1.CreateDefault();
     private bool _hasProtectedSettings;
     private bool _hasVersion1Backup;
@@ -50,7 +54,9 @@ public sealed class SettingsManagementViewModel : ObservableObject, IDisposable
             preferencesStore ?? throw new ArgumentNullException(nameof(preferencesStore));
         _editor = editor ?? throw new ArgumentNullException(nameof(editor));
         _previewMedia = previewMedia ?? SafeMediaPreviewService.Shared;
+        _uiContext = SynchronizationContext.Current;
         _editor.DraftChanged += Editor_DraftChanged;
+        _wallpaper.WorkspaceChanged += Wallpaper_WorkspaceChanged;
     }
 
     public ObservableCollection<RecentMediaItem> Recents { get; } = [];
@@ -71,9 +77,9 @@ public sealed class SettingsManagementViewModel : ObservableObject, IDisposable
         }
     }
 
-    public SettingsV1 SavedDesired => ConfigurationState.SavedDesired;
+    public SettingsV2 SavedDesired => ConfigurationState.SavedDesired;
 
-    public SettingsV1? ActiveSnapshot => ConfigurationState.ActiveSnapshot;
+    public SettingsV2? ActiveSnapshot => ConfigurationState.ActiveSnapshot;
 
     public bool IsActive => ConfigurationState.IsRuntimeActive;
 
@@ -110,43 +116,46 @@ public sealed class SettingsManagementViewModel : ObservableObject, IDisposable
         private set => SetProperty(ref _hasVersion1Backup, value);
     }
 
-    public bool SupportsVersion1BackupRestore =>
-        _wallpaper is IWallpaperSettingsRecoveryService;
+    public bool SupportsVersion1BackupRestore
+    {
+        get
+        {
+            _ = _wallpaper;
+            return true;
+        }
+    }
 
-    public void SetPersistedSettings(SettingsV1 settings, bool synchronizeEditor)
+    public void SetPersistedSettings(SettingsV2 settings, bool synchronizeEditor)
     {
         ArgumentNullException.ThrowIfNull(settings);
-
         ConfigurationState =
-            ConfigurationState.WithPersisted(
-                settings,
-                synchronizeDraft: synchronizeEditor);
+            ConfigurationState.WithPersisted(settings, synchronizeEditor);
+        RefreshRecents(settings);
         if (synchronizeEditor)
         {
             ApplySavedSettingsToEditor(settings);
-            return;
         }
-
-        ConfigurationState =
-            ConfigurationState.WithDraft(_editor.ProjectOnto(settings));
     }
 
-    public void ApplySavedSettingsToEditor(SettingsV1 settings)
+    public void ApplySavedSettingsToEditor(SettingsV2 settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
         _editor.ApplySettings(settings);
     }
 
-    public void SetActive(SettingsV1 settings)
+    public void SetActive(SettingsV2 settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
-        ConfigurationState = ConfigurationState.WithActive(settings);
+        ConfigurationState = ConfigurationState.WithActive(
+            settings,
+            _wallpaper.Workspace.RuntimeSurface);
     }
 
-    public void SetRuntimeActivity(bool isActive) =>
-        ConfigurationState = isActive
-            ? ConfigurationState.WithRuntimeActive(isRuntimeActive: true)
-            : ConfigurationState.WithoutActive();
+    public void SetRuntimeActivity(bool isActive)
+    {
+        _ = isActive;
+        SynchronizeWorkspace(_wallpaper.Workspace);
+    }
 
     public async Task LoadPreferencesAsync(CancellationToken cancellationToken)
     {
@@ -211,23 +220,24 @@ public sealed class SettingsManagementViewModel : ObservableObject, IDisposable
         catch (Exception exception)
         {
             SetProtectionFrom(exception);
-            var settings = SettingsV1.CreateDefault();
+            var settings = SettingsV2.CreateDefault();
             RefreshRecents(settings);
             return new WallpaperSettingsInitializationResult(settings, exception);
         }
     }
 
-    public async Task<SettingsV1> LoadWallpaperSettingsAsync(
+    public async Task<SettingsV2> LoadWallpaperSettingsAsync(
         CancellationToken cancellationToken)
     {
         try
         {
-            var settings = await _wallpaper
-                .LoadSettingsAsync(cancellationToken)
+            var workspace = await _wallpaper
+                .InitializeAsync(cancellationToken)
                 .ConfigureAwait(true);
             ClearProtection();
-            RefreshRecents(settings);
-            return settings;
+            HasVersion1Backup = _wallpaper.HasVersion1Backup;
+            SynchronizeWorkspace(workspace);
+            return workspace.SavedDesired;
         }
         catch (Exception exception)
         {
@@ -236,84 +246,69 @@ public sealed class SettingsManagementViewModel : ObservableObject, IDisposable
         }
     }
 
-    public async Task<SettingsV1> SaveRiskAcceptanceAsync(
-        SettingsV1 baseline,
+    public async Task<SettingsV2> SaveRiskAcceptanceAsync(
+        SettingsV2 baseline,
         bool accepted,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(baseline);
-
         return await _wallpaper
-            .SaveSettingsAsync(
-                WallpaperEditorViewModel.ClampLegacyOverlays(baseline) with
-                {
-                    AcceptedCdpRisk = accepted,
-                },
-                cancellationToken)
+            .SetRiskAcceptanceAsync(accepted, cancellationToken)
             .ConfigureAwait(true);
     }
 
-    public async Task<SettingsV1> RemoveRecentAsync(
-        SettingsV1 baseline,
+    public async Task<SettingsV2> RemoveRecentAsync(
+        SettingsV2 baseline,
         string mediaPath,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(baseline);
         ArgumentException.ThrowIfNullOrWhiteSpace(mediaPath);
+        var media = baseline.MediaCatalog.FirstOrDefault(
+            candidate =>
+                string.Equals(
+                    candidate.SourceIdentifier,
+                    Path.GetFullPath(mediaPath),
+                    StringComparison.OrdinalIgnoreCase));
+        if (media is null)
+        {
+            return baseline.CreateSnapshot();
+        }
 
         var saved = await _wallpaper
-            .SaveSettingsAsync(
-                WallpaperEditorViewModel
-                    .ClampLegacyOverlays(baseline)
-                    .RemoveRecentMediaPath(mediaPath),
-                cancellationToken)
+            .RemoveRecentMediaAsync(media.MediaId, cancellationToken)
             .ConfigureAwait(true);
         RefreshRecents(saved);
         return saved;
     }
 
-    public async Task<SettingsV1> ClearRecentsAsync(
-        SettingsV1 baseline,
+    public async Task<SettingsV2> ClearRecentsAsync(
+        SettingsV2 baseline,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(baseline);
-
         var saved = await _wallpaper
-            .SaveSettingsAsync(
-                WallpaperEditorViewModel
-                    .ClampLegacyOverlays(baseline)
-                    .ClearRecentMediaPaths(),
-                cancellationToken)
+            .ClearRecentMediaAsync(cancellationToken)
             .ConfigureAwait(true);
         RefreshRecents(saved);
         return saved;
     }
 
-    public async Task<SettingsV1> ResetWallpaperSettingsAsync(
+    public async Task<SettingsV2> ResetWallpaperSettingsAsync(
         CancellationToken cancellationToken)
     {
-        var saved = _wallpaper is IWallpaperSettingsRecoveryService recovery
-            ? await recovery
-                .ResetWallpaperSettingsAsync(cancellationToken)
-                .ConfigureAwait(true)
-            : await _wallpaper
-                .SaveSettingsAsync(SettingsV1.CreateDefault(), cancellationToken)
-                .ConfigureAwait(true);
+        var saved = await _wallpaper
+            .ResetWallpaperSettingsAsync(cancellationToken)
+            .ConfigureAwait(true);
         ClearProtection();
         RefreshRecents(saved);
         return saved;
     }
 
-    public async Task<SettingsV1> RestoreVersion1BackupAsync(
+    public async Task<SettingsV2> RestoreVersion1BackupAsync(
         CancellationToken cancellationToken)
     {
-        if (_wallpaper is not IWallpaperSettingsRecoveryService recovery)
-        {
-            throw new InvalidOperationException(
-                "The wallpaper settings service does not support V1 backup recovery.");
-        }
-
-        var restored = await recovery
+        var restored = await _wallpaper
             .RestoreVersion1BackupAsync(cancellationToken)
             .ConfigureAwait(true);
         ClearProtection();
@@ -321,19 +316,29 @@ public sealed class SettingsManagementViewModel : ObservableObject, IDisposable
         return restored;
     }
 
-    public void RefreshRecents(SettingsV1 settings)
+    public void RefreshRecents(SettingsV2 settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
-
+        var snapshot = settings.CreateSnapshot();
         Recents.Clear();
-        foreach (var path in settings.RecentMediaPaths.Take(SettingsV1.MaximumRecentMediaPaths))
+        foreach (var mediaId in snapshot.RecentMediaIds.Take(SettingsV2.MaximumRecentMediaIds))
         {
+            var media = snapshot.FindMedia(mediaId);
+            if (media is null)
+            {
+                continue;
+            }
+
+            var path = media.SourceIdentifier;
             Recents.Add(
                 new RecentMediaItem(
                     path,
                     Path.GetFileName(path),
-                    WallpaperEditorViewModel.InferMediaKind(path),
-                    _previewMedia.IsAvailable(path)));
+                    media.LastKnownKind,
+                    _previewMedia.IsAvailable(path))
+                {
+                    MediaId = media.MediaId,
+                });
         }
     }
 
@@ -346,6 +351,8 @@ public sealed class SettingsManagementViewModel : ObservableObject, IDisposable
 
         _isDisposed = true;
         _editor.DraftChanged -= Editor_DraftChanged;
+        _wallpaper.WorkspaceChanged -= Wallpaper_WorkspaceChanged;
+        _preferencesMutationGate.Dispose();
         GC.SuppressFinalize(this);
     }
 
@@ -391,10 +398,66 @@ public sealed class SettingsManagementViewModel : ObservableObject, IDisposable
     private void ClearProtection()
     {
         HasProtectedSettings = false;
-        HasVersion1Backup = false;
+        HasVersion1Backup = _wallpaper.HasVersion1Backup;
     }
 
-    private void Editor_DraftChanged(object? sender, EventArgs eventArgs) =>
-        ConfigurationState =
-            ConfigurationState.WithDraft(_editor.ProjectOnto(SavedDesired));
+    private void Editor_DraftChanged(object? sender, EventArgs eventArgs)
+    {
+        if (_isDisposed || HasProtectedSettings)
+        {
+            return;
+        }
+
+        try
+        {
+            _wallpaper.ReplaceDraft(
+                _editor.ProjectOnto(_wallpaper.Workspace.Draft));
+        }
+        catch (InvalidOperationException)
+        {
+            // Initialization/recovery owns the workspace until a valid V2 document is available.
+        }
+    }
+
+    private void Wallpaper_WorkspaceChanged(
+        object? sender,
+        WallpaperWorkspaceStateChangedEventArgs eventArgs)
+    {
+        if (_isDisposed)
+        {
+            return;
+        }
+
+        if (_uiContext is null || ReferenceEquals(SynchronizationContext.Current, _uiContext))
+        {
+            SynchronizeWorkspace(eventArgs.State);
+            return;
+        }
+
+        _uiContext.Post(
+            static state =>
+            {
+                var payload = (WorkspaceUpdate)state!;
+                if (!payload.Owner._isDisposed)
+                {
+                    payload.Owner.SynchronizeWorkspace(payload.State);
+                }
+            },
+            new WorkspaceUpdate(this, eventArgs.State));
+    }
+
+    private void SynchronizeWorkspace(WallpaperWorkspaceState workspace)
+    {
+        if (!ReferenceEquals(workspace, _wallpaper.Workspace))
+        {
+            return;
+        }
+
+        ConfigurationState = WallpaperConfigurationState.FromWorkspace(workspace);
+        RefreshRecents(workspace.SavedDesired);
+    }
+
+    private sealed record WorkspaceUpdate(
+        SettingsManagementViewModel Owner,
+        WallpaperWorkspaceState State);
 }

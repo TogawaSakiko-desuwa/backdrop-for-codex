@@ -38,6 +38,103 @@ public sealed class PlaybackPoolTests
     }
 
     [Fact]
+    public async Task ActivateOwnedAsyncPublishesCallerOwnership()
+    {
+        var lease = new FakeLease("active", []);
+        var ownership = PlaybackOwnershipToken.Create();
+        await using var pool = new SingleSlotPlaybackPool();
+
+        await pool.ActivateOwnedAsync(lease, ownership);
+
+        Assert.Same(lease, pool.ActiveLease);
+        Assert.Equal(ownership, pool.ActiveOwnership);
+    }
+
+    [Fact]
+    public async Task ReleaseOwnedAsyncDoesNotReleaseANewerOwnersLease()
+    {
+        var first = new FakeLease("first", []);
+        var second = new FakeLease("second", []);
+        var firstOwnership = PlaybackOwnershipToken.Create();
+        var secondOwnership = PlaybackOwnershipToken.Create();
+        await using var pool = new SingleSlotPlaybackPool();
+        await pool.ActivateOwnedAsync(first, firstOwnership);
+        await pool.ActivateOwnedAsync(second, secondOwnership);
+
+        var released = await pool.ReleaseOwnedAsync(firstOwnership);
+
+        Assert.False(released);
+        Assert.Same(second, pool.ActiveLease);
+        Assert.Equal(secondOwnership, pool.ActiveOwnership);
+        Assert.Equal(1, first.DisposeCount);
+        Assert.Equal(0, second.DisposeCount);
+    }
+
+    [Fact]
+    public async Task ReleaseOwnedAsyncReleasesMatchingSlotExactlyOnce()
+    {
+        var lease = new FakeLease("active", []);
+        var ownership = PlaybackOwnershipToken.Create();
+        await using var pool = new SingleSlotPlaybackPool();
+        await pool.ActivateOwnedAsync(lease, ownership);
+
+        var released = await pool.ReleaseOwnedAsync(ownership);
+        var releasedAgain = await pool.ReleaseOwnedAsync(ownership);
+
+        Assert.True(released);
+        Assert.False(releasedAgain);
+        Assert.Null(pool.ActiveLease);
+        Assert.Null(pool.ActiveOwnership);
+        Assert.Equal(1, lease.DisposeCount);
+    }
+
+    [Fact]
+    public async Task QueuedStaleReleaseCannotClearReplacementAfterTransferCompletes()
+    {
+        var first = new BlockingDisposeLease("first");
+        var second = new FakeLease("second", []);
+        var firstOwnership = PlaybackOwnershipToken.Create();
+        var secondOwnership = PlaybackOwnershipToken.Create();
+        await using var pool = new SingleSlotPlaybackPool();
+        await pool.ActivateOwnedAsync(first, firstOwnership);
+
+        var replaceTask = pool
+            .ActivateOwnedAsync(second, secondOwnership)
+            .AsTask();
+        await first.DisposeStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var staleReleaseTask = pool
+            .ReleaseOwnedAsync(firstOwnership)
+            .AsTask();
+
+        first.AllowDispose.TrySetResult();
+
+        await replaceTask.WaitAsync(TimeSpan.FromSeconds(5));
+        var released = await staleReleaseTask.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.False(released);
+        Assert.Same(second, pool.ActiveLease);
+        Assert.Equal(secondOwnership, pool.ActiveOwnership);
+        Assert.Equal(0, second.DisposeCount);
+    }
+
+    [Fact]
+    public async Task OwnedOperationsRejectEmptyOwnership()
+    {
+        var lease = new FakeLease("active", []);
+        await using var pool = new SingleSlotPlaybackPool();
+
+        await Assert.ThrowsAsync<ArgumentException>(
+            () => pool
+                .ActivateOwnedAsync(lease, default)
+                .AsTask());
+        await Assert.ThrowsAsync<ArgumentException>(
+            () => pool
+                .ReleaseOwnedAsync(default)
+                .AsTask());
+        Assert.Null(pool.ActiveLease);
+        Assert.Equal(0, lease.DisposeCount);
+    }
+
+    [Fact]
     public async Task DisposeAsyncReleasesActiveLeaseAndRejectsNewWork()
     {
         var lease = new FakeLease("active", []);
