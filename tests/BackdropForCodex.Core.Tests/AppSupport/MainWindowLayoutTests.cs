@@ -104,18 +104,20 @@ public sealed class MainWindowLayoutTests
                         surfaceBounds.Width / surfaceBounds.Height,
                         precision: 6);
                     AssertRectEqual(cardBounds, surfaceBounds);
+                    var dpi = VisualTreeHelper.GetDpi(window);
+                    const double physicalPixelAllowance = 1.01;
                     Assert.InRange(
                         Math.Abs(
                             (surfaceBounds.Top - hostBounds.Top) -
                             (hostBounds.Bottom - surfaceBounds.Bottom)),
                         0,
-                        1);
+                        physicalPixelAllowance / dpi.DpiScaleY);
                     Assert.InRange(
                         Math.Abs(
                             (surfaceBounds.Left - hostBounds.Left) -
                             (hostBounds.Right - surfaceBounds.Right)),
                         0,
-                        1);
+                        physicalPixelAllowance / dpi.DpiScaleX);
                 }
                 finally
                 {
