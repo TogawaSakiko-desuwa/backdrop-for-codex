@@ -19,117 +19,8 @@ public sealed class MainWindowLayoutTests
         StaTest.Run(
             () =>
             {
-                var fixture = MainWindowViewModelTests.CreateLayoutFixture();
-                MainWindow? window = null;
-
-                try
-                {
-                    window = new MainWindow(
-                        fixture.ViewModel,
-                        fixture.Text,
-                        new DiagnosticReportService())
-                    {
-                        WindowStartupLocation = WindowStartupLocation.Manual,
-                        Left = -10000,
-                        Top = -10000,
-                        ShowActivated = false,
-                    };
-                    window.Show();
-                    window.Width = 2048;
-                    window.Height = 1224;
-                    window.Dispatcher.Invoke(
-                        static () => { },
-                        DispatcherPriority.ApplicationIdle);
-                    window.UpdateLayout();
-
-                    var previewPane = FindElement(window, "PreviewPane");
-                    var previewView = FindElement(window, "PreviewView");
-                    var previewHost = FindElement(previewView, "PreviewHost");
-                    var previewCard = FindElement(previewView, "PreviewCard");
-                    var previewSurface =
-                        FindElement(previewView, "PreviewSurface");
-                    var hostBounds = GetBounds(previewHost, previewPane);
-                    var cardBounds = GetBounds(previewCard, previewPane);
-                    var surfaceBounds =
-                        GetBounds(previewSurface, previewPane);
-                    Assert.True(
-                        hostBounds.Width >= previewPane.ActualWidth * 0.99,
-                        $"PreviewHost width {hostBounds.Width:F2} did not fill " +
-                        $"PreviewPane width {previewPane.ActualWidth:F2}.");
-                    var expectedScale = Math.Min(
-                        hostBounds.Width /
-                        WallpaperPreviewView.PreviewDesignWidth,
-                        hostBounds.Height /
-                        WallpaperPreviewView.PreviewDesignHeight);
-                    Assert.Equal(
-                        WallpaperPreviewView.PreviewDesignWidth *
-                        expectedScale,
-                        surfaceBounds.Width,
-                        precision: 6);
-                    Assert.Equal(
-                        WallpaperPreviewView.PreviewDesignHeight *
-                        expectedScale,
-                        surfaceBounds.Height,
-                        precision: 6);
-                    var hostAspect =
-                        hostBounds.Width / hostBounds.Height;
-                    if (hostAspect >= 16d / 9d)
-                    {
-                        Assert.True(
-                            surfaceBounds.Height >=
-                            hostBounds.Height * 0.99,
-                            $"PreviewSurface height " +
-                            $"{surfaceBounds.Height:F2} left excessive " +
-                            $"vertical space in a {hostAspect:F3}:1 host.");
-                    }
-                    else
-                    {
-                        Assert.True(
-                            surfaceBounds.Width >=
-                            hostBounds.Width * 0.99,
-                            $"PreviewSurface width " +
-                            $"{surfaceBounds.Width:F2} left excessive " +
-                            $"horizontal space in a {hostAspect:F3}:1 host.");
-                    }
-                    Assert.True(
-                        surfaceBounds.Width >=
-                        previewPane.ActualWidth * 0.7,
-                        $"Visible PreviewSurface width " +
-                        $"{surfaceBounds.Width:F2} used only " +
-                        $"{surfaceBounds.Width / previewPane.ActualWidth:P1} " +
-                        $"of PreviewPane width " +
-                        $"{previewPane.ActualWidth:F2}.");
-                    Assert.Equal(
-                        16d / 9d,
-                        surfaceBounds.Width / surfaceBounds.Height,
-                        precision: 6);
-                    AssertRectEqual(cardBounds, surfaceBounds);
-                    var dpi = VisualTreeHelper.GetDpi(window);
-                    const double physicalPixelAllowance = 1.01;
-                    Assert.InRange(
-                        Math.Abs(
-                            (surfaceBounds.Top - hostBounds.Top) -
-                            (hostBounds.Bottom - surfaceBounds.Bottom)),
-                        0,
-                        physicalPixelAllowance / dpi.DpiScaleY);
-                    Assert.InRange(
-                        Math.Abs(
-                            (surfaceBounds.Left - hostBounds.Left) -
-                            (hostBounds.Right - surfaceBounds.Right)),
-                        0,
-                        physicalPixelAllowance / dpi.DpiScaleX);
-                }
-                finally
-                {
-                    if (window is null)
-                    {
-                        fixture.ViewModel.Dispose();
-                    }
-                    else
-                    {
-                        window.CloseForShutdown();
-                    }
-                }
+                AssertPreviewSurfaceLayout(width: 2048, height: 1224);
+                AssertPreviewSurfaceLayout(width: 1200, height: 760);
             });
     }
 
@@ -164,6 +55,155 @@ public sealed class MainWindowLayoutTests
             CultureInfo.InvariantCulture);
 
         Assert.Equal(expectedWidth, Assert.IsType<double>(actual));
+    }
+
+    private static void AssertPreviewSurfaceLayout(
+        double width,
+        double height)
+    {
+        var fixture = MainWindowViewModelTests.CreateLayoutFixture();
+        MainWindow? window = null;
+
+        try
+        {
+            window = new MainWindow(
+                fixture.ViewModel,
+                fixture.Text,
+                new DiagnosticReportService())
+            {
+                WindowStartupLocation = WindowStartupLocation.Manual,
+                Left = -10000,
+                Top = -10000,
+                ShowActivated = false,
+            };
+            window.Show();
+            window.Width = width;
+            window.Height = height;
+            window.Dispatcher.Invoke(
+                static () => { },
+                DispatcherPriority.ApplicationIdle);
+            window.UpdateLayout();
+
+            var previewPane = FindElement(window, "PreviewPane");
+            var previewView = FindElement(window, "PreviewView");
+            var previewHost = FindElement(previewView, "PreviewHost");
+            var previewCard = FindElement(previewView, "PreviewCard");
+            var previewSurface =
+                FindElement(previewView, "PreviewSurface");
+            var hostBounds = GetBounds(previewHost, previewPane);
+            var cardBounds = GetBounds(previewCard, previewPane);
+            var surfaceBounds =
+                GetBounds(previewSurface, previewPane);
+            Assert.True(
+                hostBounds.Width >= previewPane.ActualWidth * 0.99,
+                $"PreviewHost width {hostBounds.Width:F2} did not fill " +
+                $"PreviewPane width {previewPane.ActualWidth:F2}.");
+            var expectedScale = Math.Min(
+                hostBounds.Width /
+                WallpaperPreviewView.PreviewDesignWidth,
+                hostBounds.Height /
+                WallpaperPreviewView.PreviewDesignHeight);
+            Assert.Equal(
+                WallpaperPreviewView.PreviewDesignWidth *
+                expectedScale,
+                surfaceBounds.Width,
+                precision: 6);
+            Assert.Equal(
+                WallpaperPreviewView.PreviewDesignHeight *
+                expectedScale,
+                surfaceBounds.Height,
+                precision: 6);
+            var hostAspect =
+                hostBounds.Width / hostBounds.Height;
+            if (hostAspect >= 16d / 9d)
+            {
+                Assert.True(
+                    surfaceBounds.Height >=
+                    hostBounds.Height * 0.99,
+                    $"PreviewSurface height " +
+                    $"{surfaceBounds.Height:F2} left excessive " +
+                    $"vertical space in a {hostAspect:F3}:1 host.");
+            }
+            else
+            {
+                Assert.True(
+                    surfaceBounds.Width >=
+                    hostBounds.Width * 0.99,
+                    $"PreviewSurface width " +
+                    $"{surfaceBounds.Width:F2} left excessive " +
+                    $"horizontal space in a {hostAspect:F3}:1 host.");
+            }
+            Assert.True(
+                surfaceBounds.Width >=
+                previewPane.ActualWidth * 0.7,
+                $"Visible PreviewSurface width " +
+                $"{surfaceBounds.Width:F2} used only " +
+                $"{surfaceBounds.Width / previewPane.ActualWidth:P1} " +
+                $"of PreviewPane width " +
+                $"{previewPane.ActualWidth:F2}.");
+            Assert.Equal(
+                16d / 9d,
+                surfaceBounds.Width / surfaceBounds.Height,
+                precision: 6);
+            AssertRectEqual(cardBounds, surfaceBounds);
+            AssertVisuallyCentered(
+                hostBounds,
+                surfaceBounds,
+                expectedScale,
+                VisualTreeHelper.GetDpi(window),
+                previewHost.UseLayoutRounding);
+        }
+        finally
+        {
+            if (window is null)
+            {
+                fixture.ViewModel.Dispose();
+            }
+            else
+            {
+                window.CloseForShutdown();
+            }
+        }
+    }
+
+    private static void AssertVisuallyCentered(
+        Rect hostBounds,
+        Rect surfaceBounds,
+        double scale,
+        DpiScale dpi,
+        bool useLayoutRounding)
+    {
+        // FluentWindow enables layout rounding. Viewbox placement can therefore
+        // round once in logical canvas units and once again in device pixels.
+        // A centered surface may move by at most half of each unit.
+        const double floatingPointTolerance = 0.000001;
+        var horizontalOffset = Math.Abs(
+            (surfaceBounds.Left + (surfaceBounds.Width / 2)) -
+            (hostBounds.Left + (hostBounds.Width / 2)));
+        var verticalOffset = Math.Abs(
+            (surfaceBounds.Top + (surfaceBounds.Height / 2)) -
+            (hostBounds.Top + (hostBounds.Height / 2)));
+        var logicalRoundingAllowance = useLayoutRounding ? scale / 2 : 0;
+        var horizontalTolerance = floatingPointTolerance;
+        var verticalTolerance = floatingPointTolerance;
+        if (useLayoutRounding)
+        {
+            horizontalTolerance +=
+                logicalRoundingAllowance + (0.5 / dpi.DpiScaleX);
+            verticalTolerance +=
+                logicalRoundingAllowance + (0.5 / dpi.DpiScaleY);
+        }
+
+        Assert.True(
+            horizontalOffset <= horizontalTolerance,
+            $"PreviewSurface horizontal center offset " +
+            $"{horizontalOffset:F6} exceeded layout-rounding tolerance " +
+            $"{horizontalTolerance:F6}.");
+        Assert.True(
+            verticalOffset <= verticalTolerance,
+            $"PreviewSurface vertical center offset " +
+            $"{verticalOffset:F6} exceeded layout-rounding tolerance " +
+            $"{verticalTolerance:F6}.");
     }
 
     private static FrameworkElement FindElement(
