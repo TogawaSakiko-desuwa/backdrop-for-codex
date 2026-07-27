@@ -4,6 +4,18 @@
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-07-27
+
+### Fixed
+
+- 修复最大化窗口后本地预览只横向拉伸、内部文字与图标不随画布一致缩放的问题。预览改为完整可见的 `960×540`（16:9）逻辑画布，按可用区域严格等比放大并居中，不再形成中央小卡片。
+- 移除预览外层 `Card` 模板造成的内容内缩和底部裁切；媒体、模拟 Codex 界面、焦点与拖放交互层现在共享同一无内边距画布边界。
+- 修复“背景模糊”在本地预览中模糊整张媒体的问题。图片和视频保持清晰，只由一个实时 `VisualBrush` 采样层在左栏、顶栏、消息、输入栏和右栏五个圆角玻璃区域内应用模糊，主题遮罩仍参与采样且不增加第二路视频解码。
+
+### Verification
+
+- 非集成自动化套件扩展到 533 个；新增真实 WPF 窗口布局、普通/最大化/最小尺寸等比缩放、DPI 像素取整、五区玻璃组合和棋盘像素边界测试。Release 重建为 0 警告、0 错误，533 个非集成测试全部通过。
+
 ## [1.4.0] - 2026-07-26
 
 ### Added
@@ -207,7 +219,8 @@
 - 复验完整 MSIX 包名、激活 PID、进程启动时间、Windows 会话和监听器所有权；媒体服务保持已校验文件的只读句柄。
 - 明确禁止 CSP bypass；关闭、更换或 lease 到期时移除媒体 `src`、撤销 `blob:` URL，并仅删除带有本项目 owner/generation 的节点和样式。
 
-[Unreleased]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.4.1...HEAD
+[1.4.1]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.3.5...v1.4.0
 [1.3.5]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.3.4...v1.3.5
 [1.3.4]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.3.3...v1.3.4

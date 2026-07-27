@@ -17,6 +17,9 @@ namespace BackdropForCodex.App.Views;
 
 public sealed partial class WallpaperPreviewView : UserControl
 {
+    internal const double PreviewDesignWidth = 960;
+    internal const double PreviewDesignHeight = 540;
+
     public static readonly DependencyProperty MediaPathProperty =
         DependencyProperty.Register(
             nameof(MediaPath),
@@ -83,6 +86,7 @@ public sealed partial class WallpaperPreviewView : UserControl
     private readonly DispatcherTimer _focusFadeTimer;
     private readonly ISafeMediaPreviewService _previewMedia;
     private ISafeMediaPreviewLease? _previewLease;
+    private bool _glassClipUpdatePending;
     private bool _isDraggingFocus;
     private bool _isThemeSubscribed;
     private bool _mediaRefreshPending;
@@ -104,6 +108,8 @@ public sealed partial class WallpaperPreviewView : UserControl
         _previewMedia =
             previewMedia ?? throw new ArgumentNullException(nameof(previewMedia));
         InitializeComponent();
+        PreviewCard.Width = PreviewDesignWidth;
+        PreviewCard.Height = PreviewDesignHeight;
         _focusFadeTimer = new DispatcherTimer(
             TimeSpan.FromMilliseconds(850),
             DispatcherPriority.Background,
@@ -171,8 +177,8 @@ public sealed partial class WallpaperPreviewView : UserControl
 
     public double SurfaceMinimumHeight
     {
-        get => PreviewSurface.MinHeight;
-        set => PreviewSurface.MinHeight = Math.Max(0, value);
+        get => PreviewHost.MinHeight;
+        set => PreviewHost.MinHeight = Math.Max(0, value);
     }
 
     public void SetDropTargetVisible(bool isVisible) =>
@@ -257,6 +263,7 @@ public sealed partial class WallpaperPreviewView : UserControl
         RefreshMedia();
         UpdatePreviewThemeOverlay();
         SynchronizePreviewPlayback();
+        ScheduleGlassClipUpdate();
     }
 
     private void WallpaperPreviewView_Unloaded(object sender, RoutedEventArgs e)
@@ -356,6 +363,69 @@ public sealed partial class WallpaperPreviewView : UserControl
         {
             DisposePreviewLease(pendingLease);
         }
+    }
+
+    private void PreviewSurface_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        _ = sender;
+        _ = e;
+        ScheduleGlassClipUpdate();
+    }
+
+    private void ScheduleGlassClipUpdate()
+    {
+        if (_glassClipUpdatePending)
+        {
+            return;
+        }
+
+        _glassClipUpdatePending = true;
+        _ = Dispatcher.BeginInvoke(
+            DispatcherPriority.Loaded,
+            () =>
+            {
+                _glassClipUpdatePending = false;
+                UpdateGlassClipGeometry();
+            });
+    }
+
+    private void UpdateGlassClipGeometry()
+    {
+        var geometry = new GeometryGroup
+        {
+            FillRule = FillRule.Nonzero,
+        };
+        Border[] glassSurfaces =
+        [
+            LeftGlassSurface,
+            TopBarGlassSurface,
+            MessageGlassSurface,
+            ComposerGlassSurface,
+            RightGlassSurface,
+        ];
+        foreach (var surface in glassSurfaces)
+        {
+            if (surface.ActualWidth <= 0 || surface.ActualHeight <= 0)
+            {
+                continue;
+            }
+
+            var bounds = surface
+                .TransformToAncestor(PreviewSurface)
+                .TransformBounds(new Rect(surface.RenderSize));
+            var radius = Math.Min(
+                surface.CornerRadius.TopLeft,
+                Math.Min(bounds.Width, bounds.Height) / 2);
+            geometry.Children.Add(
+                new RectangleGeometry(bounds, radius, radius));
+        }
+
+        if (geometry.CanFreeze)
+        {
+            geometry.Freeze();
+        }
+
+        GlassBlurClipHost.Clip = geometry;
     }
 
     private void MediaViewport_SizeChanged(object sender, SizeChangedEventArgs e)

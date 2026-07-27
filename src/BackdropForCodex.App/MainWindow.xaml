@@ -86,6 +86,8 @@
 
         <views:WallpaperPreviewView x:Name="PreviewView"
                                     Grid.Row="0"
+                                    HorizontalAlignment="Stretch"
+                                    VerticalAlignment="Stretch"
                                     MediaPath="{Binding SelectedMediaPath}"
                                     MediaKind="{Binding SelectedMediaKind}"
                                     Fit="{Binding Fit}"

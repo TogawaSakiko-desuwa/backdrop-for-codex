@@ -141,7 +141,7 @@ dotnet test .\BackdropForCodex.slnx `
 dotnet run --project .\src\BackdropForCodex.App\BackdropForCodex.App.csproj
 ```
 
-1.4.0 分支包含 521 个非集成自动化用例。用例数量不等于验证结论；只有实际执行命令并记录结果后才能写作“通过”。需要真实 Edge/CDP、当前机器 Codex、交互式通知区域或 UI Automation 的环境测试，缺少先决条件或未执行时必须逐项记录为“未验证”，不得计入通过数。
+1.4.1 分支包含 533 个非集成自动化用例。用例数量不等于验证结论；只有实际执行命令并记录结果后才能写作“通过”。需要真实 Edge/CDP、当前机器 Codex、交互式通知区域或 UI Automation 的环境测试，缺少先决条件或未执行时必须逐项记录为“未验证”，不得计入通过数。
 
 发布参数、格式检查、DCO 和安全实现约束见[贡献指南](CONTRIBUTING.md)；并发 checkpoint、集成测试和通知区域冒烟测试见[测试说明](tests/README.md)。
 

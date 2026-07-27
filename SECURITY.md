@@ -2,7 +2,7 @@
 
 Backdrop for Codex 会连接高权限的本地调试接口。请先阅读[威胁模型](THREAT_MODEL.md)，不要把“仅回环”理解为完整隔离。
 
-当前安全基线为 1.4.0 Stable（2026-07-26）。设置 schema 继续为 2；多方案 V2 Workspace、latest-wins actor、播放槽所有权 token 和类型化 runtime surface 属于并发与资源所有权加固，不放宽既有包、进程、会话、回环 CDP、唯一页面或版本无关结构契约验证。
+当前安全基线为 1.4.1 Stable（2026-07-27）。设置 schema 继续为 2；多方案 V2 Workspace、latest-wins actor、播放槽所有权 token 和类型化 runtime surface 属于并发与资源所有权加固，不放宽既有包、进程、会话、回环 CDP、唯一页面或版本无关结构契约验证。
 
 ## 支持的版本
 

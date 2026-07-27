@@ -154,7 +154,7 @@ dotnet test .\BackdropForCodex.slnx `
 dotnet run --project .\src\BackdropForCodex.App\BackdropForCodex.App.csproj
 ```
 
-The 1.4.0 line contains 521 non-integration automated cases. A test count is not a verification result: only an actual recorded run may be reported as passed. Environment-dependent Edge/CDP, current-machine Codex identity, notification-area, and UI Automation checks must be recorded individually as **not verified** when they were not run or their prerequisites were unavailable. They must never be counted as passed by omission.
+The 1.4.1 line contains 533 non-integration automated cases. A test count is not a verification result: only an actual recorded run may be reported as passed. Environment-dependent Edge/CDP, current-machine Codex identity, notification-area, and UI Automation checks must be recorded individually as **not verified** when they were not run or their prerequisites were unavailable. They must never be counted as passed by omission.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for publish parameters, formatting, DCO, and implementation constraints. See [tests/README.md](tests/README.md) for concurrency checkpoints, integration tests, and the notification-area smoke test.
 

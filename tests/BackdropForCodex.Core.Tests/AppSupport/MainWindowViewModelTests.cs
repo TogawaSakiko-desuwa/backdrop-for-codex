@@ -909,6 +909,18 @@ public sealed class MainWindowViewModelTests
             new StubErrorMapper(),
             new FallbackTextProvider());
 
+    internal static (MainWindowViewModel ViewModel, IAppTextProvider Text)
+        CreateLayoutFixture()
+    {
+        var text = new FallbackTextProvider();
+        var viewModel = new MainWindowViewModel(
+            new FakeWallpaperApplicationService(SettingsV2.CreateDefault()),
+            new FakeAppPreferencesStore(),
+            new StubErrorMapper(),
+            text);
+        return (viewModel, text);
+    }
+
     private static SettingsV2 CreateSettings(
         string? selectedMediaPath = null,
         MediaKind selectedMediaKind = MediaKind.None,
