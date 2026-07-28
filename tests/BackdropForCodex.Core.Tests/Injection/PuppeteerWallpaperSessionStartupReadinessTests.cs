@@ -39,7 +39,7 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
             pagePath,
             """
             <!doctype html>
-            <html>
+            <html class="electron-dark">
               <head>
                 <meta charset="utf-8">
                 <title>Codex</title>
@@ -279,7 +279,7 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
             pagePath,
             """
             <!doctype html>
-            <html>
+            <html class="electron-dark">
               <head>
                 <meta charset="utf-8">
                 <title>Codex</title>
@@ -364,6 +364,334 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
 
     [IntegrationFact(OptInVariable)]
     [Trait("Category", "Integration")]
+    public async Task ApplyAsync_LightThemeGlassSurfacesMeetWcagContrast_WhenOptedIn()
+    {
+        var edgePath = FindEdge();
+        var port = ReserveLoopbackPort();
+        var testDirectory = Path.Combine(
+            Path.GetTempPath(),
+            "BackdropForCodex.LightThemeContrast",
+            Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(testDirectory);
+        var pagePath = Path.Combine(testDirectory, "index.html");
+        var mediaPath = Path.Combine(testDirectory, "black-wallpaper.png");
+        await File.WriteAllTextAsync(
+            pagePath,
+            """
+            <!doctype html>
+            <html class="electron-light"
+                  style="--color-token-main-surface-primary: rgb(246 240 232)">
+              <head>
+                <meta charset="utf-8">
+                <title>Codex</title>
+                <style>
+                  :root {
+                    color: rgb(26 26 31);
+                    color-scheme: light;
+                  }
+                  html, body {
+                    width: 100%;
+                    height: 100%;
+                    margin: 0;
+                    background: transparent;
+                  }
+                  #root {
+                    min-height: 100%;
+                  }
+                  .contrast-surface {
+                    position: fixed;
+                    width: 200px;
+                    height: 112px;
+                  }
+                  #contrast-sidebar {
+                    top: 24px;
+                    left: 24px;
+                  }
+                  #contrast-header {
+                    top: 24px;
+                    left: 248px;
+                  }
+                  #settings-layout {
+                    position: fixed;
+                    top: 160px;
+                    left: 24px;
+                    width: 200px;
+                    height: 112px;
+                  }
+                  #settings-navigation {
+                    display: none;
+                  }
+                  #settings-layout > main,
+                  #settings-content-boundary,
+                  #settings-content-viewport,
+                  #settings-content-frame,
+                  #settings-flex-boundary,
+                  #settings-size-boundary,
+                  #settings-visible-boundary,
+                  #settings-canvas {
+                    width: 100%;
+                    height: 100%;
+                  }
+                  #settings-canvas {
+                    position: relative;
+                  }
+                  #contrast-activity {
+                    top: 160px;
+                    left: 248px;
+                  }
+                  .contrast-pair {
+                    position: absolute;
+                    top: 36px;
+                    left: 52px;
+                    display: flex;
+                    gap: 24px;
+                  }
+                  .contrast-foreground,
+                  .contrast-background {
+                    width: 24px;
+                    height: 24px;
+                  }
+                  .contrast-foreground {
+                    background: currentColor;
+                  }
+                  .contrast-background {
+                    background: transparent;
+                  }
+                </style>
+              </head>
+              <body>
+                <div id="root">
+                  <aside id="contrast-sidebar" class="contrast-surface">
+                    <div class="contrast-pair">
+                      <div class="contrast-foreground"></div>
+                      <div class="contrast-background"></div>
+                    </div>
+                  </aside>
+                  <header id="contrast-header"
+                          class="app-header-tint contrast-surface">
+                    <div class="contrast-pair">
+                      <div class="contrast-foreground"></div>
+                      <div class="contrast-background"></div>
+                    </div>
+                  </header>
+                  <div class="app-header-tint"
+                       data-app-shell-header-edge-scroll="false"></div>
+                  <main role="main">
+                    <div class="app-shell-main-content-viewport"
+                         data-app-shell-main-content-layout="default"></div>
+                    <div id="settings-layout"
+                         class="relative isolate flex max-h-full min-h-0 w-full flex-1">
+                      <aside id="settings-navigation" class="app-shell-left-panel">
+                        <button data-settings-panel-slug="general"></button>
+                      </aside>
+                      <main id="settings-outer-main"
+                            class="main-surface relative isolate flex min-h-0 flex-1 flex-col">
+                        <div id="settings-content-boundary"
+                             class="relative isolate flex min-h-0 flex-1 overflow-hidden">
+                          <div id="settings-content-viewport"
+                               class="app-shell-main-content-viewport relative flex min-h-0 min-w-0 flex-col flex-1">
+                            <div id="settings-content-frame"
+                                 class="app-shell-main-content-frame relative flex min-h-0 flex-1 flex-col">
+                              <div id="settings-flex-boundary"
+                                   class="relative flex min-h-0 flex-1">
+                                <div id="settings-size-boundary"
+                                     class="h-full min-h-0 min-w-0 flex-1">
+                                  <div id="settings-visible-boundary"
+                                       class="h-full min-w-0 overflow-visible">
+                                    <div id="settings-canvas"
+                                         class="main-surface flex h-full min-h-0 flex-col">
+                                      <div class="contrast-pair">
+                                        <div class="contrast-foreground"></div>
+                                        <div class="contrast-background"></div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </main>
+                    </div>
+                    <div id="contrast-activity"
+                         class="contrast-surface"
+                         data-local-conversation-item-target-ids="activity">
+                      <div class="contrast-pair">
+                        <div class="contrast-foreground"></div>
+                        <div class="contrast-background"></div>
+                      </div>
+                    </div>
+                  </main>
+                </div>
+              </body>
+            </html>
+            """);
+        await WriteTestPngAsync(mediaPath);
+
+        Process? edge = null;
+        IBrowser? browser = null;
+        await using var session = new PuppeteerWallpaperSession();
+        try
+        {
+            edge = Process.Start(CreateEdgeStartInfo(edgePath, port, testDirectory, pagePath));
+            Assert.NotNull(edge);
+
+            var endpoint = await WaitForEndpointAsync(port, pagePath, TimeSpan.FromSeconds(8));
+            browser = await Puppeteer.ConnectAsync(new ConnectOptions
+            {
+                BrowserWSEndpoint = endpoint.BrowserWebSocketUri.AbsoluteUri,
+                DefaultViewport = null,
+                ProtocolTimeout = 5_000,
+                AcceptInsecureCerts = false,
+                NetworkEnabled = false,
+            });
+            var reviewedTarget = Assert.Single(endpoint.InjectableTargets);
+            var pages = await browser.PagesAsync(includeAll: true);
+            var page = Assert.Single(
+                pages,
+                candidate =>
+                    !candidate.IsClosed &&
+                    Uri.TryCreate(candidate.Url, UriKind.Absolute, out var candidateUri) &&
+                    VerifiedCodexPageSelector.IsSameReviewedDocument(
+                        candidateUri,
+                        reviewedTarget.Url));
+            await page.SetViewportAsync(new ViewPortOptions
+            {
+                Width = 960,
+                Height = 600,
+                DeviceScaleFactor = 1,
+            });
+
+            var baseline = await CaptureFinalRasterContrastAsync(
+                page,
+                "pre-injection:.electron-light");
+            AssertReadableContrastSamples(baseline);
+            Assert.False(await page.EvaluateExpressionAsync<bool>(
+                $"Boolean(document.querySelector('#{InjectionScriptBuilder.RootElementId}'))"));
+
+            var options = new WallpaperInjectionOptions(
+                generation: 1,
+                source: new Uri("http://127.0.0.1:9/black-wallpaper.png"),
+                localMediaPath: mediaPath,
+                expectedContentLength: new FileInfo(mediaPath).Length,
+                WallpaperMediaKind.Image,
+                objectFit: WallpaperObjectFit.Cover,
+                mediaOpacity: 1,
+                glass: new GlassEffectOptions(opacity: 0.60),
+                composition: new WallpaperCompositionOptions(
+                    darkOverlay: 0,
+                    lightOverlay: 0));
+
+            await session.ApplyAsync(endpoint, options);
+
+            async Task<RasterContrastSample[]> CaptureThemeAsync(
+                string marker,
+                string? className,
+                string? dataTheme,
+                bool isLight,
+                string? surfaceToken)
+            {
+                await SetRootThemeAsync(
+                    page,
+                    className,
+                    dataTheme,
+                    isLight,
+                    surfaceToken);
+                var samples = await CaptureFinalRasterContrastAsync(page, marker);
+                AssertReadableContrastSamples(samples);
+                Assert.Equal(
+                    1,
+                    await page.EvaluateExpressionAsync<long>(
+                        $"Number(document.querySelector('#{InjectionScriptBuilder.RootElementId}')?.dataset.codexWallpaperGeneration ?? 0)"));
+                return samples;
+            }
+
+            var lightClass = await CaptureThemeAsync(
+                ".light",
+                "light",
+                dataTheme: null,
+                isLight: true,
+                surfaceToken: "rgb(246 240 232)");
+            AssertSurfaceRaster(
+                lightClass,
+                glassRgb: [148, 144, 139],
+                activityRgb: [143, 139, 135]);
+
+            var electronLight = await CaptureThemeAsync(
+                ".electron-light",
+                "electron-light",
+                dataTheme: null,
+                isLight: true,
+                surfaceToken: "rgb(246 240 232)");
+            AssertSurfaceRaster(
+                electronLight,
+                glassRgb: [148, 144, 139],
+                activityRgb: [143, 139, 135]);
+
+            var dataThemeLight = await CaptureThemeAsync(
+                "[data-theme=light]",
+                className: null,
+                dataTheme: "light",
+                isLight: true,
+                surfaceToken: "rgb(246 240 232)");
+            AssertSurfaceRaster(
+                dataThemeLight,
+                glassRgb: [148, 144, 139],
+                activityRgb: [143, 139, 135]);
+
+            var electronDark = await CaptureThemeAsync(
+                ".electron-dark",
+                "electron-dark",
+                dataTheme: null,
+                isLight: false,
+                surfaceToken: "rgb(24 24 24)");
+            AssertSurfaceRaster(
+                electronDark,
+                glassRgb: [10, 11, 14],
+                activityRgb: [9, 10, 14]);
+
+            var lightAfterDark = await CaptureThemeAsync(
+                ".light-after-dark",
+                "light",
+                dataTheme: null,
+                isLight: true,
+                surfaceToken: "rgb(246 240 232)");
+            AssertSurfaceRaster(
+                lightAfterDark,
+                glassRgb: [148, 144, 139],
+                activityRgb: [143, 139, 135]);
+
+            var missingToken = await CaptureThemeAsync(
+                ".electron-light:missing-token",
+                "electron-light",
+                dataTheme: null,
+                isLight: true,
+                surfaceToken: null);
+            AssertSurfaceRaster(
+                missingToken,
+                glassRgb: [153, 153, 153],
+                activityRgb: [148, 148, 148]);
+        }
+        finally
+        {
+            browser?.Disconnect();
+            await session.StopAsync();
+            if (edge is { HasExited: false })
+            {
+                edge.Kill(entireProcessTree: true);
+                await edge.WaitForExitAsync();
+            }
+
+            edge?.Dispose();
+            if (Directory.Exists(testDirectory))
+            {
+                await DeleteDirectoryWithRetryAsync(testDirectory);
+            }
+        }
+    }
+
+    [IntegrationFact(OptInVariable)]
+    [Trait("Category", "Integration")]
     public async Task ApplyAsync_ReportsSuccessOnlyAfterCspRestrictedLoopbackImageLoads_WhenOptedIn()
     {
         var edgePath = FindEdge();
@@ -380,7 +708,7 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
             pagePath,
             """
             <!doctype html>
-            <html>
+            <html class="electron-dark">
               <head>
                 <meta charset="utf-8">
                 <meta http-equiv="Content-Security-Policy"
@@ -555,6 +883,176 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
                 await DeleteDirectoryWithRetryAsync(testDirectory);
             }
         }
+    }
+
+    private static Task<bool> SetRootThemeAsync(
+        IPage page,
+        string? className,
+        string? dataTheme,
+        bool isLight,
+        string? surfaceToken)
+    {
+        var serializedClassName = JsonSerializer.Serialize(className);
+        var serializedDataTheme = JsonSerializer.Serialize(dataTheme);
+        var serializedSurfaceToken = JsonSerializer.Serialize(surfaceToken);
+        var serializedForeground = JsonSerializer.Serialize(
+            isLight ? "rgb(26 26 31)" : "rgb(245 245 245)");
+        var serializedColorScheme = JsonSerializer.Serialize(isLight ? "light" : "dark");
+        return page.EvaluateExpressionAsync<bool>(
+            $$"""
+            (() => {
+              const root = document.documentElement;
+              root.classList.remove(
+                "light",
+                "electron-light",
+                "dark",
+                "electron-dark"
+              );
+              root.removeAttribute("data-theme");
+              const className = {{serializedClassName}};
+              const dataTheme = {{serializedDataTheme}};
+              const surfaceToken = {{serializedSurfaceToken}};
+              if (className) root.classList.add(className);
+              if (dataTheme) root.dataset.theme = dataTheme;
+              root.style.color = {{serializedForeground}};
+              root.style.colorScheme = {{serializedColorScheme}};
+              if (surfaceToken) {
+                root.style.setProperty(
+                  "--color-token-main-surface-primary",
+                  surfaceToken
+                );
+              } else {
+                root.style.removeProperty("--color-token-main-surface-primary");
+              }
+              return true;
+            })()
+            """);
+    }
+
+    private static async Task<RasterContrastSample[]> CaptureFinalRasterContrastAsync(
+        IPage page,
+        string marker)
+    {
+        await page.EvaluateExpressionAsync<bool>(
+            """
+            new Promise(resolve => requestAnimationFrame(
+              () => requestAnimationFrame(() => resolve(true))))
+            """);
+        var screenshot = await page.ScreenshotBase64Async(new ScreenshotOptions
+        {
+            Type = ScreenshotType.Png,
+            CaptureBeyondViewport = false,
+        });
+        var imageSource = JsonSerializer.Serialize($"data:image/png;base64,{screenshot}");
+        var serializedMarker = JsonSerializer.Serialize(marker);
+        return await page.EvaluateExpressionAsync<RasterContrastSample[]>(
+            $$"""
+            (async () => {
+              const image = new Image();
+              image.src = {{imageSource}};
+              await image.decode();
+              const canvas = document.createElement("canvas");
+              canvas.width = image.naturalWidth;
+              canvas.height = image.naturalHeight;
+              const context = canvas.getContext("2d", { willReadFrequently: true });
+              if (!context) throw new Error("Screenshot canvas context is unavailable.");
+              context.drawImage(image, 0, 0);
+              const sample = (surface, selector) => {
+                const element = document.querySelector(
+                  `#${surface} ${selector}`
+                );
+                if (!element) {
+                  throw new Error(
+                    `Missing contrast fixture: ${surface} ${selector}`
+                  );
+                }
+                const bounds = element.getBoundingClientRect();
+                const x = Math.floor(bounds.left + bounds.width / 2);
+                const y = Math.floor(bounds.top + bounds.height / 2);
+                return Array.from(context.getImageData(x, y, 1, 1).data)
+                  .slice(0, 3);
+              };
+              return [
+                ["contrast-sidebar", "sidebar"],
+                ["contrast-header", "header"],
+                ["settings-canvas", "settings"],
+                ["contrast-activity", "activity"]
+              ].map(([id, surface]) => ({
+                marker: {{serializedMarker}},
+                surface,
+                foreground: sample(id, ".contrast-foreground"),
+                background: sample(id, ".contrast-background")
+              }));
+            })()
+            """);
+    }
+
+    private static void AssertReadableContrastSamples(RasterContrastSample[] samples)
+    {
+        Assert.Equal(4, samples.Length);
+        Assert.All(samples, AssertWcagNormalTextContrast);
+    }
+
+    private static void AssertSurfaceRaster(
+        RasterContrastSample[] samples,
+        int[] glassRgb,
+        int[] activityRgb)
+    {
+        foreach (var sample in samples)
+        {
+            var expected = string.Equals(
+                sample.Surface,
+                "activity",
+                StringComparison.Ordinal)
+                ? activityRgb
+                : glassRgb;
+            Assert.Equal(3, sample.Background.Length);
+            Assert.True(
+                sample.Background
+                    .Select((channel, index) => Math.Abs(channel - expected[index]))
+                    .All(delta => delta <= 2),
+                $"marker={sample.Marker}; surface={sample.Surface}; " +
+                $"expected-background=rgb({string.Join(' ', expected)}); " +
+                $"actual-background=rgb({string.Join(' ', sample.Background)}); " +
+                $"foreground=rgb({string.Join(' ', sample.Foreground)}); " +
+                $"ratio={CalculateWcagContrast(sample.Foreground, sample.Background):F2}; " +
+                "rgb-tolerance=2");
+        }
+    }
+
+    private static void AssertWcagNormalTextContrast(RasterContrastSample sample)
+    {
+        var ratio = CalculateWcagContrast(sample.Foreground, sample.Background);
+        Assert.True(
+            ratio >= 4.5,
+            $"marker={sample.Marker}; surface={sample.Surface}; " +
+            $"foreground=rgb({string.Join(' ', sample.Foreground)}); " +
+            $"background=rgb({string.Join(' ', sample.Background)}); " +
+            $"ratio={ratio:F2}; required=4.50");
+    }
+
+    private static double CalculateWcagContrast(int[] foreground, int[] background)
+    {
+        static double Luminance(int[] rgb)
+        {
+            static double Linearize(int channel)
+            {
+                var value = channel / 255d;
+                return value <= 0.04045
+                    ? value / 12.92
+                    : Math.Pow((value + 0.055) / 1.055, 2.4);
+            }
+
+            return
+                (0.2126 * Linearize(rgb[0])) +
+                (0.7152 * Linearize(rgb[1])) +
+                (0.0722 * Linearize(rgb[2]));
+        }
+
+        var foregroundLuminance = Luminance(foreground);
+        var backgroundLuminance = Luminance(background);
+        return (Math.Max(foregroundLuminance, backgroundLuminance) + 0.05) /
+            (Math.Min(foregroundLuminance, backgroundLuminance) + 0.05);
     }
 
     private static MediaReference CreateLocalMediaReference(string mediaPath) => new()
@@ -2405,6 +2903,12 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
         string DisabledBackdropFilter,
         string UnrelatedBackdropFilter,
         string ListBackdropFilter);
+
+    private sealed record RasterContrastSample(
+        string Marker,
+        string Surface,
+        int[] Foreground,
+        int[] Background);
 
     private sealed record ConversationSurfaceRendering(
         string Background,
