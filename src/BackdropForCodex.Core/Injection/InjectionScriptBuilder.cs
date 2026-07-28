@@ -187,6 +187,15 @@ public static class InjectionScriptBuilder
                     z-index: 1;
                     background: transparent !important;
                   }
+                  /*
+                   * Electron mounts browser guests beside #root. Keep both the current host
+                   * and its legacy predecessor above the app stacking context without
+                   * changing guest rendering, visibility, or input behavior.
+                   */
+                  body > [data-browser-sidebar-webview-host-root],
+                  body > [data-browser-sidebar-webview][data-app-shell-focus-area] {
+                    z-index: 2 !important;
+                  }
                   body main {
                     background: transparent !important;
                     -webkit-backdrop-filter: none !important;
@@ -208,17 +217,17 @@ public static class InjectionScriptBuilder
                     backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
                   }
                   /*
-                   * Plugin browse owns an opaque sticky search shell. Glass only that
-                   * reviewed shell; plugin cards and controls retain their theme surfaces.
+                   * Plugin browse keeps its search control surfaced, but the full-width
+                   * sticky shell and its 32px fade must not form a second dark band.
                    */
                   {{glassBodySelector}} [class~="sticky"][class~="z-30"][class~="bg-token-main-surface-primary"]:has([id="plugins-page-search"]) {
-                    background-color: var(--codex-wallpaper-glass) !important;
-                    -webkit-backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
-                    backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
-                    border-color: var(--codex-wallpaper-border);
+                    background-color: transparent !important;
+                    -webkit-backdrop-filter: none !important;
+                    backdrop-filter: none !important;
+                    border-color: transparent;
                   }
                   {{glassBodySelector}} [class~="sticky"][class~="z-30"][class~="bg-token-main-surface-primary"]:has([id="plugins-page-search"])::after {
-                    background-image: linear-gradient(to bottom, var(--codex-wallpaper-glass), transparent) !important;
+                    background-image: none !important;
                   }
                   /*
                    * Scheduled tasks keeps its search control surfaced, but the full-width
@@ -320,6 +329,22 @@ public static class InjectionScriptBuilder
                     -webkit-backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
                     backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
                     border-color: var(--codex-wallpaper-border);
+                  }
+                  /*
+                   * Keyboard shortcuts reuses the shared sticky search shell. Require the
+                   * active settings route and its text search before clearing only that shell;
+                   * the search control, shortcut rows, and capture controls remain native.
+                   */
+                  {{glassBodySelector}}:has([class~="app-shell-left-panel"] [data-settings-panel-slug="keyboard-shortcuts"][aria-current="page"])
+                    [class~="sticky"][class~="z-30"][class~="bg-token-main-surface-primary"]:has(input[type="text"]) {
+                    background-color: transparent !important;
+                    -webkit-backdrop-filter: none !important;
+                    backdrop-filter: none !important;
+                    border-color: transparent;
+                  }
+                  {{glassBodySelector}}:has([class~="app-shell-left-panel"] [data-settings-panel-slug="keyboard-shortcuts"][aria-current="page"])
+                    [class~="sticky"][class~="z-30"][class~="bg-token-main-surface-primary"]:has(input[type="text"])::after {
+                    background-image: none !important;
                   }
                   /* codex-wallpaper-glass:end */
                   /*
@@ -430,6 +455,9 @@ public static class InjectionScriptBuilder
                     background-image: none !important;
                   }
                   {{advancedBodySelector}} main [data-response-annotation-conversation][data-response-annotation-target],
+                  {{advancedBodySelector}} main [data-content-search-unit-key]
+                    > h4[class~="sr-only"][class~="select-none"]
+                    + div[class~="group"][class~="flex"][class~="min-w-0"][class~="flex-col"]:not([data-response-annotation-target]):has(> [data-selected-text-overlay-target]),
                   {{advancedBodySelector}} main [data-user-message-bubble="true"] {
                     background-color: var(--codex-wallpaper-glass) !important;
                     -webkit-backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
@@ -439,7 +467,10 @@ public static class InjectionScriptBuilder
                     box-sizing: border-box;
                     box-shadow: 0 8px 28px rgb(0 0 0 / 0.18);
                   }
-                  {{advancedBodySelector}} main [data-response-annotation-conversation][data-response-annotation-target] {
+                  {{advancedBodySelector}} main [data-response-annotation-conversation][data-response-annotation-target],
+                  {{advancedBodySelector}} main [data-content-search-unit-key]
+                    > h4[class~="sr-only"][class~="select-none"]
+                    + div[class~="group"][class~="flex"][class~="min-w-0"][class~="flex-col"]:not([data-response-annotation-target]):has(> [data-selected-text-overlay-target]) {
                     padding: 12px 16px;
                   }
                   {{advancedBodySelector}} main [data-local-conversation-item-target-ids] {

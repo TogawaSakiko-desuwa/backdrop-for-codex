@@ -141,12 +141,45 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
 
             var conversation = await AddConversationAndReadRenderingAsync(endpoint);
 
-            Assert.NotEqual("rgba(0, 0, 0, 0)", conversation.AssistantBackground);
+            AssertReadableConversationSurface(conversation.AnnotatedAssistant);
+            AssertReadableConversationSurface(conversation.ChatGptAssistant);
+            AssertReadableConversationSurface(conversation.RebuiltAnnotatedAssistant);
             Assert.NotEqual("rgba(0, 0, 0, 0)", conversation.UserBackground);
             Assert.NotEqual("rgba(0, 0, 0, 0)", conversation.ActivityBackground);
-            Assert.NotEqual("0px", conversation.AssistantBorderWidth);
             Assert.NotEqual("0px", conversation.UserBorderWidth);
-            Assert.NotEqual("none", conversation.AssistantBackdropFilter);
+            Assert.Equal("rgba(0, 0, 0, 0)", conversation.NearMissBackground);
+            Assert.Equal("0px", conversation.NearMissBorderWidth);
+            Assert.Equal("none", conversation.NearMissBackdropFilter);
+            Assert.Equal(
+                ["codex", "chatgpt", "codex-rebuilt"],
+                conversation.SpaReplacements.Select(replacement => replacement.Name));
+            Assert.All(
+                conversation.SpaReplacements,
+                replacement =>
+                {
+                    Assert.Equal(1, replacement.Generation);
+                    Assert.Equal(1, replacement.OwnedStyleCount);
+                    Assert.True(replacement.StyleElementPreserved);
+                    Assert.True(replacement.VisualSentinelMatches);
+                });
+
+            var browserPortal = await AddBrowserPortalHostsAndReadRenderingAsync(endpoint);
+
+            Assert.Equal("0", browserPortal.WallpaperRootZIndex);
+            Assert.Equal("1", browserPortal.AppRootZIndex);
+            AssertForegroundBrowserPortal(browserPortal.Modern);
+            AssertForegroundBrowserPortal(browserPortal.Legacy);
+            Assert.Equal("2", browserPortal.Hidden.HostZIndex);
+            Assert.Equal("fixed", browserPortal.Hidden.HostPosition);
+            Assert.Equal("none", browserPortal.Hidden.HostPointerEvents);
+            Assert.Equal("hidden", browserPortal.Hidden.HostVisibility);
+            Assert.Equal("rgb(52, 53, 54)", browserPortal.Hidden.ContentBackground);
+            Assert.Equal("auto", browserPortal.Hidden.ContentPointerEvents);
+            Assert.False(browserPortal.Hidden.ContentIsTopmost);
+            Assert.True(browserPortal.Hidden.RootProbeIsTopmost);
+            Assert.Equal(1, browserPortal.Hidden.Generation);
+            Assert.Equal(1, browserPortal.Hidden.OwnedStyleCount);
+            Assert.True(browserPortal.Hidden.StyleElementPreserved);
 
             var shellSurfaces = await AddShellSurfacesAndReadRenderingAsync(endpoint);
             var launcher = shellSurfaces.EmptyLauncher;
@@ -662,29 +695,292 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
                         reviewedTarget.Url));
 
             return await page.EvaluateExpressionAsync<ConversationRendering>(
-                """
-                (() => {
+                $$"""
+                (async () => {
                   const main = document.querySelector("main");
                   if (!main) throw new Error("Missing fixture main element.");
+                  const ownedStyle = document.querySelector(
+                    "#{{InjectionScriptBuilder.StyleElementId}}"
+                  );
+                  if (!ownedStyle) throw new Error("Missing owned wallpaper style.");
 
-                  const assistant = document.createElement("div");
-                  assistant.dataset.responseAnnotationConversation = "conversation";
-                  assistant.dataset.responseAnnotationTarget = "message";
+                  const fixtureHost = document.createElement("section");
+                  fixtureHost.id = "conversation-swap-fixture";
+                  main.append(fixtureHost);
+                  const paint = () => new Promise(resolve => requestAnimationFrame(
+                    () => requestAnimationFrame(resolve)
+                  ));
+                  const style = element => getComputedStyle(element);
+                  const generation = () => Number(document.querySelector(
+                    "#{{InjectionScriptBuilder.RootElementId}}"
+                  )?.dataset.codexWallpaperGeneration ?? 0);
+                  const ownedStyleCount = () => document.querySelectorAll(
+                    "#{{InjectionScriptBuilder.StyleElementId}}"
+                  ).length;
+                  const createAssistant = annotated => {
+                    const unit = document.createElement("div");
+                    unit.dataset.contentSearchUnitKey = annotated
+                      ? "codex-assistant"
+                      : "chatgpt-assistant";
+                    const assistant = document.createElement("div");
+                    assistant.className = "group flex min-w-0 flex-col";
+                    if (annotated) {
+                      assistant.dataset.responseAnnotationConversation = "conversation";
+                      assistant.dataset.responseAnnotationTarget = "message";
+                    }
+                    const heading = document.createElement("h4");
+                    heading.className = "sr-only select-none";
+                    heading.textContent = "ChatGPT said:";
+                    const selectedTextTarget = document.createElement("div");
+                    selectedTextTarget.dataset.selectedTextOverlayTarget = "";
+                    selectedTextTarget.textContent = "assistant";
+                    assistant.append(selectedTextTarget);
+                    unit.append(heading, assistant);
+                    assistant.fixtureRoot = unit;
+                    return assistant;
+                  };
+                  const createNearMiss = () => {
+                    const nearMiss = document.createElement("div");
+                    nearMiss.className = "group flex min-w-0 flex-col";
+                    const heading = document.createElement("h4");
+                    heading.className = "sr-only";
+                    heading.textContent = "Unrelated selected text:";
+                    const selectedTextTarget = document.createElement("div");
+                    selectedTextTarget.dataset.selectedTextOverlayTarget = "";
+                    selectedTextTarget.textContent = "unrelated";
+                    nearMiss.append(heading, selectedTextTarget);
+                    return nearMiss;
+                  };
+                  const readSurface = element => {
+                    const computed = style(element);
+                    return {
+                      background: computed.backgroundColor,
+                      borderWidth: computed.borderTopWidth,
+                      backdropFilter: computed.backdropFilter,
+                      paddingTop: computed.paddingTop,
+                      paddingLeft: computed.paddingLeft
+                    };
+                  };
+                  const readReplacement = (name, element) => {
+                    const rendered = readSurface(element);
+                    return {
+                      name,
+                      generation: generation(),
+                      ownedStyleCount: ownedStyleCount(),
+                      styleElementPreserved:
+                        document.querySelector(
+                          "#{{InjectionScriptBuilder.StyleElementId}}"
+                        ) === ownedStyle,
+                      visualSentinelMatches:
+                        rendered.background !== "rgba(0, 0, 0, 0)" &&
+                        rendered.borderWidth !== "0px" &&
+                        rendered.backdropFilter.includes("blur(") &&
+                        rendered.paddingTop === "12px" &&
+                        rendered.paddingLeft === "16px"
+                    };
+                  };
+                  const spaReplacements = [];
+
+                  const annotatedAssistant = createAssistant(true);
+                  fixtureHost.replaceChildren(annotatedAssistant.fixtureRoot);
+                  await paint();
+                  const annotatedRendering = readSurface(annotatedAssistant);
+                  spaReplacements.push(
+                    readReplacement("codex", annotatedAssistant)
+                  );
+
+                  const chatGptAssistant = createAssistant(false);
                   const user = document.createElement("div");
                   user.dataset.userMessageBubble = "true";
                   const activity = document.createElement("div");
                   activity.dataset.localConversationItemTargetIds = "activity";
-                  main.append(assistant, user, activity);
+                  const nearMiss = createNearMiss();
+                  fixtureHost.replaceChildren(
+                    chatGptAssistant.fixtureRoot,
+                    user,
+                    activity,
+                    nearMiss
+                  );
+                  await paint();
+                  const chatGptRendering = readSurface(chatGptAssistant);
+                  const userBackground = style(user).backgroundColor;
+                  const activityBackground = style(activity).backgroundColor;
+                  const userBorderWidth = style(user).borderTopWidth;
+                  const nearMissBackground = style(nearMiss).backgroundColor;
+                  const nearMissBorderWidth = style(nearMiss).borderTopWidth;
+                  const nearMissBackdropFilter =
+                    style(nearMiss).backdropFilter;
+                  spaReplacements.push(
+                    readReplacement("chatgpt", chatGptAssistant)
+                  );
 
-                  const style = element => getComputedStyle(element);
+                  const rebuiltAnnotatedAssistant = createAssistant(true);
+                  fixtureHost.replaceChildren(
+                    rebuiltAnnotatedAssistant.fixtureRoot
+                  );
+                  await paint();
+                  const rebuiltAnnotatedRendering =
+                    readSurface(rebuiltAnnotatedAssistant);
+                  spaReplacements.push(
+                    readReplacement("codex-rebuilt", rebuiltAnnotatedAssistant)
+                  );
+
+                  fixtureHost.remove();
                   return {
-                    assistantBackground: style(assistant).backgroundColor,
-                    userBackground: style(user).backgroundColor,
-                    activityBackground: style(activity).backgroundColor,
-                    assistantBorderWidth: style(assistant).borderTopWidth,
-                    userBorderWidth: style(user).borderTopWidth,
-                    assistantBackdropFilter: style(assistant).backdropFilter
+                    annotatedAssistant: annotatedRendering,
+                    chatGptAssistant: chatGptRendering,
+                    rebuiltAnnotatedAssistant: rebuiltAnnotatedRendering,
+                    userBackground,
+                    activityBackground,
+                    userBorderWidth,
+                    nearMissBackground,
+                    nearMissBorderWidth,
+                    nearMissBackdropFilter,
+                    spaReplacements
                   };
+                })()
+                """);
+        }
+        finally
+        {
+            browser.Disconnect();
+        }
+    }
+
+    private static async Task<BrowserPortalRendering>
+        AddBrowserPortalHostsAndReadRenderingAsync(VerifiedCdpEndpoint endpoint)
+    {
+        var browser = await Puppeteer.ConnectAsync(new ConnectOptions
+        {
+            BrowserWSEndpoint = endpoint.BrowserWebSocketUri.AbsoluteUri,
+            DefaultViewport = null,
+            ProtocolTimeout = 5_000,
+            AcceptInsecureCerts = false,
+            NetworkEnabled = false,
+        });
+        try
+        {
+            var reviewedTarget = Assert.Single(endpoint.InjectableTargets);
+            var pages = await browser.PagesAsync(includeAll: true);
+            var page = Assert.Single(
+                pages,
+                candidate =>
+                    !candidate.IsClosed &&
+                    Uri.TryCreate(candidate.Url, UriKind.Absolute, out var candidateUri) &&
+                    VerifiedCodexPageSelector.IsSameReviewedDocument(
+                        candidateUri,
+                        reviewedTarget.Url));
+
+            return await page.EvaluateExpressionAsync<BrowserPortalRendering>(
+                $$"""
+                (async () => {
+                  const appRoot = document.querySelector("body > #root");
+                  const wallpaperRoot = document.querySelector(
+                    "#{{InjectionScriptBuilder.RootElementId}}"
+                  );
+                  const ownedStyle = document.querySelector(
+                    "#{{InjectionScriptBuilder.StyleElementId}}"
+                  );
+                  if (!appRoot || !wallpaperRoot || !ownedStyle) {
+                    throw new Error("Missing browser stacking fixture anchors.");
+                  }
+
+                  const probe = document.createElement("div");
+                  probe.id = "browser-root-stacking-probe";
+                  Object.assign(probe.style, {
+                    position: "fixed",
+                    left: "8px",
+                    top: "8px",
+                    width: "32px",
+                    height: "32px",
+                    zIndex: "2147483647",
+                    backgroundColor: "rgb(71 72 73)"
+                  });
+                  appRoot.append(probe);
+
+                  const paint = () => new Promise(resolve => requestAnimationFrame(
+                    () => requestAnimationFrame(resolve)
+                  ));
+                  const generation = () => Number(document.querySelector(
+                    "#{{InjectionScriptBuilder.RootElementId}}"
+                  )?.dataset.codexWallpaperGeneration ?? 0);
+                  const ownedStyleCount = () => document.querySelectorAll(
+                    "#{{InjectionScriptBuilder.StyleElementId}}"
+                  ).length;
+                  const createHost = kind => {
+                    const host = document.createElement("div");
+                    host.dataset.browserStackingFixture = kind;
+                    if (kind === "legacy") {
+                      host.dataset.browserSidebarWebview = "true";
+                      host.dataset.appShellFocusArea = "browser";
+                    } else {
+                      host.dataset.browserSidebarWebviewHostRoot = "true";
+                    }
+                    Object.assign(host.style, {
+                      position: "fixed",
+                      left: "8px",
+                      top: "8px",
+                      width: "32px",
+                      height: "32px"
+                    });
+                    if (kind === "hidden") {
+                      host.style.pointerEvents = "none";
+                      host.style.visibility = "hidden";
+                    }
+                    const content = document.createElement("div");
+                    content.dataset.browserNativeContent = kind;
+                    Object.assign(content.style, {
+                      position: "absolute",
+                      inset: "0",
+                      backgroundColor: "rgb(52 53 54)",
+                      pointerEvents: "auto"
+                    });
+                    host.append(content);
+                    return { host, content };
+                  };
+                  const read = (host, content) => {
+                    const hostStyle = getComputedStyle(host);
+                    const contentStyle = getComputedStyle(content);
+                    const topmost = document.elementFromPoint(24, 24);
+                    return {
+                      generation: generation(),
+                      ownedStyleCount: ownedStyleCount(),
+                      styleElementPreserved:
+                        document.querySelector(
+                          "#{{InjectionScriptBuilder.StyleElementId}}"
+                        ) === ownedStyle,
+                      hostZIndex: hostStyle.zIndex,
+                      hostPosition: hostStyle.position,
+                      hostPointerEvents: hostStyle.pointerEvents,
+                      hostVisibility: hostStyle.visibility,
+                      contentBackground: contentStyle.backgroundColor,
+                      contentPointerEvents: contentStyle.pointerEvents,
+                      contentIsTopmost: topmost === content,
+                      rootProbeIsTopmost: topmost === probe
+                    };
+                  };
+                  const mountAndRead = async kind => {
+                    const fixture = createHost(kind);
+                    document.body.append(fixture.host);
+                    await paint();
+                    const snapshot = read(fixture.host, fixture.content);
+                    fixture.host.remove();
+                    await paint();
+                    return snapshot;
+                  };
+
+                  const modern = await mountAndRead("modern");
+                  const legacy = await mountAndRead("legacy");
+                  const hidden = await mountAndRead("hidden");
+                  const result = {
+                    wallpaperRootZIndex: getComputedStyle(wallpaperRoot).zIndex,
+                    appRootZIndex: getComputedStyle(appRoot).zIndex,
+                    modern,
+                    legacy,
+                    hidden
+                  };
+                  probe.remove();
+                  return result;
                 })()
                 """);
         }
@@ -1299,9 +1595,22 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
                       "settings-navigation",
                       "app-shell-left-panel"
                     );
-                    const navigationItem = create("button", "settings-general");
-                    navigationItem.dataset.settingsPanelSlug = "general";
-                    navigation.append(navigationItem);
+                    const generalNavigationItem = create(
+                      "button",
+                      "settings-general"
+                    );
+                    generalNavigationItem.dataset.settingsPanelSlug = "general";
+                    const keyboardNavigationItem = create(
+                      "button",
+                      "settings-keyboard-shortcuts"
+                    );
+                    keyboardNavigationItem.dataset.settingsPanelSlug =
+                      "keyboard-shortcuts";
+                    keyboardNavigationItem.setAttribute("aria-current", "page");
+                    navigation.append(
+                      generalNavigationItem,
+                      keyboardNavigationItem
+                    );
                     const outerMain = create(
                       "main",
                       "settings-outer-main",
@@ -1344,7 +1653,32 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
                       "settings-canvas",
                       "main-surface flex h-full min-h-0 flex-col"
                     );
+                    const keyboardSticky = create(
+                      "div",
+                      "keyboard-sticky",
+                      "sticky z-30 bg-token-main-surface-primary"
+                    );
+                    keyboardSticky.dataset.routeSticky = "true";
+                    const keyboardSearch = create(
+                      "input",
+                      "keyboard-search",
+                      "bg-token-main-surface-primary"
+                    );
+                    keyboardSearch.setAttribute("type", "text");
+                    keyboardSearch.dataset.protectedRouteSurface = "true";
+                    keyboardSticky.append(keyboardSearch);
+                    const keyboardShortcutRow = createProtectedSurface(
+                      "keyboard-shortcut-row",
+                      "keyboard-shortcut-row"
+                    );
+                    const keyboardNearMissSticky = createSticky(
+                      "keyboard-near-miss-sticky",
+                      "keyboard-near-miss-search"
+                    );
                     canvas.append(
+                      keyboardSticky,
+                      keyboardShortcutRow,
+                      keyboardNearMissSticky,
                       createProtectedSurface("settings-card", "settings-card")
                     );
                     visibleBoundary.append(canvas);
@@ -1449,8 +1783,9 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
                   const routeVisualMatches = name => {
                     switch (name) {
                       case "plugins":
-                        return isGlass("plugins-sticky") &&
-                          hasGlassGradient("plugins-sticky");
+                        return isTransparent("plugins-sticky") &&
+                          hasNoBackdrop("plugins-sticky") &&
+                          afterBackgroundImage("plugins-sticky") === "none";
                       case "scheduled":
                         return isTransparent("scheduled-sticky") &&
                           hasNoBackdrop("scheduled-sticky") &&
@@ -1467,7 +1802,18 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
                           isTransparent("pull-request-detail-section") &&
                           isTransparent("pull-request-detail-root");
                       case "settings":
-                        return isGlass("settings-canvas");
+                        return isGlass("settings-canvas") &&
+                          isTransparent("keyboard-sticky") &&
+                          hasNoBackdrop("keyboard-sticky") &&
+                          afterBackgroundImage("keyboard-sticky") === "none" &&
+                          background("keyboard-search") === "rgb(41, 42, 43)" &&
+                          background("keyboard-shortcut-row") ===
+                            "rgb(41, 42, 43)" &&
+                          background("keyboard-near-miss-sticky") ===
+                            "rgb(24, 24, 24)" &&
+                          hasNoBackdrop("keyboard-near-miss-sticky") &&
+                          afterBackgroundImage("keyboard-near-miss-sticky")
+                            .includes("linear-gradient(");
                       case "changed-files":
                         return style(required("changed-files-fade"))
                           .backgroundImage === "none" &&
@@ -1552,6 +1898,19 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
                         style(required("settings-canvas")).display,
                       settingsCanvasFlexDirection:
                         style(required("settings-canvas")).flexDirection,
+                      keyboardStickyBackground: background("keyboard-sticky"),
+                      keyboardStickyBackdropFilter: filter("keyboard-sticky"),
+                      keyboardStickyAfterBackgroundImage:
+                        afterBackgroundImage("keyboard-sticky"),
+                      keyboardSearchBackground: background("keyboard-search"),
+                      keyboardShortcutRowBackground:
+                        background("keyboard-shortcut-row"),
+                      keyboardNearMissStickyBackground:
+                        background("keyboard-near-miss-sticky"),
+                      keyboardNearMissStickyBackdropFilter:
+                        filter("keyboard-near-miss-sticky"),
+                      keyboardNearMissStickyAfterBackgroundImage:
+                        afterBackgroundImage("keyboard-near-miss-sticky"),
                       protectedSurfaceBackgrounds: Array.from(
                         fixtureHost.querySelectorAll(
                           "[data-protected-route-surface]"
@@ -1603,10 +1962,12 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
             Assert.True(initialSnapshot.StyleElementPreserved);
             Assert.True(initialSnapshot.GlassEnabled);
             Assert.True(initialSnapshot.AdvancedSurfacesEnabled);
-            AssertGlassSurface(
-                initialSnapshot.PluginStickyBackground,
-                initialSnapshot.PluginStickyBackdropFilter);
-            AssertGlassPseudoGradient(
+            Assert.Equal(
+                "rgba(0, 0, 0, 0)",
+                initialSnapshot.PluginStickyBackground);
+            Assert.Equal("none", initialSnapshot.PluginStickyBackdropFilter);
+            Assert.Equal(
+                "none",
                 initialSnapshot.PluginStickyAfterBackgroundImage);
             Assert.Equal(
                 "rgba(0, 0, 0, 0)",
@@ -1650,10 +2011,28 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
                 initialSnapshot.SettingsCanvasBackdropFilter);
             AssertSettingsCanvasProperties(initialSnapshot);
             Assert.Equal(
+                "rgba(0, 0, 0, 0)",
+                initialSnapshot.KeyboardStickyBackground);
+            Assert.Equal("none", initialSnapshot.KeyboardStickyBackdropFilter);
+            Assert.Equal(
+                "none",
+                initialSnapshot.KeyboardStickyAfterBackgroundImage);
+            Assert.Equal(
+                "rgb(41, 42, 43)",
+                initialSnapshot.KeyboardSearchBackground);
+            Assert.Equal(
+                "rgb(41, 42, 43)",
+                initialSnapshot.KeyboardShortcutRowBackground);
+            AssertNativeRouteSurface(
+                initialSnapshot.KeyboardNearMissStickyBackground,
+                initialSnapshot.KeyboardNearMissStickyBackdropFilter);
+            AssertNativePseudoGradient(
+                initialSnapshot.KeyboardNearMissStickyAfterBackgroundImage);
+            Assert.Equal(
                 "none",
                 initialSnapshot.ChangedFilesFadeBackgroundImage);
             Assert.Equal("rgb(41, 42, 43)", initialSnapshot.ComposerBackground);
-            Assert.Equal(9, initialSnapshot.ProtectedSurfaceBackgrounds.Length);
+            Assert.Equal(11, initialSnapshot.ProtectedSurfaceBackgrounds.Length);
             Assert.All(
                 initialSnapshot.ProtectedSurfaceBackgrounds,
                 background => Assert.Equal("rgb(41, 42, 43)", background));
@@ -1744,6 +2123,22 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
                 downgradedSnapshot.SettingsCanvasBackground,
                 downgradedSnapshot.SettingsCanvasBackdropFilter);
             AssertSettingsCanvasProperties(downgradedSnapshot);
+            AssertNativeRouteSurface(
+                downgradedSnapshot.KeyboardStickyBackground,
+                downgradedSnapshot.KeyboardStickyBackdropFilter);
+            AssertNativePseudoGradient(
+                downgradedSnapshot.KeyboardStickyAfterBackgroundImage);
+            Assert.Equal(
+                "rgb(41, 42, 43)",
+                downgradedSnapshot.KeyboardSearchBackground);
+            Assert.Equal(
+                "rgb(41, 42, 43)",
+                downgradedSnapshot.KeyboardShortcutRowBackground);
+            AssertNativeRouteSurface(
+                downgradedSnapshot.KeyboardNearMissStickyBackground,
+                downgradedSnapshot.KeyboardNearMissStickyBackdropFilter);
+            AssertNativePseudoGradient(
+                downgradedSnapshot.KeyboardNearMissStickyAfterBackgroundImage);
             Assert.Equal(
                 "none",
                 downgradedSnapshot.ChangedFilesFadeBackgroundImage);
@@ -1774,6 +2169,31 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
         {
             browser.Disconnect();
         }
+    }
+
+    private static void AssertReadableConversationSurface(
+        ConversationSurfaceRendering rendering)
+    {
+        Assert.NotEqual("rgba(0, 0, 0, 0)", rendering.Background);
+        Assert.NotEqual("0px", rendering.BorderWidth);
+        Assert.Contains("blur(", rendering.BackdropFilter, StringComparison.Ordinal);
+        Assert.Equal("12px", rendering.PaddingTop);
+        Assert.Equal("16px", rendering.PaddingLeft);
+    }
+
+    private static void AssertForegroundBrowserPortal(BrowserPortalSnapshot snapshot)
+    {
+        Assert.Equal("2", snapshot.HostZIndex);
+        Assert.Equal("fixed", snapshot.HostPosition);
+        Assert.Equal("auto", snapshot.HostPointerEvents);
+        Assert.Equal("visible", snapshot.HostVisibility);
+        Assert.Equal("rgb(52, 53, 54)", snapshot.ContentBackground);
+        Assert.Equal("auto", snapshot.ContentPointerEvents);
+        Assert.True(snapshot.ContentIsTopmost);
+        Assert.False(snapshot.RootProbeIsTopmost);
+        Assert.Equal(1, snapshot.Generation);
+        Assert.Equal(1, snapshot.OwnedStyleCount);
+        Assert.True(snapshot.StyleElementPreserved);
     }
 
     private static void AssertGlassSurface(string background, string backdropFilter)
@@ -1986,13 +2406,44 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
         string UnrelatedBackdropFilter,
         string ListBackdropFilter);
 
+    private sealed record ConversationSurfaceRendering(
+        string Background,
+        string BorderWidth,
+        string BackdropFilter,
+        string PaddingTop,
+        string PaddingLeft);
+
     private sealed record ConversationRendering(
-        string AssistantBackground,
+        ConversationSurfaceRendering AnnotatedAssistant,
+        ConversationSurfaceRendering ChatGptAssistant,
+        ConversationSurfaceRendering RebuiltAnnotatedAssistant,
         string UserBackground,
         string ActivityBackground,
-        string AssistantBorderWidth,
         string UserBorderWidth,
-        string AssistantBackdropFilter);
+        string NearMissBackground,
+        string NearMissBorderWidth,
+        string NearMissBackdropFilter,
+        SpaReplacementRendering[] SpaReplacements);
+
+    private sealed record BrowserPortalRendering(
+        string WallpaperRootZIndex,
+        string AppRootZIndex,
+        BrowserPortalSnapshot Modern,
+        BrowserPortalSnapshot Legacy,
+        BrowserPortalSnapshot Hidden);
+
+    private sealed record BrowserPortalSnapshot(
+        long Generation,
+        int OwnedStyleCount,
+        bool StyleElementPreserved,
+        string HostZIndex,
+        string HostPosition,
+        string HostPointerEvents,
+        string HostVisibility,
+        string ContentBackground,
+        string ContentPointerEvents,
+        bool ContentIsTopmost,
+        bool RootProbeIsTopmost);
 
     private sealed record ShellSurfaceTransitionRendering(
         EmptyLauncherRendering EmptyLauncher,
@@ -2106,6 +2557,14 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
         string SettingsCanvasOverflowY,
         string SettingsCanvasDisplay,
         string SettingsCanvasFlexDirection,
+        string KeyboardStickyBackground,
+        string KeyboardStickyBackdropFilter,
+        string KeyboardStickyAfterBackgroundImage,
+        string KeyboardSearchBackground,
+        string KeyboardShortcutRowBackground,
+        string KeyboardNearMissStickyBackground,
+        string KeyboardNearMissStickyBackdropFilter,
+        string KeyboardNearMissStickyAfterBackgroundImage,
         string[] ProtectedSurfaceBackgrounds,
         string ChangedFilesFadeBackgroundImage,
         string ComposerBackground);

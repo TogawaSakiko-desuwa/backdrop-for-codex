@@ -277,6 +277,89 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
     }
 
     [Fact]
+    public void ReviewedConversationSelectors_GlassOnlyUnannotatedChatGptAssistantMessages()
+    {
+        var styleSheet = ExtractGeneratedStyleSheet();
+        var forcedColorsNone = ExtractBlock(styleSheet, "@media (forced-colors: none)");
+        var rules = ParseLeafRules(forcedColorsNone);
+        var fixture = XDocument.Parse(CurrentConversationMessagesFixture);
+
+        var fallbackGlassRule = Assert.Single(
+            rules,
+            IsReviewedChatGptAssistantFallbackGlassRule);
+        var fallbackPaddingRule = Assert.Single(
+            rules,
+            IsReviewedChatGptAssistantFallbackPaddingRule);
+        var fallbackSelector = CanonicalizeSelector(
+            """
+            body main [data-content-search-unit-key] > h4[class~="sr-only"][class~="select-none"] + div[class~="group"][class~="flex"][class~="min-w-0"][class~="flex-col"]:not([data-response-annotation-target]):has(> [data-selected-text-overlay-target])
+            """);
+
+        Assert.Contains(fallbackSelector, fallbackGlassRule.Selectors);
+        Assert.Contains(fallbackSelector, fallbackPaddingRule.Selectors);
+        Assert.Equal(
+            ["chatgpt-assistant-message"],
+            SelectFixtureIds(fixture, [fallbackSelector]));
+
+        var changedIds = SelectFixtureIds(fixture, [fallbackSelector]);
+        Assert.DoesNotContain("annotated-codex-assistant-message", changedIds);
+        Assert.DoesNotContain("ordinary-selected-text-container", changedIds);
+        Assert.DoesNotContain("non-adjacent-assistant-lookalike", changedIds);
+        Assert.DoesNotContain("assistant-heading-without-sr-only", changedIds);
+        Assert.DoesNotContain("assistant-heading-without-select-none", changedIds);
+        Assert.DoesNotContain("assistant-wrapper-without-required-classes", changedIds);
+        Assert.DoesNotContain("assistant-unit-without-search-key", changedIds);
+        Assert.DoesNotContain("assistant-target-not-direct-child", changedIds);
+        Assert.DoesNotContain("user-message-bubble", changedIds);
+        Assert.DoesNotContain("assistant-message-outside-main", changedIds);
+    }
+
+    [Fact]
+    public void ReviewedBrowserHostSelectors_LiftOnlyBodyLevelHostsWithoutChangingContentOrInteraction()
+    {
+        var styleSheet = ExtractGeneratedStyleSheet();
+        var forcedColorsNone = ExtractBlock(styleSheet, "@media (forced-colors: none)");
+        var rules = ParseLeafRules(forcedColorsNone);
+        var fixture = XDocument.Parse(CurrentBrowserHostFixture);
+
+        var stackingRule = Assert.Single(rules, IsReviewedBrowserHostStackingRule);
+
+        Assert.Equal(
+            [
+                CanonicalizeSelector(
+                    """
+                    body > [data-browser-sidebar-webview-host-root]
+                    """),
+                CanonicalizeSelector(
+                    """
+                    body > [data-browser-sidebar-webview][data-app-shell-focus-area]
+                    """),
+            ],
+            stackingRule.Selectors);
+        Assert.Equal(
+            [
+                "browser-host-current",
+                "browser-host-current-hidden",
+                "browser-host-legacy",
+            ],
+            SelectFixtureIds(fixture, stackingRule.Selectors));
+
+        Assert.DoesNotContain("background", stackingRule.Declarations, StringComparison.Ordinal);
+        Assert.DoesNotContain("opacity", stackingRule.Declarations, StringComparison.Ordinal);
+        Assert.DoesNotContain("filter", stackingRule.Declarations, StringComparison.Ordinal);
+        Assert.DoesNotContain("pointer-events", stackingRule.Declarations, StringComparison.Ordinal);
+        Assert.DoesNotContain("display", stackingRule.Declarations, StringComparison.Ordinal);
+        Assert.DoesNotContain("visibility", stackingRule.Declarations, StringComparison.Ordinal);
+
+        var changedIds = SelectFixtureIds(fixture, stackingRule.Selectors);
+        Assert.DoesNotContain("app-root", changedIds);
+        Assert.DoesNotContain("browser-host-current-nested", changedIds);
+        Assert.DoesNotContain("browser-host-legacy-without-focus-area", changedIds);
+        Assert.DoesNotContain("browser-webview-current", changedIds);
+        Assert.DoesNotContain("browser-webview-legacy", changedIds);
+    }
+
+    [Fact]
     public void ReviewedMainContentSelectors_ClearOnlyTheNativeTopFade()
     {
         var styleSheet = ExtractGeneratedStyleSheet();
@@ -301,14 +384,14 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
     }
 
     [Fact]
-    public void ReviewedPluginsPageSelectors_GlassOnlyTheSearchStickyShell()
+    public void ReviewedPluginsPageSelectors_ClearOnlyTheSearchStickyShell()
     {
         var styleSheet = ExtractGeneratedStyleSheet();
         var forcedColorsNone = ExtractBlock(styleSheet, "@media (forced-colors: none)");
         var rules = ParseLeafRules(forcedColorsNone);
         var fixture = XDocument.Parse(CurrentPluginsPageFixture);
 
-        var stickyGlassRule = Assert.Single(rules, IsReviewedPluginsPageStickyGlassRule);
+        var stickyClearRule = Assert.Single(rules, IsReviewedPluginsPageStickyClearRule);
 
         Assert.Equal(
             [
@@ -317,12 +400,12 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
                     body [class~="sticky"][class~="z-30"][class~="bg-token-main-surface-primary"]:has([id="plugins-page-search"])
                     """),
             ],
-            stickyGlassRule.Selectors);
+            stickyClearRule.Selectors);
         Assert.Equal(
             ["plugins-search-sticky"],
-            SelectFixtureIds(fixture, stickyGlassRule.Selectors));
+            SelectFixtureIds(fixture, stickyClearRule.Selectors));
 
-        var changedIds = SelectFixtureIds(fixture, stickyGlassRule.Selectors);
+        var changedIds = SelectFixtureIds(fixture, stickyClearRule.Selectors);
         Assert.DoesNotContain("plugins-search-sticky-wrong-id", changedIds);
         Assert.DoesNotContain("plugins-featured-card", changedIds);
     }
@@ -537,6 +620,42 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
     }
 
     [Fact]
+    public void ReviewedKeyboardShortcutsSelectors_ClearOnlyTheActiveSearchStickyShell()
+    {
+        var styleSheet = ExtractGeneratedStyleSheet();
+        var forcedColorsNone = ExtractBlock(styleSheet, "@media (forced-colors: none)");
+        var rules = ParseLeafRules(forcedColorsNone);
+        var activeFixture = XDocument.Parse(CurrentKeyboardShortcutsFixture);
+        var inactiveFixture = XDocument.Parse(InactiveKeyboardShortcutsFixture);
+        var otherRouteFixture = XDocument.Parse(OtherSettingsRouteFixture);
+
+        var stickyClearRule = Assert.Single(
+            rules,
+            IsReviewedKeyboardShortcutsStickyClearRule);
+
+        Assert.Equal(
+            [
+                CanonicalizeSelector(
+                    """
+                    body:has([class~="app-shell-left-panel"] [data-settings-panel-slug="keyboard-shortcuts"][aria-current="page"])
+                      [class~="sticky"][class~="z-30"][class~="bg-token-main-surface-primary"]:has(input[type="text"])
+                    """),
+            ],
+            stickyClearRule.Selectors);
+        Assert.Equal(
+            ["keyboard-search-sticky"],
+            SelectFixtureIds(activeFixture, stickyClearRule.Selectors));
+        Assert.Empty(SelectFixtureIds(inactiveFixture, stickyClearRule.Selectors));
+        Assert.Empty(SelectFixtureIds(otherRouteFixture, stickyClearRule.Selectors));
+
+        var changedIds = SelectFixtureIds(activeFixture, stickyClearRule.Selectors);
+        Assert.DoesNotContain("keyboard-search-input", changedIds);
+        Assert.DoesNotContain("keyboard-shortcut-row", changedIds);
+        Assert.DoesNotContain("keyboard-shortcut-capture", changedIds);
+        Assert.DoesNotContain("keyboard-sticky-non-text-input", changedIds);
+    }
+
+    [Fact]
     public void ReviewedChangedFilesComposerSelectors_ClearOnlyTheInProgressFade()
     {
         var styleSheet = ExtractGeneratedStyleSheet();
@@ -677,6 +796,46 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
                     "[class~=\"via-token-main-surface-primary\"]",
                     StringComparison.Ordinal));
 
+    private static bool IsReviewedChatGptAssistantFallbackGlassRule(CssRule rule) =>
+        rule.Declarations.Contains(
+            "background-color: var(--codex-wallpaper-glass) !important",
+            StringComparison.Ordinal) &&
+        rule.Declarations.Contains(
+            "backdrop-filter: blur(var(--codex-wallpaper-blur))",
+            StringComparison.Ordinal) &&
+        rule.Declarations.Contains(
+            "border-radius: var(--codex-wallpaper-radius)",
+            StringComparison.Ordinal) &&
+        rule.Declarations.Contains(
+            "box-shadow: 0 8px 28px",
+            StringComparison.Ordinal) &&
+        rule.Selectors.Any(
+            selector => selector.Contains(
+                "[data-selected-text-overlay-target]",
+                StringComparison.Ordinal));
+
+    private static bool IsReviewedChatGptAssistantFallbackPaddingRule(CssRule rule) =>
+        CanonicalizeWhitespace(rule.Declarations) == "padding: 12px 16px;" &&
+        rule.Selectors.Any(
+            selector => selector.Contains(
+                "[data-selected-text-overlay-target]",
+                StringComparison.Ordinal));
+
+    private static bool IsReviewedBrowserHostStackingRule(CssRule rule) =>
+        rule.Declarations.Contains("z-index: 2", StringComparison.Ordinal) &&
+        rule.Selectors.Any(
+            selector => selector.Contains(
+                "[data-browser-sidebar-webview-host-root]",
+                StringComparison.Ordinal)) &&
+        rule.Selectors.Any(
+            selector =>
+                selector.Contains(
+                    "[data-browser-sidebar-webview]",
+                    StringComparison.Ordinal) &&
+                selector.Contains(
+                    "[data-app-shell-focus-area]",
+                    StringComparison.Ordinal));
+
     private static bool IsReviewedMainContentTopFadeClearRule(CssRule rule) =>
         CanonicalizeWhitespace(rule.Declarations) ==
         "background-image: none !important;" &&
@@ -689,12 +848,12 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
                     "[data-app-shell-main-content-top-fade]",
                     StringComparison.Ordinal));
 
-    private static bool IsReviewedPluginsPageStickyGlassRule(CssRule rule) =>
+    private static bool IsReviewedPluginsPageStickyClearRule(CssRule rule) =>
         rule.Declarations.Contains(
-            "background-color: var(--codex-wallpaper-glass) !important",
+            "background-color: transparent !important",
             StringComparison.Ordinal) &&
         rule.Declarations.Contains(
-            "backdrop-filter: blur(var(--codex-wallpaper-blur))",
+            "backdrop-filter: none !important",
             StringComparison.Ordinal) &&
         rule.Selectors.Any(
             selector =>
@@ -878,6 +1037,28 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
                     "[class~=\"h-full\"][class~=\"min-h-0\"][class~=\"flex-col\"]",
                     StringComparison.Ordinal));
 
+    private static bool IsReviewedKeyboardShortcutsStickyClearRule(CssRule rule) =>
+        rule.Declarations.Contains(
+            "background-color: transparent !important",
+            StringComparison.Ordinal) &&
+        rule.Declarations.Contains(
+            "backdrop-filter: none !important",
+            StringComparison.Ordinal) &&
+        rule.Selectors.Any(
+            selector =>
+                selector.Contains(
+                    "[class~=\"app-shell-left-panel\"] " +
+                    "[data-settings-panel-slug=\"keyboard-shortcuts\"]" +
+                    "[aria-current=\"page\"]",
+                    StringComparison.Ordinal) &&
+                selector.Contains(
+                    "[class~=\"sticky\"][class~=\"z-30\"]" +
+                    "[class~=\"bg-token-main-surface-primary\"]",
+                    StringComparison.Ordinal) &&
+                selector.Contains(
+                    ":has(input[type=\"text\"])",
+                    StringComparison.Ordinal));
+
     private static bool IsReviewedChangedFilesComposerFadeClearRule(CssRule rule) =>
         CanonicalizeWhitespace(rule.Declarations) ==
         "background-image: none !important;" &&
@@ -994,9 +1175,11 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
 
     private static bool MatchesSelector(XElement element, string selector)
     {
-        var compactSelector = ChildCombinatorWhitespaceRegex().Replace(
-            CanonicalizeWhitespace(selector),
-            ">");
+        var compactSelector = SiblingCombinatorWhitespaceRegex().Replace(
+            ChildCombinatorWhitespaceRegex().Replace(
+                CanonicalizeWhitespace(selector),
+                ">"),
+            "+");
         var split = FindLastCombinator(compactSelector);
         if (split is null)
         {
@@ -1011,9 +1194,14 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
             return false;
         }
 
-        return combinator == '>'
-            ? element.Parent is not null && MatchesSelector(element.Parent, left)
-            : element.Ancestors().Any(ancestor => MatchesSelector(ancestor, left));
+        return combinator switch
+        {
+            '>' => element.Parent is not null &&
+                MatchesSelector(element.Parent, left),
+            '+' => element.ElementsBeforeSelf().LastOrDefault() is { } sibling &&
+                MatchesSelector(sibling, left),
+            _ => element.Ancestors().Any(ancestor => MatchesSelector(ancestor, left)),
+        };
     }
 
     private static (int Index, char Combinator)? FindLastCombinator(string selector)
@@ -1055,7 +1243,7 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
                 case '[':
                     brackets--;
                     break;
-                case '>' when parentheses == 0 && brackets == 0:
+                case '>' or '+' when parentheses == 0 && brackets == 0:
                     return (index, character);
                 case ' ' when parentheses == 0 && brackets == 0:
                     return (index, character);
@@ -1080,43 +1268,45 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
                 .Any(alternative => MatchesSimpleSelector(element, alternative));
         }
 
-        var notIndex = FindTopLevelPseudo(selector, ":not(");
-        if (notIndex >= 0)
+        for (var notIndex = FindTopLevelPseudo(selector, ":not(");
+             notIndex >= 0;
+             notIndex = FindTopLevelPseudo(selector, ":not("))
         {
             var closingParenthesis = FindMatchingParenthesis(selector, notIndex + 4);
-            if (closingParenthesis != selector.Length - 1)
-            {
-                throw new InvalidOperationException(
-                    $"Unsupported selector after :not(): '{selector}'.");
-            }
-
             var excludedSelector = selector[(notIndex + 5)..closingParenthesis];
             if (MatchesSimpleSelector(element, excludedSelector))
             {
                 return false;
             }
 
-            selector = selector[..notIndex];
+            selector = string.Concat(
+                selector.AsSpan(0, notIndex),
+                selector.AsSpan(closingParenthesis + 1));
         }
 
-        var hasIndex = FindTopLevelPseudo(selector, ":has(");
-        if (hasIndex >= 0)
+        for (var hasIndex = FindTopLevelPseudo(selector, ":has(");
+             hasIndex >= 0;
+             hasIndex = FindTopLevelPseudo(selector, ":has("))
         {
             var closingParenthesis = FindMatchingParenthesis(selector, hasIndex + 4);
-            if (closingParenthesis != selector.Length - 1)
+            var relativeSelector = selector[(hasIndex + 5)..closingParenthesis].Trim();
+            var directChild = relativeSelector.StartsWith('>');
+            if (directChild)
             {
-                throw new InvalidOperationException(
-                    $"Unsupported selector after :has(): '{selector}'.");
+                relativeSelector = relativeSelector[1..].TrimStart();
             }
 
-            var relativeSelector = selector[(hasIndex + 5)..closingParenthesis];
-            if (!element.Descendants().Any(
-                    descendant => MatchesSelector(descendant, relativeSelector)))
+            var candidates = directChild
+                ? element.Elements()
+                : element.Descendants();
+            if (!candidates.Any(candidate => MatchesSelector(candidate, relativeSelector)))
             {
                 return false;
             }
 
-            selector = selector[..hasIndex];
+            selector = string.Concat(
+                selector.AsSpan(0, hasIndex),
+                selector.AsSpan(closingParenthesis + 1));
         }
 
         var attributes = CssAttributeRegex().Matches(selector);
@@ -1335,6 +1525,9 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
 
     [GeneratedRegex(@"\s*>\s*", RegexOptions.CultureInvariant)]
     private static partial Regex ChildCombinatorWhitespaceRegex();
+
+    [GeneratedRegex(@"\s*\+\s*", RegexOptions.CultureInvariant)]
+    private static partial Regex SiblingCombinatorWhitespaceRegex();
 
     [GeneratedRegex(
         @"\[(?<name>[\w-]+)(?:(?<operation>~=|\*=|\^=|=)""(?<value>[^""]*)"")?\]",
@@ -1645,6 +1838,160 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
         </html>
         """;
 
+    private const string CurrentConversationMessagesFixture =
+        """
+        <html class="electron-dark">
+          <body>
+            <main>
+              <div data-content-search-unit-key="assistant-1">
+                <h4 class="sr-only select-none">ChatGPT said:</h4>
+                <div class="group flex min-w-0 flex-col"
+                     data-fixture-id="chatgpt-assistant-message">
+                  <div data-selected-text-overlay-target="">
+                    Assistant response
+                  </div>
+                </div>
+              </div>
+
+              <div data-content-search-unit-key="assistant-2">
+                <h4 class="sr-only select-none">ChatGPT said:</h4>
+                <div class="group flex min-w-0 flex-col"
+                     data-response-annotation-conversation="conversation-1"
+                     data-response-annotation-target="response-1"
+                     data-fixture-id="annotated-codex-assistant-message">
+                  <div data-selected-text-overlay-target="">
+                    Annotated Codex response
+                  </div>
+                </div>
+              </div>
+
+              <article data-fixture-id="ordinary-selected-text-container">
+                <div data-selected-text-overlay-target="">
+                  Ordinary selectable content
+                </div>
+              </article>
+
+              <div data-content-search-unit-key="assistant-3">
+                <h4 class="sr-only select-none">ChatGPT said:</h4>
+                <span>Unexpected sibling</span>
+                <div class="group flex min-w-0 flex-col"
+                     data-fixture-id="non-adjacent-assistant-lookalike">
+                  <div data-selected-text-overlay-target="">
+                    Not directly adjacent
+                  </div>
+                </div>
+              </div>
+
+              <div data-content-search-unit-key="assistant-4">
+                <h4 class="select-none">ChatGPT said:</h4>
+                <div class="group flex min-w-0 flex-col"
+                     data-fixture-id="assistant-heading-without-sr-only">
+                  <div data-selected-text-overlay-target="">
+                    Heading is not the accessible role marker
+                  </div>
+                </div>
+              </div>
+
+              <div data-content-search-unit-key="assistant-5">
+                <h4 class="sr-only">ChatGPT said:</h4>
+                <div class="group flex min-w-0 flex-col"
+                     data-fixture-id="assistant-heading-without-select-none">
+                  <div data-selected-text-overlay-target="">
+                    Heading is missing the reviewed companion class
+                  </div>
+                </div>
+              </div>
+
+              <div data-content-search-unit-key="assistant-6">
+                <h4 class="sr-only select-none">ChatGPT said:</h4>
+                <div data-fixture-id="assistant-wrapper-without-required-classes">
+                  <div data-selected-text-overlay-target="">
+                    Wrapper is not an assistant message container
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <h4 class="sr-only select-none">ChatGPT said:</h4>
+                <div class="group flex min-w-0 flex-col"
+                     data-fixture-id="assistant-unit-without-search-key">
+                  <div data-selected-text-overlay-target="">
+                    Unit is missing the reviewed search anchor
+                  </div>
+                </div>
+              </div>
+
+              <div data-content-search-unit-key="assistant-7">
+                <h4 class="sr-only select-none">ChatGPT said:</h4>
+                <div class="group flex min-w-0 flex-col"
+                     data-fixture-id="assistant-target-not-direct-child">
+                  <div>
+                    <div data-selected-text-overlay-target="">
+                      Target is nested below the reviewed surface
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div data-content-search-unit-key="user-1">
+                <h4 class="sr-only select-none">You said:</h4>
+                <div class="group flex min-w-0 flex-col"
+                     data-fixture-id="user-message-bubble">
+                  <div data-user-message-bubble="true">
+                    <div data-selected-text-overlay-target="">
+                      User message
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </main>
+
+            <aside>
+              <div data-content-search-unit-key="assistant-outside-main">
+                <h4 class="sr-only select-none">ChatGPT said:</h4>
+                <div class="group flex min-w-0 flex-col"
+                     data-fixture-id="assistant-message-outside-main">
+                  <div data-selected-text-overlay-target="">
+                    Outside main
+                  </div>
+                </div>
+              </div>
+            </aside>
+          </body>
+        </html>
+        """;
+
+    private const string CurrentBrowserHostFixture =
+        """
+        <html class="electron-dark">
+          <body>
+            <div id="root"
+                 data-fixture-id="app-root">
+              <div data-browser-sidebar-webview-host-root=""
+                   data-fixture-id="browser-host-current-nested" />
+            </div>
+
+            <div data-browser-sidebar-webview-host-root=""
+                 data-fixture-id="browser-host-current">
+              <webview data-fixture-id="browser-webview-current" />
+            </div>
+
+            <div data-browser-sidebar-webview-host-root=""
+                 hidden="hidden"
+                 data-fixture-id="browser-host-current-hidden" />
+
+            <div data-browser-sidebar-webview=""
+                 data-app-shell-focus-area="browser"
+                 data-fixture-id="browser-host-legacy">
+              <webview data-fixture-id="browser-webview-legacy" />
+            </div>
+
+            <div data-browser-sidebar-webview=""
+                 data-fixture-id="browser-host-legacy-without-focus-area" />
+          </body>
+        </html>
+        """;
+
     private const string CurrentMainContentTopFadeFixture =
         """
         <html class="electron-dark">
@@ -1904,6 +2251,82 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
                      data-fixture-id="settings-canvas-without-data-anchor" />
               </div>
             </div>
+          </body>
+        </html>
+        """;
+
+    private const string CurrentKeyboardShortcutsFixture =
+        """
+        <html class="electron-dark">
+          <body>
+            <aside class="app-shell-left-panel">
+              <button data-settings-panel-slug="keyboard-shortcuts"
+                      aria-current="page">
+                Keyboard shortcuts
+              </button>
+            </aside>
+
+            <main>
+              <div class="sticky z-30 bg-token-main-surface-primary"
+                   data-fixture-id="keyboard-search-sticky">
+                <div class="relative">
+                  <input type="text"
+                         data-fixture-id="keyboard-search-input" />
+                </div>
+              </div>
+
+              <div class="sticky z-30 bg-token-main-surface-primary"
+                   data-fixture-id="keyboard-sticky-non-text-input">
+                <input type="search" />
+              </div>
+
+              <section class="rounded-xl bg-token-main-surface-primary"
+                       data-fixture-id="keyboard-shortcut-row">
+                <div role="group"
+                     data-fixture-id="keyboard-shortcut-capture">
+                  <button type="button">Edit shortcut</button>
+                </div>
+              </section>
+            </main>
+          </body>
+        </html>
+        """;
+
+    private const string InactiveKeyboardShortcutsFixture =
+        """
+        <html class="electron-dark">
+          <body>
+            <aside class="app-shell-left-panel">
+              <button data-settings-panel-slug="keyboard-shortcuts">
+                Keyboard shortcuts
+              </button>
+            </aside>
+            <main>
+              <div class="sticky z-30 bg-token-main-surface-primary"
+                   data-fixture-id="keyboard-search-sticky-inactive">
+                <input type="text" />
+              </div>
+            </main>
+          </body>
+        </html>
+        """;
+
+    private const string OtherSettingsRouteFixture =
+        """
+        <html class="electron-dark">
+          <body>
+            <aside class="app-shell-left-panel">
+              <button data-settings-panel-slug="general-settings"
+                      aria-current="page">
+                General
+              </button>
+            </aside>
+            <main>
+              <div class="sticky z-30 bg-token-main-surface-primary"
+                   data-fixture-id="general-search-sticky">
+                <input type="text" />
+              </div>
+            </main>
           </body>
         </html>
         """;

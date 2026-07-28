@@ -180,39 +180,88 @@ public sealed class InjectionScriptBuilderTests
     }
 
     [Fact]
-    public void BuildInstall_GlassesPluginStickyFadeAndClearsScheduledSticky()
+    public void BuildInstall_LayersOnlyBodyLevelBrowserHostsAboveTheApp()
     {
         var script = InjectionScriptBuilder.BuildInstall(CreateOptions());
         var compactScript = string.Concat(script.Where(character => !char.IsWhiteSpace(character)));
-        const string GradientDeclaration =
-            "background-image: linear-gradient(to bottom, var(--codex-wallpaper-glass), transparent) !important;";
-        var compactGradientDeclaration = string.Concat(
-            GradientDeclaration.Where(character => !char.IsWhiteSpace(character)));
-
-        Assert.Equal(
-            1,
-            script.Split(GradientDeclaration, StringSplitOptions.None).Length - 1);
 
         Assert.Contains(
-            "body[class~=\"sticky\"][class~=\"z-30\"]" +
-            "[class~=\"bg-token-main-surface-primary\"]" +
-            ":has([id=\"plugins-page-search\"])::after{" +
-            compactGradientDeclaration +
-            "}",
+            "#${cfg.rootId}{position:fixed;inset:0;z-index:0;",
+            compactScript,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "body>#root{position:relative;z-index:1;",
+            compactScript,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "body>[data-browser-sidebar-webview-host-root]," +
+            "body>[data-browser-sidebar-webview][data-app-shell-focus-area]" +
+            "{z-index:2!important;}",
             compactScript,
             StringComparison.Ordinal);
         Assert.DoesNotContain(
-            "body[class~=\"sticky\"][class~=\"z-30\"]" +
-            "[class~=\"bg-token-main-surface-primary\"]" +
-            ":has([id=\"scheduled-page-search\"])::after{" +
-            compactGradientDeclaration +
-            "}",
+            "[data-browser-sidebar-webview-host-root]webview",
             compactScript,
             StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "[data-browser-sidebar-webview][data-app-shell-focus-area]webview",
+            compactScript,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildInstall_ClearsPluginAndScheduledStickyFades()
+    {
+        var script = InjectionScriptBuilder.BuildInstall(CreateOptions());
+        var compactScript = string.Concat(script.Where(character => !char.IsWhiteSpace(character)));
+
+        foreach (var searchId in new[] { "plugins-page-search", "scheduled-page-search" })
+        {
+            Assert.Contains(
+                "body[class~=\"sticky\"][class~=\"z-30\"]" +
+                "[class~=\"bg-token-main-surface-primary\"]" +
+                $":has([id=\"{searchId}\"])" +
+                "{background-color:transparent!important;" +
+                "-webkit-backdrop-filter:none!important;" +
+                "backdrop-filter:none!important;" +
+                "border-color:transparent;}",
+                compactScript,
+                StringComparison.Ordinal);
+            Assert.Contains(
+                "body[class~=\"sticky\"][class~=\"z-30\"]" +
+                "[class~=\"bg-token-main-surface-primary\"]" +
+                $":has([id=\"{searchId}\"])::after{{" +
+                "background-image:none!important;}",
+                compactScript,
+                StringComparison.Ordinal);
+        }
+
+        Assert.DoesNotContain(
+            "background-image:linear-gradient(tobottom,var(--codex-wallpaper-glass),transparent)!important;",
+            compactScript,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "body[class~=\"after:bg-linear-to-b\"]" +
+            "[class~=\"after:from-token-main-surface-primary\"]" +
+            "[class~=\"after:to-transparent\"]::after",
+            compactScript,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildInstall_ClearsOnlyTheActiveKeyboardShortcutsSearchSticky()
+    {
+        var script = InjectionScriptBuilder.BuildInstall(CreateOptions());
+        var compactScript = string.Concat(script.Where(character => !char.IsWhiteSpace(character)));
+        const string RouteEvidence =
+            "body:has([class~=\"app-shell-left-panel\"]" +
+            "[data-settings-panel-slug=\"keyboard-shortcuts\"][aria-current=\"page\"])";
+        const string SearchSticky =
+            "[class~=\"sticky\"][class~=\"z-30\"]" +
+            "[class~=\"bg-token-main-surface-primary\"]:has(input[type=\"text\"])";
+
         Assert.Contains(
-            "body[class~=\"sticky\"][class~=\"z-30\"]" +
-            "[class~=\"bg-token-main-surface-primary\"]" +
-            ":has([id=\"scheduled-page-search\"])" +
+            RouteEvidence + SearchSticky +
             "{background-color:transparent!important;" +
             "-webkit-backdrop-filter:none!important;" +
             "backdrop-filter:none!important;" +
@@ -220,16 +269,12 @@ public sealed class InjectionScriptBuilderTests
             compactScript,
             StringComparison.Ordinal);
         Assert.Contains(
-            "body[class~=\"sticky\"][class~=\"z-30\"]" +
-            "[class~=\"bg-token-main-surface-primary\"]" +
-            ":has([id=\"scheduled-page-search\"])::after{" +
-            "background-image:none!important;}",
+            RouteEvidence + SearchSticky +
+            "::after{background-image:none!important;}",
             compactScript,
             StringComparison.Ordinal);
         Assert.DoesNotContain(
-            "body[class~=\"after:bg-linear-to-b\"]" +
-            "[class~=\"after:from-token-main-surface-primary\"]" +
-            "[class~=\"after:to-transparent\"]::after",
+            "body" + SearchSticky + "{",
             compactScript,
             StringComparison.Ordinal);
     }
@@ -477,6 +522,37 @@ public sealed class InjectionScriptBuilderTests
         Assert.Contains("rgba(16, 18, 24, 0.58)", script, StringComparison.Ordinal);
         Assert.Contains("border: 1px solid rgb(255 255 255 / 0.06)", script, StringComparison.Ordinal);
         Assert.Contains("padding: 4px 8px", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildInstall_GlassesUnannotatedChatGptAssistantMessagesByAccessibleStructure()
+    {
+        var script = InjectionScriptBuilder.BuildInstall(CreateOptions());
+        var compactScript = string.Concat(script.Where(character => !char.IsWhiteSpace(character)));
+        const string Fallback =
+            "bodymain" +
+            "[data-content-search-unit-key]>" +
+            "h4[class~=\"sr-only\"][class~=\"select-none\"]+" +
+            "div[class~=\"group\"][class~=\"flex\"][class~=\"min-w-0\"][class~=\"flex-col\"]" +
+            ":not([data-response-annotation-target])" +
+            ":has(>[data-selected-text-overlay-target])";
+
+        Assert.Contains(
+            Fallback + ",",
+            compactScript,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            Fallback + "{padding:12px16px;}",
+            compactScript,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "bodymain[data-selected-text-overlay-target]",
+            compactScript,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "bodymain:has([data-selected-text-overlay-target])",
+            compactScript,
+            StringComparison.Ordinal);
     }
 
     [Fact]

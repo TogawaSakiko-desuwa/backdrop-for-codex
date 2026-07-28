@@ -4,6 +4,15 @@
 
 ## [Unreleased]
 
+## [1.4.2] - 2026-07-28
+
+### Fixed
+
+- 移除插件页搜索区域共享 sticky 外壳及其 32px 伪元素渐变形成的黑条，搜索框和插件卡片继续使用原生表面。
+- 移除键盘快捷键页活动路由中的搜索 sticky 黑条；规则仅作用于含文本搜索框的外壳，不透明化快捷键行、按键编辑控件或其他设置页。
+- 将 Codex 内置浏览器的新旧 body 级 webview 宿主提升到应用根之上，避免网页被玻璃应用层遮住，同时保持网页背景、透明度、缩放与输入事件不变。
+- 为缺少 response annotation 属性的 ChatGPT 助手消息补充结构化玻璃选择器，保持 Codex 与 ChatGPT 助手消息样式一致且不扩散到用户消息或普通可选文本区域。
+
 ## [1.4.1] - 2026-07-27
 
 ### Fixed
@@ -219,7 +228,8 @@
 - 复验完整 MSIX 包名、激活 PID、进程启动时间、Windows 会话和监听器所有权；媒体服务保持已校验文件的只读句柄。
 - 明确禁止 CSP bypass；关闭、更换或 lease 到期时移除媒体 `src`、撤销 `blob:` URL，并仅删除带有本项目 owner/generation 的节点和样式。
 
-[Unreleased]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.4.1...HEAD
+[Unreleased]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.4.2...HEAD
+[1.4.2]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.4.1...v1.4.2
 [1.4.1]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.3.5...v1.4.0
 [1.3.5]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.3.4...v1.3.5
