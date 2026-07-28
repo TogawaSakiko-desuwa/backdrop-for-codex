@@ -132,21 +132,56 @@ public static class InjectionScriptBuilder
               style.dataset.codexWallpaperGeneration = String(cfg.generation);
               style.textContent = `
                 :root {
-                  --codex-wallpaper-glass: rgba(${cfg.glassRed}, ${cfg.glassGreen}, ${cfg.glassBlue}, ${cfg.glassOpacity});
+                  --codex-wallpaper-glass-dark: rgba(${cfg.glassRed}, ${cfg.glassGreen}, ${cfg.glassBlue}, ${cfg.glassOpacity});
+                  --codex-wallpaper-glass-light: color-mix(
+                    in srgb,
+                    var(--color-token-main-surface-primary, rgb(255 255 255))
+                      ${cfg.glassOpacity * 100}%,
+                    transparent);
+                  --codex-wallpaper-glass: light-dark(
+                    var(--codex-wallpaper-glass-light),
+                    var(--codex-wallpaper-glass-dark));
                   --codex-wallpaper-home-suggestion-opacity: ${cfg.glassOpacity * 100}%;
                   --codex-wallpaper-home-suggestion-hover-opacity: ${cfg.homeSuggestionHoverOpacity * 100}%;
                   --codex-wallpaper-blur: ${cfg.glassBlurPixels}px;
                   --codex-wallpaper-saturation: ${cfg.glassSaturation};
-                  --codex-wallpaper-border: rgb(255 255 255 / 0.14);
+                  --codex-wallpaper-border-dark: rgb(255 255 255 / 0.14);
+                  --codex-wallpaper-border-light: rgb(0 0 0 / 0.14);
+                  --codex-wallpaper-border: light-dark(
+                    var(--codex-wallpaper-border-light),
+                    var(--codex-wallpaper-border-dark));
+                  --codex-wallpaper-activity-dark: rgba(16, 18, 24, 0.58);
+                  --codex-wallpaper-activity-light: color-mix(
+                    in srgb,
+                    var(--color-token-main-surface-primary, rgb(255 255 255)) 58%,
+                    transparent);
+                  --codex-wallpaper-activity: light-dark(
+                    var(--codex-wallpaper-activity-light),
+                    var(--codex-wallpaper-activity-dark));
+                  --codex-wallpaper-activity-border-dark: rgb(255 255 255 / 0.06);
+                  --codex-wallpaper-activity-border-light: rgb(0 0 0 / 0.06);
+                  --codex-wallpaper-activity-border: light-dark(
+                    var(--codex-wallpaper-activity-border-light),
+                    var(--codex-wallpaper-activity-border-dark));
                   --codex-wallpaper-radius: 16px;
                   --codex-wallpaper-overlay: light-dark(
                     rgb(255 255 255 / ${cfg.lightOverlay}),
                     rgb(0 0 0 / ${cfg.darkOverlay}));
                 }
                 :root:is(.dark, .electron-dark, [data-theme="dark"]) {
+                  --codex-wallpaper-glass: var(--codex-wallpaper-glass-dark);
+                  --codex-wallpaper-border: var(--codex-wallpaper-border-dark);
+                  --codex-wallpaper-activity: var(--codex-wallpaper-activity-dark);
+                  --codex-wallpaper-activity-border:
+                    var(--codex-wallpaper-activity-border-dark);
                   --codex-wallpaper-overlay: rgb(0 0 0 / ${cfg.darkOverlay});
                 }
                 :root:is(.light, .electron-light, [data-theme="light"]) {
+                  --codex-wallpaper-glass: var(--codex-wallpaper-glass-light);
+                  --codex-wallpaper-border: var(--codex-wallpaper-border-light);
+                  --codex-wallpaper-activity: var(--codex-wallpaper-activity-light);
+                  --codex-wallpaper-activity-border:
+                    var(--codex-wallpaper-activity-border-light);
                   --codex-wallpaper-overlay: rgb(255 255 255 / ${cfg.lightOverlay});
                 }
                 #${cfg.rootId} {
@@ -474,8 +509,8 @@ public static class InjectionScriptBuilder
                     padding: 12px 16px;
                   }
                   {{advancedBodySelector}} main [data-local-conversation-item-target-ids] {
-                    background-color: rgba(16, 18, 24, 0.58) !important;
-                    border: 1px solid rgb(255 255 255 / 0.06);
+                    background-color: var(--codex-wallpaper-activity) !important;
+                    border: 1px solid var(--codex-wallpaper-activity-border);
                     border-radius: 10px;
                     box-sizing: border-box;
                     padding: 4px 8px;

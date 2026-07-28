@@ -371,11 +371,27 @@ public sealed class InjectionScriptBuilderTests
         Assert.Contains("object-position:", script, StringComparison.Ordinal);
         Assert.Contains("light-dark(", script, StringComparison.Ordinal);
         Assert.Contains(
+            "--codex-wallpaper-glass: light-dark(",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "var(--color-token-main-surface-primary, rgb(255 255 255))",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains(
             ":root:is(.dark, .electron-dark, [data-theme=\"dark\"])",
             script,
             StringComparison.Ordinal);
         Assert.Contains(
             ":root:is(.light, .electron-light, [data-theme=\"light\"])",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "--codex-wallpaper-glass: var(--codex-wallpaper-glass-dark);",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "--codex-wallpaper-glass: var(--codex-wallpaper-glass-light);",
             script,
             StringComparison.Ordinal);
         Assert.Contains("overlay.dataset.codexWallpaperOverlay = \"\"", script, StringComparison.Ordinal);
@@ -519,8 +535,22 @@ public sealed class InjectionScriptBuilderTests
         Assert.Contains("[data-user-message-bubble=\"true\"]", script, StringComparison.Ordinal);
         Assert.Contains("padding: 12px 16px", script, StringComparison.Ordinal);
         Assert.Contains("[data-local-conversation-item-target-ids]", script, StringComparison.Ordinal);
-        Assert.Contains("rgba(16, 18, 24, 0.58)", script, StringComparison.Ordinal);
-        Assert.Contains("border: 1px solid rgb(255 255 255 / 0.06)", script, StringComparison.Ordinal);
+        Assert.Contains(
+            "--codex-wallpaper-activity-dark: rgba(16, 18, 24, 0.58)",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "--codex-wallpaper-activity-light: color-mix(",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "background-color: var(--codex-wallpaper-activity) !important",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "border: 1px solid var(--codex-wallpaper-activity-border)",
+            script,
+            StringComparison.Ordinal);
         Assert.Contains("padding: 4px 8px", script, StringComparison.Ordinal);
     }
 
