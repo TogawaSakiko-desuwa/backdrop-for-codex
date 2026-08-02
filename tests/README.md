@@ -1,8 +1,8 @@
 # Tests
 
-Backdrop for Codex 1.4.1 keeps environment-independent verification separate from checks that require a real Codex installation, Edge/CDP, an unlocked Explorer desktop, or UI Automation.
+Backdrop for Codex 1.4.3 keeps environment-independent verification separate from checks that require a real Codex installation, Edge/CDP, an unlocked Explorer desktop, or UI Automation.
 
-The current 1.4.1 line contains **533 non-integration automated cases**. That number describes suite coverage; it is not evidence that a particular checkout passed. Report a check as passed only after the command actually completes successfully. If an environment-dependent check is not run or a prerequisite is unavailable, record it explicitly as **not verified**—never as passed or as part of the passing test count.
+The current 1.4.3 line contains **540 non-integration automated cases**. That number describes suite coverage; it is not evidence that a particular checkout passed. Report a check as passed only after the command actually completes successfully. If an environment-dependent check is not run or a prerequisite is unavailable, record it explicitly as **not verified**—never as passed or as part of the passing test count.
 
 ## Required environment-independent verification
 
@@ -40,7 +40,7 @@ dotnet publish .\src\BackdropForCodex.App\BackdropForCodex.App.csproj `
 
 The shape check succeeds only when the output contains exactly one top-level `BackdropForCodex.exe` and no subdirectories. Use a clean, dedicated publish directory when checking this locally.
 
-## 1.4.1 coverage
+## 1.4.3 coverage
 
 The non-integration suite covers these release contracts:
 
@@ -55,6 +55,7 @@ The non-integration suite covers these release contracts:
 - playback ownership tokens, conditional release, pending-lease disposal, and the guarantee that stale cleanup cannot release a newer active lease;
 - typed outcomes (`MediaActive`, `Official`, `SavedButNotActivated`, `Superseded`, `Canceled`, `Failed`) and typed surfaces (`Official`, `MediaActive`, `Faulted`, `Disconnected`);
 - strict package/process/session/listener/IPv4 loopback/browser/socket/target/unique-page identity order, zero DOM probes after safety failure, zero/multiple-page rejection, baseline failure, and version-independent structure contracts;
+- stable `data-app-shell-*` presentation evidence for the Codex 26.727 CSS Modules shell, with conservative global-baseline fallback when reviewed markers are absent;
 - editing and resubmitting during activation, stale-revision UI filtering, profile cards changing only `Draft`, empty profiles skipping CDP risk confirmation, Saved ≠ Active rendering, temporary Official, dirty-draft confirmation, the 959/960 px breakpoint, and critical accessibility behavior.
 - the 16:9 preview canvas across normal, maximized, and minimum layouts; uniform scaling and pointer-coordinate inversion; one shared image/video backdrop sample; and blur containment within the five rounded simulated glass surfaces.
 
@@ -74,7 +75,7 @@ dotnet test .\BackdropForCodex.slnx `
   --filter "FullyQualifiedName~CurrentMachineCompatibilityTests"
 ```
 
-Record the installed package identity and running-process checks separately. Do not replace either with a unit-test result.
+Record the installed package identity, running-process identity, and live presentation-contract checks separately. Do not replace any of them with a unit-test result.
 
 ### Edge/CDP startup and injection
 

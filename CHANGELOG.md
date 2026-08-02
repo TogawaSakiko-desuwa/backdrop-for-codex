@@ -4,9 +4,19 @@
 
 ## [Unreleased]
 
+## [1.4.3] - 2026-08-02
+
 ### Fixed
 
+- 适配 Codex `26.727` 将应用标题栏与主内容 shell 迁移到 CSS Modules 后的结构变化：表现契约与标题栏、设置画布、内容 frame、顶部渐变规则改用受审核的稳定 `data-app-shell-*` 标记，恢复 `codex-shell-v1`、玻璃效果和高级表面，同时继续在标记缺失时安全降级到全局背景。
+- 修复兼容迁移一度混淆顶部应用菜单栏与下层内容 edge header 的问题；“文件 / 编辑 / 视图 / 帮助”所在的 Electron 原生菜单顶栏现在通过窗口类型、窗口 chrome、应用根和直接水平 `menubar` 结构承载主题玻璃，不依赖会变化的 CSS Modules 类名；同时带 `data-app-shell-application-menu-bar` 与 `data-app-shell-header-edge-scroll` 的下层内容 header 及其 context 子层保持透明且不重复模糊。
+- 修复设置页末端画布已移除 `main-surface` class 后选择器零命中、右侧继续显示原生黑底的问题；设置路由 guard 与 shell data-marker 链保持不变，末端改用 26.727 唯一的 Electron/Windows 语义 surface 组合并继续排除浏览器画布、卡片和控件。
 - 修复 Codex 浅色主题下侧栏、标题栏、设置画布和活动消息卡片仍使用深色玻璃表面、导致文字对比度不足的问题；浅色玻璃现在跟随主题主表面色并保留既有透明度与模糊效果，主题令牌缺失时回退白色，深色视觉保持不变。
+
+### Verification
+
+- .NET SDK `10.0.301` 的锁定还原、格式检查和 Release 构建全部通过，构建为 0 警告、0 错误；540 个非集成测试全部通过，16 个受审选择器用例确认标题栏、设置画布及近似反例作用域。
+- 当前机器 3 个 Codex 身份与实时页面结构用例全部通过，确认官方 Codex `26.727` 运行页匹配 `codex-shell-v1` 并恢复 Glass/Advanced；4 个 Edge/CDP 用例全部通过，其中深色 fixture 直接断言顶部应用菜单栏和 26.727 设置画布的半透明背景、blur 与 saturate，并确认下层 edge header 为透明，浅色 fixture 通过最终栅格与对比度验证主题玻璃表面。
 
 ## [1.4.2] - 2026-07-28
 
@@ -232,7 +242,8 @@
 - 复验完整 MSIX 包名、激活 PID、进程启动时间、Windows 会话和监听器所有权；媒体服务保持已校验文件的只读句柄。
 - 明确禁止 CSP bypass；关闭、更换或 lease 到期时移除媒体 `src`、撤销 `blob:` URL，并仅删除带有本项目 owner/generation 的节点和样式。
 
-[Unreleased]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.4.2...HEAD
+[Unreleased]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.4.3...HEAD
+[1.4.3]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.4.2...v1.4.3
 [1.4.2]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.4.1...v1.4.2
 [1.4.1]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.3.5...v1.4.0

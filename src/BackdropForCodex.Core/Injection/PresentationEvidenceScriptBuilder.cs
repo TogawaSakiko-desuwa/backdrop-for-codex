@@ -12,9 +12,9 @@ internal static class PresentationEvidenceScriptBuilder
     private const string AppRootSelector = "body > #root";
     private const string MainSelector = "main";
     private const string ShellHeaderSelector =
-        ".app-header-tint[data-app-shell-header-edge-scroll]";
+        "header[data-app-shell-application-menu-bar][data-app-shell-header-edge-scroll]";
     private const string MainViewportSelector =
-        ".app-shell-main-content-viewport[data-app-shell-main-content-layout]";
+        "[data-app-shell-main-content-layout][data-app-shell-right-panel-full-width]";
 
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {

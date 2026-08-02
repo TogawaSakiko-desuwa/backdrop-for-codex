@@ -200,14 +200,16 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
     }
 
     [Fact]
-    public void ReviewedHeaderSelectors_KeepOnlyTheGlobalHeaderSurfaced()
+    public void ReviewedHeaderSelectors_GlassOnlyTheNativeApplicationMenuTopBarAndClearTheEdgeLayer()
     {
         var styleSheet = ExtractGeneratedStyleSheet();
         var forcedColorsNone = ExtractBlock(styleSheet, "@media (forced-colors: none)");
         var rules = ParseLeafRules(forcedColorsNone);
         var fixture = XDocument.Parse(CurrentHeaderFixture);
 
-        var generalGlassRule = Assert.Single(rules, IsGeneralGlassRule);
+        var applicationMenuTopBarGlassRule = Assert.Single(
+            rules,
+            IsReviewedApplicationMenuTopBarGlassRule);
         var edgeHeaderResetRule = Assert.Single(rules, IsReviewedEdgeHeaderResetRule);
         var contextClearRule = Assert.Single(rules, IsReviewedHeaderContextClearRule);
 
@@ -215,7 +217,16 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
             [
                 CanonicalizeSelector(
                     """
-                    body .app-header-tint[data-app-shell-header-edge-scroll]
+                    html[data-codex-window-type="electron"][data-codex-window-chrome="application-menu"]
+                      body > #root > div > div:has(> [role="menubar"][data-orientation="horizontal"])
+                    """),
+            ],
+            applicationMenuTopBarGlassRule.Selectors);
+        Assert.Equal(
+            [
+                CanonicalizeSelector(
+                    """
+                    body header[data-app-shell-application-menu-bar][data-app-shell-header-edge-scroll]
                     """),
             ],
             edgeHeaderResetRule.Selectors);
@@ -223,7 +234,7 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
             [
                 CanonicalizeSelector(
                     """
-                    body .app-header-tint[data-app-shell-header-edge-scroll]
+                    body header[data-app-shell-application-menu-bar][data-app-shell-header-edge-scroll]
                       > [data-testid="app-shell-header-context-menu-surface"]
                     """),
             ],
@@ -231,7 +242,7 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
 
         Assert.Equal(
             ["top-app-bar"],
-            SelectFixtureIds(fixture, generalGlassRule.Selectors));
+            SelectFixtureIds(fixture, applicationMenuTopBarGlassRule.Selectors));
         Assert.Equal(
             ["edge-scroll-header"],
             SelectFixtureIds(fixture, edgeHeaderResetRule.Selectors));
@@ -242,14 +253,21 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
         var changedIds = SelectFixtureIds(
             fixture,
             [
-                .. generalGlassRule.Selectors,
+                .. applicationMenuTopBarGlassRule.Selectors,
                 .. edgeHeaderResetRule.Selectors,
                 .. contextClearRule.Selectors,
             ]);
         Assert.DoesNotContain("main-header-menu-button", changedIds);
+        Assert.DoesNotContain("top-app-leading-controls", changedIds);
+        Assert.DoesNotContain("top-app-menubar", changedIds);
+        Assert.DoesNotContain("top-file-menu-item", changedIds);
         Assert.DoesNotContain("right-header-slot", changedIds);
         Assert.DoesNotContain("right-tab-close-button", changedIds);
         Assert.DoesNotContain("right-panel", changedIds);
+        Assert.DoesNotContain("css-module-header-without-data-markers", changedIds);
+        Assert.DoesNotContain("css-module-header-context", changedIds);
+        Assert.DoesNotContain("nested-horizontal-menubar-container", changedIds);
+        Assert.DoesNotContain("wrong-orientation-topbar", changedIds);
     }
 
     [Fact]
@@ -374,12 +392,15 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
                 CanonicalizeSelector(
                     """
                     body main
-                      .app-shell-main-content-top-fade[data-app-shell-main-content-top-fade]
+                      [data-app-shell-main-content-top-fade]
                     """),
             ],
             topFadeRule.Selectors);
         Assert.Equal(
-            ["main-content-top-fade"],
+            ["main-content-top-fade", "top-fade-without-class"],
+            SelectFixtureIds(fixture, topFadeRule.Selectors));
+        Assert.DoesNotContain(
+            "css-module-top-fade-without-data-marker",
             SelectFixtureIds(fixture, topFadeRule.Selectors));
     }
 
@@ -593,14 +614,14 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
                 CanonicalizeSelector(
                     """
                     body [class~="relative"][class~="isolate"][class~="flex"][class~="max-h-full"][class~="min-h-0"][class~="w-full"][class~="flex-1"]:has([class~="app-shell-left-panel"] [data-settings-panel-slug])
-                      > main[class~="main-surface"][class~="relative"][class~="isolate"][class~="flex"][class~="min-h-0"][class~="flex-1"][class~="flex-col"]
+                      > main[data-app-shell-main-surface="default"]
                       > [class~="relative"][class~="isolate"][class~="flex"][class~="min-h-0"][class~="flex-1"][class~="overflow-hidden"]
-                      > [class~="app-shell-main-content-viewport"][class~="relative"][class~="flex"][class~="min-h-0"][class~="min-w-0"][class~="flex-col"][class~="flex-1"]
-                      > [class~="app-shell-main-content-frame"][class~="relative"][class~="flex"][class~="min-h-0"][class~="flex-1"][class~="flex-col"]
+                      > [data-app-shell-main-content-layout][data-app-shell-right-panel-full-width]
+                      > [data-app-shell-thread-edge-divider]
                       > [class~="relative"][class~="flex"][class~="min-h-0"][class~="flex-1"]
                       > [class~="h-full"][class~="min-h-0"][class~="min-w-0"][class~="flex-1"]
                       > [class~="h-full"][class~="min-w-0"][class~="overflow-visible"]
-                      > div[class~="main-surface"][class~="flex"][class~="h-full"][class~="min-h-0"][class~="flex-col"]
+                      > div[class~="flex"][class~="h-full"][class~="min-h-0"][class~="flex-col"][class~="electron:overflow-hidden"][class~="electron:bg-token-main-surface-primary"][class~="electron:elevation-prominent"][class~="windows:rounded-tl-lg"]
                     """),
             ],
             canvasGlassRule.Selectors);
@@ -617,6 +638,9 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
         Assert.DoesNotContain("settings-general-card", changedIds);
         Assert.DoesNotContain("settings-dropdown", changedIds);
         Assert.DoesNotContain("settings-switch", changedIds);
+        Assert.DoesNotContain("settings-css-module-only-canvas", changedIds);
+        Assert.DoesNotContain("settings-browser-canvas", changedIds);
+        Assert.DoesNotContain("settings-legacy-main-surface-canvas", changedIds);
     }
 
     [Fact]
@@ -762,12 +786,31 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
                     ":not(:has([data-app-shell-tab-panel-controller]))",
                     StringComparison.Ordinal));
 
+    private static bool IsReviewedApplicationMenuTopBarGlassRule(CssRule rule) =>
+        rule.Declarations.Contains(
+            "background-color: var(--codex-wallpaper-glass) !important",
+            StringComparison.Ordinal) &&
+        rule.Declarations.Contains(
+            "-webkit-backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation))",
+            StringComparison.Ordinal) &&
+        rule.Declarations.Contains(
+            "backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation))",
+            StringComparison.Ordinal) &&
+        rule.Selectors.Contains(
+            CanonicalizeSelector(
+                """
+                html[data-codex-window-type="electron"][data-codex-window-chrome="application-menu"]
+                  body > #root > div > div:has(> [role="menubar"][data-orientation="horizontal"])
+                """),
+            StringComparer.Ordinal);
+
     private static bool IsReviewedEdgeHeaderResetRule(CssRule rule) =>
         CanonicalizeWhitespace(rule.Declarations) ==
         "background: transparent !important; -webkit-backdrop-filter: none !important; backdrop-filter: none !important;" &&
         rule.Selectors.Any(
             selector => selector.Contains(
-                ".app-header-tint[data-app-shell-header-edge-scroll]",
+                "header[data-app-shell-application-menu-bar]" +
+                "[data-app-shell-header-edge-scroll]",
                 StringComparison.Ordinal));
 
     private static bool IsReviewedHeaderContextClearRule(CssRule rule) =>
@@ -841,9 +884,6 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
         "background-image: none !important;" &&
         rule.Selectors.Any(
             selector =>
-                selector.Contains(
-                    ".app-shell-main-content-top-fade",
-                    StringComparison.Ordinal) &&
                 selector.Contains(
                     "[data-app-shell-main-content-top-fade]",
                     StringComparison.Ordinal));
@@ -1025,16 +1065,20 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
                     ":has([class~=\"app-shell-left-panel\"] [data-settings-panel-slug])",
                     StringComparison.Ordinal) &&
                 selector.Contains(
-                    "> main[class~=\"main-surface\"][class~=\"relative\"]" +
-                    "[class~=\"isolate\"][class~=\"flex\"][class~=\"min-h-0\"]" +
-                    "[class~=\"flex-1\"][class~=\"flex-col\"]",
+                    "> main[data-app-shell-main-surface=\"default\"]",
                     StringComparison.Ordinal) &&
                 selector.Contains(
-                    "> [class~=\"app-shell-main-content-frame\"]",
+                    "> [data-app-shell-main-content-layout]" +
+                    "[data-app-shell-right-panel-full-width]" +
+                    " > [data-app-shell-thread-edge-divider]",
                     StringComparison.Ordinal) &&
                 selector.EndsWith(
-                    "> div[class~=\"main-surface\"][class~=\"flex\"]" +
-                    "[class~=\"h-full\"][class~=\"min-h-0\"][class~=\"flex-col\"]",
+                    "> div[class~=\"flex\"][class~=\"h-full\"]" +
+                    "[class~=\"min-h-0\"][class~=\"flex-col\"]" +
+                    "[class~=\"electron:overflow-hidden\"]" +
+                    "[class~=\"electron:bg-token-main-surface-primary\"]" +
+                    "[class~=\"electron:elevation-prominent\"]" +
+                    "[class~=\"windows:rounded-tl-lg\"]",
                     StringComparison.Ordinal));
 
     private static bool IsReviewedKeyboardShortcutsStickyClearRule(CssRule rule) =>
@@ -1348,6 +1392,14 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
         }
 
         var selectorWithoutAttributes = CssAttributeRegex().Replace(selector, string.Empty);
+        var ids = CssIdRegex().Matches(selectorWithoutAttributes);
+        var actualId = (string?)element.Attribute("id");
+        if (ids.Any(idMatch => actualId != idMatch.Groups["name"].Value))
+        {
+            return false;
+        }
+
+        selectorWithoutAttributes = CssIdRegex().Replace(selectorWithoutAttributes, string.Empty);
         var classes = CssClassRegex().Matches(selectorWithoutAttributes);
         var actualClasses = ((string?)element.Attribute("class") ?? string.Empty)
             .Split(' ', StringSplitOptions.RemoveEmptyEntries);
@@ -1536,6 +1588,9 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
 
     [GeneratedRegex(@"\.(?<name>[\w-]+)", RegexOptions.CultureInvariant)]
     private static partial Regex CssClassRegex();
+
+    [GeneratedRegex(@"#(?<name>[\w-]+)", RegexOptions.CultureInvariant)]
+    private static partial Regex CssIdRegex();
 
     private const string ReviewedRightPanelFixture =
         """
@@ -1782,23 +1837,63 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
 
     private const string CurrentHeaderFixture =
         """
-        <html class="electron-dark">
+        <html class="electron-dark"
+              data-codex-window-type="electron"
+              data-window-type="electron"
+              data-codex-os="win32"
+              data-codex-window-chrome="application-menu">
           <body>
-            <header class="app-header-tint"
-                    data-fixture-id="top-app-bar" />
+            <div id="root">
+              <div class="relative flex flex-col" data-fixture-id="app-shell-frame">
+                <div class="_ApplicationMenuTopBar_fixture_1"
+                     data-fixture-id="top-app-bar">
+                  <div class="flex items-center gap-1"
+                       data-fixture-id="top-app-leading-controls">
+                    <span class="contents" data-state="closed" />
+                  </div>
+                  <div class="flex items-center gap-0.5 ps-1 pe-2"
+                       role="menubar"
+                       data-orientation="horizontal"
+                       data-fixture-id="top-app-menubar">
+                    <button id="application-menu-trigger-file-menu"
+                            role="menuitem"
+                            data-fixture-id="top-file-menu-item" />
+                  </div>
+                </div>
 
-            <header class="app-header-tint"
-                    data-app-shell-header-edge-scroll=""
-                    data-fixture-id="edge-scroll-header">
-              <div data-testid="app-shell-header-context-menu-surface"
-                   data-fixture-id="main-header-context">
-                <button data-fixture-id="main-header-menu-button" />
+                <div data-fixture-id="nested-horizontal-menubar-container">
+                  <div>
+                    <div role="menubar" data-orientation="horizontal" />
+                  </div>
+                </div>
+
+                <div data-fixture-id="wrong-orientation-topbar">
+                  <div role="menubar" data-orientation="vertical" />
+                </div>
+
+                <main>
+                  <header class="_Header_fixture_2"
+                          data-app-shell-application-menu-bar=""
+                          data-app-shell-header-edge-scroll=""
+                          data-fixture-id="edge-scroll-header">
+                    <div data-testid="app-shell-header-context-menu-surface"
+                         data-fixture-id="main-header-context">
+                      <button data-fixture-id="main-header-menu-button" />
+                    </div>
+                    <div data-fixture-id="right-header-slot">
+                      <button data-app-shell-tab-close-button="true"
+                              data-fixture-id="right-tab-close-button" />
+                    </div>
+                  </header>
+
+                  <header class="_Header_fixture_3"
+                          data-fixture-id="css-module-header-without-data-markers">
+                    <div data-testid="app-shell-header-context-menu-surface"
+                         data-fixture-id="css-module-header-context" />
+                  </header>
+                </main>
               </div>
-              <div data-fixture-id="right-header-slot">
-                <button data-app-shell-tab-close-button="true"
-                        data-fixture-id="right-tab-close-button" />
-              </div>
-            </header>
+            </div>
 
             <aside data-app-shell-focus-area="right-panel"
                    data-fixture-id="right-panel" />
@@ -1997,17 +2092,17 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
         <html class="electron-dark">
           <body>
             <main>
-              <div class="app-shell-main-content-top-fade"
+              <div class="_MainContentTopFade_fixture_144"
                    data-app-shell-main-content-top-fade="visible"
                    data-fixture-id="main-content-top-fade" />
-              <div class="app-shell-main-content-top-fade"
-                   data-fixture-id="top-fade-without-state-attribute" />
+              <div class="_MainContentTopFade_fixture_145"
+                   data-fixture-id="css-module-top-fade-without-data-marker" />
               <div data-app-shell-main-content-top-fade="visible"
                    data-fixture-id="top-fade-without-class" />
               <div class="bg-gradient-to-b from-token-main-surface-primary"
                    data-fixture-id="unrelated-main-gradient" />
             </main>
-            <div class="app-shell-main-content-top-fade"
+            <div class="_MainContentTopFade_fixture_146"
                  data-app-shell-main-content-top-fade="visible"
                  data-fixture-id="outside-main-top-fade" />
           </body>
@@ -2097,7 +2192,9 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
           <body>
             <main>
               <div class="relative isolate flex min-h-0 flex-1 overflow-hidden">
-                <div class="app-shell-main-content-viewport">
+                <div class="_MainContentViewport_fixture_201"
+                     data-app-shell-main-content-layout="default"
+                     data-app-shell-right-panel-full-width="false">
                   <div class="flex h-full min-h-0 w-full flex-col bg-token-main-surface-primary"
                        data-fixture-id="pull-request-list-root">
                     <div class="sticky z-30 bg-token-main-surface-primary"
@@ -2160,7 +2257,9 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
 
             <main>
               <div class="relative isolate flex min-h-0 flex-1 overflow-hidden">
-                <div class="app-shell-main-content-viewport">
+                <div class="_MainContentViewport_fixture_202"
+                     data-app-shell-main-content-layout="default"
+                     data-app-shell-right-panel-full-width="false">
                   <div class="flex h-full min-h-0 w-full flex-col bg-token-main-surface-primary"
                        data-fixture-id="pull-request-list-root-wrong-id">
                     <div class="sticky z-30 bg-token-main-surface-primary"
@@ -2197,15 +2296,19 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
               <aside class="app-shell-left-panel">
                 <button data-settings-panel-slug="general" />
               </aside>
-              <main class="main-surface relative isolate flex min-h-0 flex-1 flex-col"
+              <main class="_MainSurface_fixture_41"
+                    data-app-shell-main-surface="default"
                     data-fixture-id="settings-outer-main-surface">
                 <div class="relative isolate flex min-h-0 flex-1 overflow-hidden">
-                  <div class="app-shell-main-content-viewport relative flex min-h-0 min-w-0 flex-col flex-1">
-                    <div class="app-shell-main-content-frame relative flex min-h-0 flex-1 flex-col">
+                  <div class="_MainContentViewport_fixture_143"
+                       data-app-shell-main-content-layout="default"
+                       data-app-shell-right-panel-full-width="false">
+                    <div class="_MainContentFrame_fixture_144"
+                         data-app-shell-thread-edge-divider="">
                       <div class="relative flex min-h-0 flex-1">
                         <div class="h-full min-h-0 min-w-0 flex-1">
                           <div class="h-full min-w-0 overflow-visible">
-                            <div class="main-surface flex h-full min-h-0 flex-col"
+                            <div class="flex h-full min-h-0 flex-col electron:overflow-hidden electron:bg-token-main-surface-primary electron:elevation-prominent windows:rounded-tl-lg"
                                  data-fixture-id="settings-content-canvas">
                               <section class="rounded-xl bg-token-main-surface-primary"
                                        data-fixture-id="settings-permissions-card">
@@ -2222,6 +2325,56 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
                                         data-fixture-id="settings-switch" />
                               </section>
                             </div>
+                            <div class="main-surface flex h-full min-h-0 flex-col"
+                                 data-fixture-id="settings-legacy-main-surface-canvas" />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </main>
+            </div>
+
+            <div class="relative isolate flex max-h-full min-h-0 w-full flex-1">
+              <aside class="app-shell-left-panel">
+                <button data-settings-panel-slug="general" />
+              </aside>
+              <main class="_MainSurface_fixture_42"
+                    data-app-shell-main-surface="browser">
+                <div class="relative isolate flex min-h-0 flex-1 overflow-hidden">
+                  <div class="_MainContentViewport_fixture_145"
+                       data-app-shell-main-content-layout="default"
+                       data-app-shell-right-panel-full-width="false">
+                    <div class="_MainContentFrame_fixture_146"
+                         data-app-shell-thread-edge-divider="">
+                      <div class="relative flex min-h-0 flex-1">
+                        <div class="h-full min-h-0 min-w-0 flex-1">
+                          <div class="h-full min-w-0 overflow-visible">
+                            <div class="flex h-full min-h-0 flex-col electron:overflow-hidden electron:bg-token-main-surface-primary electron:elevation-prominent windows:rounded-tl-lg"
+                                 data-fixture-id="settings-browser-canvas" />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </main>
+            </div>
+
+            <div class="relative isolate flex max-h-full min-h-0 w-full flex-1">
+              <aside class="app-shell-left-panel">
+                <button data-settings-panel-slug="general" />
+              </aside>
+              <main class="_MainSurface_fixture_43">
+                <div class="relative isolate flex min-h-0 flex-1 overflow-hidden">
+                  <div class="_MainContentViewport_fixture_147">
+                    <div class="_MainContentFrame_fixture_148">
+                      <div class="relative flex min-h-0 flex-1">
+                        <div class="h-full min-h-0 min-w-0 flex-1">
+                          <div class="h-full min-w-0 overflow-visible">
+                            <div class="flex h-full min-h-0 flex-col electron:overflow-hidden electron:bg-token-main-surface-primary electron:elevation-prominent windows:rounded-tl-lg"
+                                 data-fixture-id="settings-css-module-only-canvas" />
                           </div>
                         </div>
                       </div>
@@ -2244,12 +2397,28 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
               </div>
             </div>
 
-            <div class="flex h-full min-h-0">
+            <div class="relative isolate flex max-h-full min-h-0 w-full flex-1">
               <aside class="app-shell-left-panel" />
-              <div class="relative isolate min-w-0 flex-1 overflow-visible">
-                <div class="main-surface flex h-full min-h-0 flex-col"
-                     data-fixture-id="settings-canvas-without-data-anchor" />
-              </div>
+              <main class="_MainSurface_fixture_44"
+                    data-app-shell-main-surface="default">
+                <div class="relative isolate flex min-h-0 flex-1 overflow-hidden">
+                  <div class="_MainContentViewport_fixture_149"
+                       data-app-shell-main-content-layout="default"
+                       data-app-shell-right-panel-full-width="false">
+                    <div class="_MainContentFrame_fixture_150"
+                         data-app-shell-thread-edge-divider="">
+                      <div class="relative flex min-h-0 flex-1">
+                        <div class="h-full min-h-0 min-w-0 flex-1">
+                          <div class="h-full min-w-0 overflow-visible">
+                            <div class="flex h-full min-h-0 flex-col electron:overflow-hidden electron:bg-token-main-surface-primary electron:elevation-prominent windows:rounded-tl-lg"
+                                 data-fixture-id="settings-canvas-without-data-anchor" />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </main>
             </div>
           </body>
         </html>

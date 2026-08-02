@@ -347,19 +347,19 @@ public static class InjectionScriptBuilder
                     background-image: none !important;
                   }
                   /*
-                   * Settings renders its opaque div.main-surface inside the reviewed
+                   * Settings renders its opaque Electron surface inside the reviewed
                    * app-shell viewport stack. Anchor through the settings navigation and
                    * exact current wrappers so the outer main and nested cards stay native.
                    */
                   {{glassBodySelector}} [class~="relative"][class~="isolate"][class~="flex"][class~="max-h-full"][class~="min-h-0"][class~="w-full"][class~="flex-1"]:has([class~="app-shell-left-panel"] [data-settings-panel-slug])
-                    > main[class~="main-surface"][class~="relative"][class~="isolate"][class~="flex"][class~="min-h-0"][class~="flex-1"][class~="flex-col"]
+                    > main[data-app-shell-main-surface="default"]
                     > [class~="relative"][class~="isolate"][class~="flex"][class~="min-h-0"][class~="flex-1"][class~="overflow-hidden"]
-                    > [class~="app-shell-main-content-viewport"][class~="relative"][class~="flex"][class~="min-h-0"][class~="min-w-0"][class~="flex-col"][class~="flex-1"]
-                    > [class~="app-shell-main-content-frame"][class~="relative"][class~="flex"][class~="min-h-0"][class~="flex-1"][class~="flex-col"]
+                    > [data-app-shell-main-content-layout][data-app-shell-right-panel-full-width]
+                    > [data-app-shell-thread-edge-divider]
                     > [class~="relative"][class~="flex"][class~="min-h-0"][class~="flex-1"]
                     > [class~="h-full"][class~="min-h-0"][class~="min-w-0"][class~="flex-1"]
                     > [class~="h-full"][class~="min-w-0"][class~="overflow-visible"]
-                    > div[class~="main-surface"][class~="flex"][class~="h-full"][class~="min-h-0"][class~="flex-col"] {
+                    > div[class~="flex"][class~="h-full"][class~="min-h-0"][class~="flex-col"][class~="electron:overflow-hidden"][class~="electron:bg-token-main-surface-primary"][class~="electron:elevation-prominent"][class~="windows:rounded-tl-lg"] {
                     background-color: var(--codex-wallpaper-glass) !important;
                     -webkit-backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
                     backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
@@ -437,12 +437,19 @@ public static class InjectionScriptBuilder
                   }
                   /* codex-wallpaper-advanced:end */
                   /* codex-wallpaper-glass:start */
-                  {{glassBodySelector}} .app-header-tint[data-app-shell-header-edge-scroll] {
+                  html[data-codex-window-type="electron"][data-codex-window-chrome="application-menu"]
+                    {{glassBodySelector}} > #root > div > div:has(> [role="menubar"][data-orientation="horizontal"]) {
+                    background-color: var(--codex-wallpaper-glass) !important;
+                    -webkit-backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation)) !important;
+                    backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation)) !important;
+                    border-color: var(--codex-wallpaper-border);
+                  }
+                  {{glassBodySelector}} header[data-app-shell-application-menu-bar][data-app-shell-header-edge-scroll] {
                     background: transparent !important;
                     -webkit-backdrop-filter: none !important;
                     backdrop-filter: none !important;
                   }
-                  {{glassBodySelector}} .app-header-tint[data-app-shell-header-edge-scroll]
+                  {{glassBodySelector}} header[data-app-shell-application-menu-bar][data-app-shell-header-edge-scroll]
                     > [data-testid="app-shell-header-context-menu-surface"] {
                     background: transparent !important;
                     -webkit-backdrop-filter: none !important;
@@ -451,7 +458,6 @@ public static class InjectionScriptBuilder
                   }
                   {{glassBodySelector}} :is(
                     aside:not([data-app-shell-focus-area="right-panel"]),
-                    .app-header-tint:not([data-app-shell-header-edge-scroll]),
                     [role="dialog"],
                     [data-codex-wallpaper-glass]) {
                     background-color: var(--codex-wallpaper-glass) !important;
@@ -461,7 +467,6 @@ public static class InjectionScriptBuilder
                   }
                   {{glassBodySelector}} :is(
                     aside:not([data-app-shell-focus-area="right-panel"]),
-                    .app-header-tint:not([data-app-shell-header-edge-scroll]),
                     [role="dialog"],
                     [data-codex-wallpaper-glass]) :is(nav, header) {
                     background: transparent !important;
@@ -471,7 +476,7 @@ public static class InjectionScriptBuilder
                   /* codex-wallpaper-glass:end */
                   /* codex-wallpaper-advanced:start */
                   {{advancedBodySelector}} main
-                    .app-shell-main-content-top-fade[data-app-shell-main-content-top-fade] {
+                    [data-app-shell-main-content-top-fade] {
                     background-image: none !important;
                   }
                   {{advancedBodySelector}} main .thread-scroll-container
