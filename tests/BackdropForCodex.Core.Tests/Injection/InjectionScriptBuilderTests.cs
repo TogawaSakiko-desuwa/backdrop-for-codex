@@ -355,6 +355,37 @@ public sealed class InjectionScriptBuilderTests
     }
 
     [Fact]
+    public void BuildInstall_UsesStableShellDataMarkersInsteadOfCssModuleClasses()
+    {
+        var script = InjectionScriptBuilder.BuildInstall(CreateOptions());
+
+        string[] stableSelectors =
+        [
+            "header[data-app-shell-application-menu-bar]" +
+            "[data-app-shell-header-edge-scroll]",
+            "main[data-app-shell-main-surface=\"default\"]",
+            "[data-app-shell-main-content-layout]" +
+            "[data-app-shell-right-panel-full-width]",
+            "[data-app-shell-thread-edge-divider]",
+            "[data-app-shell-main-content-top-fade]",
+        ];
+        string[] supersededCssModuleSelectors =
+        [
+            ".app-header-tint",
+            ".app-shell-main-content-viewport",
+            ".app-shell-main-content-frame",
+            ".app-shell-main-content-top-fade",
+        ];
+
+        Assert.All(
+            stableSelectors,
+            selector => Assert.Contains(selector, script, StringComparison.Ordinal));
+        Assert.All(
+            supersededCssModuleSelectors,
+            selector => Assert.DoesNotContain(selector, script, StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void BuildInstall_AppliesCropFocusAndAddsAnOwnedThemeAwareOverlay()
     {
         var script = InjectionScriptBuilder.BuildInstall(CreateOptions(

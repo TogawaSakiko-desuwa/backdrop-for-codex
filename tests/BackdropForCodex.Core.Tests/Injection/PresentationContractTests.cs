@@ -15,12 +15,14 @@ public sealed class PresentationContractTests
         Assert.Contains("appRoot.contains(main)", script, StringComparison.Ordinal);
         Assert.Contains(
             "\"shellHeaderSelector\":\"" +
-            ".app-header-tint[data-app-shell-header-edge-scroll]\"",
+            "header[data-app-shell-application-menu-bar]" +
+            "[data-app-shell-header-edge-scroll]\"",
             script,
             StringComparison.Ordinal);
         Assert.Contains(
             "\"mainViewportSelector\":\"" +
-            ".app-shell-main-content-viewport[data-app-shell-main-content-layout]\"",
+            "[data-app-shell-main-content-layout]" +
+            "[data-app-shell-right-panel-full-width]\"",
             script,
             StringComparison.Ordinal);
         Assert.Contains(
@@ -40,6 +42,13 @@ public sealed class PresentationContractTests
             "data-app-shell-focus-area",
             script,
             StringComparison.Ordinal);
+        Assert.DoesNotContain(".app-header-tint", script, StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            ".app-shell-main-content-viewport",
+            script,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("_Header_", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("_MainContentViewport_", script, StringComparison.Ordinal);
         Assert.Contains("selector(:has(*))", script, StringComparison.Ordinal);
         Assert.DoesNotContain("packageVersion", script, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("packageFullName", script, StringComparison.OrdinalIgnoreCase);

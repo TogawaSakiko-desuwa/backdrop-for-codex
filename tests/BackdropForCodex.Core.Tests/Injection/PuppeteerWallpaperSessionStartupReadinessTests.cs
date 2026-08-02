@@ -67,18 +67,28 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
                     }).observe(document.documentElement, { childList: true, subtree: true });
                     setTimeout(() => {
                       const main = document.createElement("main");
+                      main.className = "_mainSurface_26_727_1";
+                      main.dataset.appShellMainSurface = "default";
                       main.textContent = "ready";
+                      const applicationHeader = document.createElement("header");
+                      applicationHeader.className = "_applicationMenuBar_26_727_1";
+                      applicationHeader.dataset.appShellApplicationMenuBar = "true";
+                      applicationHeader.dataset.appShellHeaderEdgeScroll = "false";
                       const viewport = document.createElement("div");
-                      viewport.className = "app-shell-main-content-viewport";
+                      viewport.className = "_mainContentLayout_26_727_1";
                       viewport.dataset.appShellMainContentLayout = "default";
+                      viewport.dataset.appShellRightPanelFullWidth = "false";
                       const frame = document.createElement("div");
                       frame.id = "initial-main-content-frame";
+                      frame.className = "_threadEdgeDivider_26_727_1";
+                      frame.dataset.appShellThreadEdgeDivider = "true";
                       const topFade = document.createElement("div");
                       topFade.id = "initial-main-content-top-fade";
-                      topFade.className = "app-shell-main-content-top-fade";
+                      topFade.className = "_mainContentTopFade_26_727_1";
                       topFade.dataset.appShellMainContentTopFade = "visible";
                       frame.append(topFade);
-                      main.append(viewport, frame);
+                      viewport.append(frame);
+                      main.append(applicationHeader, viewport);
                       document.querySelector("#root").appendChild(main);
                     }, 4000);
                   });
@@ -86,9 +96,6 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
               </head>
               <body>
                 <div id="root">
-                  <header class="app-header-tint"></header>
-                  <div class="app-header-tint"
-                       data-app-shell-header-edge-scroll="false"></div>
                   <div data-home-ambient-suggestions></div>
                 </div>
               </body>
@@ -218,8 +225,11 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
             Assert.Equal("auto", populatedPanel.CloseButtonPointerEvents);
 
             var headers = shellSurfaces.Headers;
-            Assert.NotEqual("rgba(0, 0, 0, 0)", headers.GlobalBackground);
-            Assert.Contains("blur(", headers.GlobalBackdropFilter, StringComparison.Ordinal);
+            Assert.Equal("rgb(61, 62, 63)", headers.GenericBackground);
+            Assert.Equal("blur(3px)", headers.GenericBackdropFilter);
+            AssertGlassSurface(
+                headers.ApplicationMenuBackground,
+                headers.ApplicationMenuBackdropFilter);
             Assert.Equal("rgba(0, 0, 0, 0)", headers.EdgeBackground);
             Assert.Equal("none", headers.EdgeBackdropFilter);
             Assert.Equal("rgba(0, 0, 0, 0)", headers.ContextBackground);
@@ -286,11 +296,11 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
               </head>
               <body>
                 <div id="root">
-                  <div class="app-header-tint"
-                       data-app-shell-header-edge-scroll="false"></div>
-                  <main>
-                    <div class="app-shell-main-content-viewport"
-                         data-app-shell-main-content-layout="default"></div>
+                  <main data-app-shell-main-surface>
+                    <header data-app-shell-application-menu-bar
+                            data-app-shell-header-edge-scroll="false"></header>
+                    <div data-app-shell-main-content-layout="default"
+                         data-app-shell-right-panel-full-width="false"></div>
                   </main>
                 </div>
               </body>
@@ -380,6 +390,8 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
             """
             <!doctype html>
             <html class="electron-light"
+                  data-codex-window-type="electron"
+                  data-codex-window-chrome="application-menu"
                   style="--color-token-main-surface-primary: rgb(246 240 232)">
               <head>
                 <meta charset="utf-8">
@@ -467,31 +479,42 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
                       <div class="contrast-background"></div>
                     </div>
                   </aside>
-                  <header id="contrast-header"
-                          class="app-header-tint contrast-surface">
-                    <div class="contrast-pair">
-                      <div class="contrast-foreground"></div>
-                      <div class="contrast-background"></div>
+                  <div class="relative flex flex-col">
+                    <div id="contrast-header"
+                         class="_ApplicationMenuTopBar_26_727_1 contrast-surface">
+                      <div role="menubar" data-orientation="horizontal"></div>
+                      <div class="contrast-pair">
+                        <div class="contrast-foreground"></div>
+                        <div class="contrast-background"></div>
+                      </div>
                     </div>
-                  </header>
-                  <div class="app-header-tint"
-                       data-app-shell-header-edge-scroll="false"></div>
-                  <main role="main">
-                    <div class="app-shell-main-content-viewport"
-                         data-app-shell-main-content-layout="default"></div>
+                  </div>
+                  <main class="_mainSurface_26_727_1"
+                        role="main"
+                        data-app-shell-main-surface="default">
+                    <header class="_applicationMenuBar_26_727_1"
+                            data-app-shell-application-menu-bar="true"
+                            data-app-shell-header-edge-scroll="false"></header>
+                    <div class="_mainContentLayout_26_727_1"
+                         data-app-shell-main-content-layout="default"
+                         data-app-shell-right-panel-full-width="false"></div>
                     <div id="settings-layout"
                          class="relative isolate flex max-h-full min-h-0 w-full flex-1">
                       <aside id="settings-navigation" class="app-shell-left-panel">
                         <button data-settings-panel-slug="general"></button>
                       </aside>
                       <main id="settings-outer-main"
-                            class="main-surface relative isolate flex min-h-0 flex-1 flex-col">
+                            class="_mainSurface_26_727_2"
+                            data-app-shell-main-surface="default">
                         <div id="settings-content-boundary"
                              class="relative isolate flex min-h-0 flex-1 overflow-hidden">
                           <div id="settings-content-viewport"
-                               class="app-shell-main-content-viewport relative flex min-h-0 min-w-0 flex-col flex-1">
+                               class="_mainContentLayout_26_727_2"
+                               data-app-shell-main-content-layout="default"
+                               data-app-shell-right-panel-full-width="false">
                             <div id="settings-content-frame"
-                                 class="app-shell-main-content-frame relative flex min-h-0 flex-1 flex-col">
+                                 class="_threadEdgeDivider_26_727_1"
+                                 data-app-shell-thread-edge-divider="true">
                               <div id="settings-flex-boundary"
                                    class="relative flex min-h-0 flex-1">
                                 <div id="settings-size-boundary"
@@ -499,7 +522,7 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
                                   <div id="settings-visible-boundary"
                                        class="h-full min-w-0 overflow-visible">
                                     <div id="settings-canvas"
-                                         class="main-surface flex h-full min-h-0 flex-col">
+                                         class="flex h-full min-h-0 flex-col electron:overflow-hidden electron:bg-token-main-surface-primary electron:elevation-prominent windows:rounded-tl-lg">
                                       <div class="contrast-pair">
                                         <div class="contrast-foreground"></div>
                                         <div class="contrast-background"></div>
@@ -732,13 +755,17 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
               </head>
               <body>
                 <div id="root">
-                  <div class="app-header-tint"
-                       data-app-shell-header-edge-scroll="false"></div>
                   <aside><nav>sidebar</nav></aside>
-                  <main role="main"
+                  <main class="_mainSurface_26_727_1"
+                        role="main"
+                        data-app-shell-main-surface="default"
                         style="--color-token-main-surface-primary: rgb(24 24 24)">
-                    <div class="app-shell-main-content-viewport"
-                         data-app-shell-main-content-layout="default"></div>
+                    <header class="_applicationMenuBar_26_727_1"
+                            data-app-shell-application-menu-bar="true"
+                            data-app-shell-header-edge-scroll="false"></header>
+                    <div class="_mainContentLayout_26_727_1"
+                         data-app-shell-main-content-layout="default"
+                         data-app-shell-right-panel-full-width="false"></div>
                     <div data-response-annotation-conversation="conversation"
                          data-response-annotation-target="message">assistant</div>
                     <div data-user-message-bubble="true">user</div>
@@ -1517,12 +1544,18 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
                 $$"""
                 (() => {
                   const root = document.querySelector("#root");
-                  const header = root?.querySelector(
-                    ".app-header-tint[data-app-shell-header-edge-scroll]"
+                  const main = root?.querySelector(
+                    "main[data-app-shell-main-surface]"
                   );
-                  const main = root?.querySelector("main");
+                  const header = main?.querySelector(
+                    "header[data-app-shell-application-menu-bar]" +
+                    "[data-app-shell-header-edge-scroll]"
+                  );
                   const viewport =
-                    main?.querySelector(".app-shell-main-content-viewport");
+                    main?.querySelector(
+                      "[data-app-shell-main-content-layout]" +
+                      "[data-app-shell-right-panel-full-width]"
+                    );
                   if (!root || !header || !main || !viewport) {
                     throw new Error("Missing presentation evidence fixture anchors.");
                   }
@@ -1535,19 +1568,23 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
                   };
                   const results = [];
 
+                  header.removeAttribute("data-app-shell-application-menu-bar");
                   header.removeAttribute("data-app-shell-header-edge-scroll");
-                  viewport.classList.remove("app-shell-main-content-viewport");
                   viewport.removeAttribute("data-app-shell-main-content-layout");
+                  viewport.removeAttribute("data-app-shell-right-panel-full-width");
                   results.push(...read());
 
+                  header.dataset.appShellApplicationMenuBar = "true";
                   header.dataset.appShellHeaderEdgeScroll = "false";
                   results.push(...read());
 
+                  header.removeAttribute("data-app-shell-application-menu-bar");
                   header.removeAttribute("data-app-shell-header-edge-scroll");
-                  viewport.classList.add("app-shell-main-content-viewport");
                   viewport.dataset.appShellMainContentLayout = "default";
+                  viewport.dataset.appShellRightPanelFullWidth = "false";
                   results.push(...read());
 
+                  header.dataset.appShellApplicationMenuBar = "true";
                   header.dataset.appShellHeaderEdgeScroll = "false";
                   results.push(...read());
                   aside.remove();
@@ -1599,11 +1636,17 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
                     .launcher-action-card {
                       background-color: rgb(41 42 43);
                     }
+                    #application-menu-top-bar,
                     #edge-header,
                     #header-context {
                       background-color: rgb(24 24 24);
                       -webkit-backdrop-filter: blur(2px);
                       backdrop-filter: blur(2px);
+                    }
+                    #generic-header-near-miss {
+                      background-color: rgb(61 62 63);
+                      -webkit-backdrop-filter: blur(3px);
+                      backdrop-filter: blur(3px);
                     }
                     #header-context {
                       border: 1px solid rgb(90 91 92);
@@ -1631,14 +1674,35 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
                   `;
                   document.head.append(nativeStyles);
 
-                  const globalHeader = document.querySelector("header.app-header-tint");
-                  if (!globalHeader) throw new Error("Missing fixture global header.");
-                  globalHeader.id = "global-header";
-
-                  const edgeHeader = document.createElement("header");
+                  const main = document.querySelector(
+                    "main[data-app-shell-main-surface]"
+                  );
+                  if (!main) throw new Error("Missing fixture main element.");
+                  document.documentElement.dataset.codexWindowType = "electron";
+                  document.documentElement.dataset.codexWindowChrome = "application-menu";
+                  const appShellFrame = document.createElement("div");
+                  appShellFrame.className = "relative flex flex-col";
+                  const applicationMenuTopBar = document.createElement("div");
+                  applicationMenuTopBar.id = "application-menu-top-bar";
+                  applicationMenuTopBar.className = "_ApplicationMenuTopBar_26_727_global_1";
+                  const applicationMenuLeadingControls = document.createElement("div");
+                  const applicationMenuBar = document.createElement("div");
+                  applicationMenuBar.setAttribute("role", "menubar");
+                  applicationMenuBar.dataset.orientation = "horizontal";
+                  applicationMenuTopBar.append(
+                    applicationMenuLeadingControls,
+                    applicationMenuBar
+                  );
+                  appShellFrame.append(applicationMenuTopBar);
+                  host.prepend(appShellFrame);
+                  const edgeHeader = main.querySelector(
+                    "header[data-app-shell-application-menu-bar]" +
+                    "[data-app-shell-header-edge-scroll]"
+                  );
+                  if (!edgeHeader) {
+                    throw new Error("Missing fixture application header.");
+                  }
                   edgeHeader.id = "edge-header";
-                  edgeHeader.className = "app-header-tint";
-                  edgeHeader.dataset.appShellHeaderEdgeScroll = "false";
                   const headerContext = document.createElement("div");
                   headerContext.id = "header-context";
                   headerContext.dataset.testid = "app-shell-header-context-menu-surface";
@@ -1653,20 +1717,30 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
                   rightHeaderSlot.append(rightHeaderCloseButton);
                   edgeHeader.append(headerContext, rightHeaderSlot);
 
-                  const main = document.querySelector("main");
-                  if (!main) throw new Error("Missing fixture main element.");
+                  const genericHeader = document.createElement("header");
+                  genericHeader.id = "generic-header-near-miss";
+                  genericHeader.className = "_genericHeader_26_727_1";
+                  const mainViewport = main.querySelector(
+                    "[data-app-shell-main-content-layout]" +
+                    "[data-app-shell-right-panel-full-width]"
+                  );
+                  if (!mainViewport) {
+                    throw new Error("Missing fixture main viewport.");
+                  }
                   const mainContentFrame = document.createElement("div");
                   mainContentFrame.id = "main-content-frame";
+                  mainContentFrame.className = "_threadEdgeDivider_26_727_2";
+                  mainContentFrame.dataset.appShellThreadEdgeDivider = "true";
                   const mainContentTopFade = document.createElement("div");
                   mainContentTopFade.id = "main-content-top-fade";
-                  mainContentTopFade.className = "app-shell-main-content-top-fade";
+                  mainContentTopFade.className = "_mainContentTopFade_26_727_2";
                   mainContentTopFade.dataset.appShellMainContentTopFade = "visible";
                   const unrelatedMainGradient = document.createElement("div");
                   unrelatedMainGradient.id = "unrelated-main-gradient";
                   unrelatedMainGradient.className =
                     "bg-gradient-to-b from-token-main-surface-primary";
                   mainContentFrame.append(mainContentTopFade, unrelatedMainGradient);
-                  main.append(mainContentFrame);
+                  mainViewport.append(mainContentFrame);
 
                   const rightAside = document.createElement("aside");
                   rightAside.dataset.appShellFocusArea = "right-panel";
@@ -1720,7 +1794,7 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
                   shell.append(shellLayout);
                   positioner.append(primarySibling, shell);
                   rightAside.append(positioner);
-                  host.append(edgeHeader, rightAside);
+                  host.append(genericHeader, rightAside);
 
                   const style = element => getComputedStyle(element);
                   const background = element => style(element).backgroundColor;
@@ -1766,8 +1840,10 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
                       background)
                   };
                   const headers = {
-                    globalBackground: background(globalHeader),
-                    globalBackdropFilter: filter(globalHeader),
+                    genericBackground: background(genericHeader),
+                    genericBackdropFilter: filter(genericHeader),
+                    applicationMenuBackground: background(applicationMenuTopBar),
+                    applicationMenuBackdropFilter: filter(applicationMenuTopBar),
                     edgeBackground: background(edgeHeader),
                     edgeBackdropFilter: filter(edgeHeader),
                     contextBackground: background(headerContext),
@@ -1907,7 +1983,7 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
                   nativeStyles.id = "route-surface-native-styles";
                   nativeStyles.textContent = `
                     .bg-token-main-surface-primary,
-                    .main-surface {
+                    [class~="electron:bg-token-main-surface-primary"] {
                       background-color: rgb(24 24 24);
                       -webkit-backdrop-filter: none;
                       backdrop-filter: none;
@@ -2018,8 +2094,10 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
                     const viewport = create(
                       "div",
                       "pull-request-viewport",
-                      "app-shell-main-content-viewport"
+                      "_mainContentLayout_26_727_3"
                     );
+                    viewport.dataset.appShellMainContentLayout = "default";
+                    viewport.dataset.appShellRightPanelFullWidth = "false";
                     const route = create(
                       "div",
                       "pull-request-route",
@@ -2112,8 +2190,9 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
                     const outerMain = create(
                       "main",
                       "settings-outer-main",
-                      "main-surface relative isolate flex min-h-0 flex-1 flex-col"
+                      "_mainSurface_26_727_3"
                     );
+                    outerMain.dataset.appShellMainSurface = "default";
                     const contentBoundary = create(
                       "div",
                       "settings-content-boundary",
@@ -2122,15 +2201,16 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
                     const viewport = create(
                       "div",
                       "settings-content-viewport",
-                      "app-shell-main-content-viewport relative flex min-h-0 " +
-                        "min-w-0 flex-col flex-1"
+                      "_mainContentLayout_26_727_4"
                     );
+                    viewport.dataset.appShellMainContentLayout = "default";
+                    viewport.dataset.appShellRightPanelFullWidth = "false";
                     const frame = create(
                       "div",
                       "settings-content-frame",
-                      "app-shell-main-content-frame relative flex min-h-0 " +
-                        "flex-1 flex-col"
+                      "_threadEdgeDivider_26_727_3"
                     );
+                    frame.dataset.appShellThreadEdgeDivider = "true";
                     const flexBoundary = create(
                       "div",
                       "settings-flex-boundary",
@@ -2149,7 +2229,7 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
                     const canvas = create(
                       "div",
                       "settings-canvas",
-                      "main-surface flex h-full min-h-0 flex-col"
+                      "flex h-full min-h-0 flex-col electron:overflow-hidden electron:bg-token-main-surface-primary electron:elevation-prominent windows:rounded-tl-lg"
                     );
                     const keyboardSticky = create(
                       "div",
@@ -2986,8 +3066,10 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
         string CloseButtonPointerEvents);
 
     private sealed record HeaderSurfaceRendering(
-        string GlobalBackground,
-        string GlobalBackdropFilter,
+        string GenericBackground,
+        string GenericBackdropFilter,
+        string ApplicationMenuBackground,
+        string ApplicationMenuBackdropFilter,
         string EdgeBackground,
         string EdgeBackdropFilter,
         string ContextBackground,
