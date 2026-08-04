@@ -374,6 +374,462 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
 
     [IntegrationFact(OptInVariable)]
     [Trait("Category", "Integration")]
+    public async Task ApplyAsync_UsesSingleAdaptiveAssistantGlassForWideMarkdownTable_WhenOptedIn()
+    {
+        var edgePath = FindEdge();
+        var port = ReserveLoopbackPort();
+        var testDirectory = Path.Combine(
+            Path.GetTempPath(),
+            "BackdropForCodex.MarkdownTableGlass",
+            Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(testDirectory);
+        var pagePath = Path.Combine(testDirectory, "index.html");
+        var mediaPath = Path.Combine(testDirectory, "wallpaper.png");
+        await File.WriteAllTextAsync(
+            pagePath,
+            """
+            <!doctype html>
+            <html class="electron-dark">
+              <head>
+                <meta charset="utf-8">
+                <title>Codex</title>
+                <style>
+                  * {
+                    box-sizing: border-box;
+                  }
+                  html,
+                  body {
+                    width: 100%;
+                    height: 100%;
+                    margin: 0;
+                  }
+                  main {
+                    min-height: 100%;
+                    padding: 40px;
+                    container-type: inline-size;
+                    --padding-toolbar: 16px;
+                    --thread-content-margin: 24px;
+                    --thread-content-max-width: 40rem;
+                    --thread-wide-block-inline-shift: 0px;
+                    --spacing: 4px;
+                    --markdown-wide-block-max-width: 43.1875rem;
+                  }
+                  #assistant-glass {
+                    width: 736px;
+                    margin-inline: auto;
+                  }
+                  [class^="_tableContainer_"],
+                  [class*=" _tableContainer_"] {
+                    width: calc(100% + (var(--thread-content-margin, 24px) * 2));
+                    margin-inline: calc(var(--thread-content-margin, 24px) * -1);
+                  }
+                  [class^="_tableWideBlock_"],
+                  [class*=" _tableWideBlock_"] {
+                    --wide-block-container-max-width: max(
+                      100%,
+                      calc(
+                        100cqi - (var(--padding-toolbar) * 2) -
+                        (var(--thread-content-margin, 24px) * 2) -
+                        (var(--spacing) * 18) -
+                        (var(--thread-wide-block-inline-shift, 0px) * 2)
+                      )
+                    );
+                    --wide-block-default-max-width: min(
+                      calc(var(--markdown-wide-block-max-width) + 8rem),
+                      var(--wide-block-container-max-width)
+                    );
+                    --wide-block-width: var(--wide-block-default-max-width);
+                    width: calc(
+                      var(--wide-block-width) +
+                      (var(--thread-content-margin, 24px) * 2)
+                    );
+                    max-width: none;
+                    margin-left: calc(
+                      ((100% - var(--wide-block-width)) / 2) -
+                      var(--thread-content-margin, 24px)
+                    );
+                  }
+                  [class^="_tableScroller_"],
+                  [class*=" _tableScroller_"] {
+                    overflow-x: auto;
+                  }
+                  [class^="_tableWideBlock_"] > [class^="_tableScroller_"],
+                  [class*=" _tableWideBlock_"] > [class^="_tableScroller_"],
+                  [class^="_tableWideBlock_"] > [class*=" _tableScroller_"],
+                  [class*=" _tableWideBlock_"] > [class*=" _tableScroller_"] {
+                    display: flex;
+                    justify-content: safe center;
+                  }
+                  [class^="_tableWrapper_"],
+                  [class*=" _tableWrapper_"] {
+                    width: fit-content;
+                    margin-inline: var(--thread-content-margin, 24px);
+                  }
+                  table[class^="_table_"],
+                  table[class*=" _table_"] {
+                    width: fit-content;
+                    min-width: min(
+                      calc(100cqw - (var(--padding-toolbar) * 2)),
+                      calc(
+                        var(--thread-content-max-width, 40rem) -
+                        (var(--padding-toolbar) * 2)
+                      )
+                    );
+                    table-layout: auto;
+                    border-collapse: collapse;
+                  }
+                  th,
+                  td {
+                    padding: 8px 12px;
+                    border: 1px solid rgb(106 106 112);
+                    background: rgb(32 33 38);
+                    white-space: nowrap;
+                  }
+                </style>
+              </head>
+              <body>
+                <div id="root">
+                  <main role="main"
+                        data-app-shell-main-surface="default"
+                        style="--color-token-main-surface-primary: rgb(24 24 24)">
+                    <header data-app-shell-application-menu-bar="true"
+                            data-app-shell-header-edge-scroll="false"></header>
+                    <div data-app-shell-main-content-layout="default"
+                         data-app-shell-right-panel-full-width="false"></div>
+                    <div id="assistant-glass"
+                         class="group flex min-w-0 flex-col"
+                         data-response-annotation-conversation="conversation"
+                         data-response-annotation-target="message">
+                      <p>Wide Markdown table:</p>
+                      <div class="_tableContainer_fixture _tableWideBlock_fixture">
+                        <div class="_tableScroller_fixture">
+                          <div class="_tableWrapper_fixture">
+                            <table class="_table_fixture">
+                              <thead>
+                                <tr>
+                                  <th>Provider</th>
+                                  <th>Current plan</th>
+                                  <th>Best for</th>
+                                  <th>Important caveats</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                <tr>
+                                  <td>Example cloud</td>
+                                  <td>Four cores and sixteen gigabytes</td>
+                                  <td>Low-cost validation and automation</td>
+                                  <td>Verify disk allocation and refund terms before purchase</td>
+                                </tr>
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </main>
+                </div>
+              </body>
+            </html>
+            """);
+        await WriteTestPngAsync(mediaPath);
+
+        Process? edge = null;
+        IBrowser? browser = null;
+        await using var session = new PuppeteerWallpaperSession();
+        try
+        {
+            edge = Process.Start(CreateEdgeStartInfo(edgePath, port, testDirectory, pagePath));
+            Assert.NotNull(edge);
+
+            var endpoint = await WaitForEndpointAsync(port, pagePath, TimeSpan.FromSeconds(8));
+            var options = new WallpaperInjectionOptions(
+                generation: 1,
+                source: new Uri("http://127.0.0.1:9/wallpaper.png"),
+                localMediaPath: mediaPath,
+                expectedContentLength: new FileInfo(mediaPath).Length,
+                WallpaperMediaKind.Image);
+
+            await session.ApplyAsync(endpoint, options);
+            Assert.True(session.IsActive);
+            Assert.True(session.Capabilities.Advanced.IsAvailable);
+
+            browser = await Puppeteer.ConnectAsync(new ConnectOptions
+            {
+                BrowserWSEndpoint = endpoint.BrowserWebSocketUri.AbsoluteUri,
+                DefaultViewport = null,
+                ProtocolTimeout = 5_000,
+                AcceptInsecureCerts = false,
+                NetworkEnabled = false,
+            });
+            var reviewedTarget = Assert.Single(endpoint.InjectableTargets);
+            var pages = await browser.PagesAsync(includeAll: true);
+            var page = Assert.Single(
+                pages,
+                candidate =>
+                    !candidate.IsClosed &&
+                    Uri.TryCreate(candidate.Url, UriKind.Absolute, out var candidateUri) &&
+                    VerifiedCodexPageSelector.IsSameReviewedDocument(
+                        candidateUri,
+                        reviewedTarget.Url));
+            var probeScript =
+                $$"""
+                (() => {
+                  const glass = document.querySelector("#assistant-glass");
+                  const scroller = document.querySelector(
+                    '[class^="_tableScroller_"], [class*=" _tableScroller_"]'
+                  );
+                  const table = document.querySelector(
+                    'table[class^="_table_"], table[class*=" _table_"]'
+                  );
+                  const rowCell = table?.querySelector("tbody td");
+                  if (!glass || !scroller || !table || !rowCell) {
+                    throw new Error("Missing Markdown table glass fixture nodes.");
+                  }
+
+                  const glassRect = glass.getBoundingClientRect();
+                  const scrollerRect = scroller.getBoundingClientRect();
+                  const tableRect = table.getBoundingClientRect();
+                  const rowCellRect = rowCell.getBoundingClientRect();
+                  const glassStyle = getComputedStyle(glass);
+                  const pseudoStyle = getComputedStyle(glass, "::before");
+                  const transparent = value =>
+                    value === "rgba(0, 0, 0, 0)" || value === "transparent";
+                  const pseudoWidth = Number.parseFloat(pseudoStyle.width);
+                  const pseudoLeft = Number.parseFloat(pseudoStyle.left);
+                  const pseudoRight = Number.parseFloat(pseudoStyle.right);
+                  const pseudoTransform = pseudoStyle.transform === "none"
+                    ? null
+                    : new DOMMatrixReadOnly(pseudoStyle.transform);
+                  const pseudoTransformX = pseudoTransform?.m41 ?? 0;
+                  const parentBorderLeft = Number.parseFloat(
+                    glassStyle.borderLeftWidth
+                  );
+                  const parentBorderRight = Number.parseFloat(
+                    glassStyle.borderRightWidth
+                  );
+                  const pseudoUsesLeftAnchor = Number.isFinite(pseudoLeft);
+                  const pseudoUsesRightAnchor = Number.isFinite(pseudoRight);
+                  const pseudoGeometryIsMeasurable =
+                    pseudoStyle.position === "absolute" &&
+                    Number.isFinite(pseudoTransformX) &&
+                    Number.isFinite(parentBorderLeft) &&
+                    Number.isFinite(parentBorderRight) &&
+                    (pseudoUsesLeftAnchor || pseudoUsesRightAnchor);
+                  const filterOwnsGlass = style =>
+                    style.backdropFilter.includes("blur(") ||
+                    String(style.webkitBackdropFilter ?? "none").includes("blur(");
+                  const pseudoOwnsGlass =
+                    pseudoStyle.content !== "none" &&
+                    pseudoStyle.content !== "normal" &&
+                    Number.isFinite(pseudoWidth) &&
+                    pseudoWidth > 0 &&
+                    !transparent(pseudoStyle.backgroundColor) &&
+                    filterOwnsGlass(pseudoStyle) &&
+                    pseudoGeometryIsMeasurable;
+                  const parentOwnsGlass =
+                    !transparent(glassStyle.backgroundColor) ||
+                    filterOwnsGlass(glassStyle) ||
+                    glassStyle.boxShadow !== "none";
+                  const effectiveGlassLeft = pseudoOwnsGlass
+                    ? pseudoUsesLeftAnchor
+                      ? glassRect.left + parentBorderLeft + pseudoLeft + pseudoTransformX
+                      : glassRect.right - parentBorderRight - pseudoRight -
+                        pseudoWidth + pseudoTransformX
+                    : glassRect.left;
+                  const effectiveGlassRight = pseudoOwnsGlass
+                    ? effectiveGlassLeft + pseudoWidth
+                    : glassRect.right;
+                  const probeY = (rowCellRect.top + rowCellRect.bottom) / 2;
+                  const rightProbeX = effectiveGlassRight + 2;
+                  const rightHit = document.elementFromPoint(rightProbeX, probeY);
+                  const initialScrollLeft = scroller.scrollLeft;
+                  scroller.scrollLeft = scroller.scrollWidth;
+                  let terminalScrollLeft = scroller.scrollLeft;
+                  if (Math.abs(terminalScrollLeft - initialScrollLeft) <= 1) {
+                    scroller.scrollLeft = -scroller.scrollWidth;
+                    terminalScrollLeft = scroller.scrollLeft;
+                  }
+                  scroller.scrollLeft = initialScrollLeft;
+                  const tableOwns = hit => Boolean(
+                    hit && (hit === table || table.contains(hit))
+                  );
+                  const describe = hit => hit
+                    ? `${hit.tagName}.${Array.from(hit.classList).join(".")}`
+                    : "<none>";
+
+                  return {
+                    ownedStylePresent: Boolean(document.querySelector(
+                      "#{{InjectionScriptBuilder.StyleElementId}}"
+                    )),
+                    parentBackground: glassStyle.backgroundColor,
+                    parentBackdropFilter: glassStyle.backdropFilter,
+                    parentWebkitBackdropFilter:
+                      String(glassStyle.webkitBackdropFilter ?? "none"),
+                    parentBoxShadow: glassStyle.boxShadow,
+                    pseudoContent: pseudoStyle.content,
+                    pseudoBackground: pseudoStyle.backgroundColor,
+                    pseudoBackdropFilter: pseudoStyle.backdropFilter,
+                    pseudoWebkitBackdropFilter:
+                      String(pseudoStyle.webkitBackdropFilter ?? "none"),
+                    pseudoBoxShadow: pseudoStyle.boxShadow,
+                    pseudoPosition: pseudoStyle.position,
+                    pseudoPointerEvents: pseudoStyle.pointerEvents,
+                    pseudoZIndex: pseudoStyle.zIndex,
+                    pseudoLeft: Number.isFinite(pseudoLeft) ? pseudoLeft : 0,
+                    pseudoRight: Number.isFinite(pseudoRight) ? pseudoRight : 0,
+                    pseudoTransformX:
+                      Number.isFinite(pseudoTransformX) ? pseudoTransformX : 0,
+                    pseudoWidth: Number.isFinite(pseudoWidth) ? pseudoWidth : 0,
+                    parentOwnsGlass,
+                    pseudoOwnsGlass,
+                    glassLeft: glassRect.left,
+                    glassRight: glassRect.right,
+                    effectiveGlassLeft,
+                    effectiveGlassRight,
+                    effectiveGlassSource: pseudoOwnsGlass
+                      ? "assistant::before"
+                      : "assistant-border-box",
+                    scrollerLeft: scrollerRect.left,
+                    scrollerRight: scrollerRect.right,
+                    tableLeft: tableRect.left,
+                    tableRight: tableRect.right,
+                    rightProbeX,
+                    rightProbeHit: describe(rightHit),
+                    scrollerMatchesEffectiveGlass:
+                      Math.abs(scrollerRect.left - effectiveGlassLeft) <= 0.5 &&
+                      Math.abs(scrollerRect.right - effectiveGlassRight) <= 0.5,
+                    scrollerCount: document.querySelectorAll(
+                      '[class^="_tableScroller_"], [class*=" _tableScroller_"]'
+                    ).length,
+                    scrollerClientWidth: scroller.clientWidth,
+                    scrollerScrollWidth: scroller.scrollWidth,
+                    terminalScrollLeft,
+                    scrollerHasHorizontalOverflow:
+                      scroller.scrollWidth > scroller.clientWidth + 1,
+                    horizontalScrollReachable:
+                      Math.abs(terminalScrollLeft - initialScrollLeft) > 1,
+                    documentHasHorizontalOverflow:
+                      document.documentElement.scrollWidth >
+                      document.documentElement.clientWidth + 0.5,
+                    rightProbeHitsTable: tableOwns(rightHit)
+                  };
+                })()
+                """;
+
+            string[] writingDirections = ["ltr", "rtl"];
+            int[] viewportWidths = [900, 960, 1280];
+            foreach (var writingDirection in writingDirections)
+            {
+                await page.EvaluateExpressionAsync<string>(
+                    $"document.documentElement.dir = '{writingDirection}'");
+                foreach (var viewportWidth in viewportWidths)
+                {
+                    await page.SetViewportAsync(new ViewPortOptions
+                    {
+                        Width = viewportWidth,
+                        Height = 720,
+                    });
+                    await page.EvaluateExpressionAsync<bool>(
+                        "new Promise(resolve => requestAnimationFrame(() => " +
+                        "requestAnimationFrame(() => resolve(true))))");
+
+                    var rendering =
+                        await page.EvaluateExpressionAsync<MarkdownTableGlassRendering>(probeScript);
+                    var expectedScrollerWidth = viewportWidth switch
+                    {
+                        900 => 750d,
+                        960 => 776d,
+                        1280 => 867d,
+                        _ => throw new InvalidOperationException(
+                            $"No expected Markdown table width for viewport {viewportWidth}."),
+                    };
+
+                    Assert.True(rendering.OwnedStylePresent);
+                    Assert.True(
+                        rendering.ParentOwnsGlass || rendering.PseudoOwnsGlass,
+                        "The assistant fixture has no rendered glass owner.");
+                    Assert.False(
+                        rendering.ParentOwnsGlass && rendering.PseudoOwnsGlass,
+                        "Assistant and assistant::before must not render two overlapping glass layers.");
+                    Assert.True(
+                        rendering.ScrollerMatchesEffectiveGlass && !rendering.RightProbeHitsTable,
+                        $"Wide Markdown table is visibly painted beyond effective assistant glass. " +
+                        $"direction={writingDirection}, viewport={viewportWidth}, " +
+                        $"glass=[{rendering.GlassLeft:F2}, {rendering.GlassRight:F2}], " +
+                        $"effective-glass={rendering.EffectiveGlassSource}:" +
+                        $"[{rendering.EffectiveGlassLeft:F2}, {rendering.EffectiveGlassRight:F2}], " +
+                        $"scroller=[{rendering.ScrollerLeft:F2}, {rendering.ScrollerRight:F2}], " +
+                        $"table=[{rendering.TableLeft:F2}, {rendering.TableRight:F2}], " +
+                        $"scroller-matches={rendering.ScrollerMatchesEffectiveGlass}, " +
+                        $"outside-probe={rendering.RightProbeX:F2}:{rendering.RightProbeHit}, " +
+                        $"outside-probe-hits-table={rendering.RightProbeHitsTable}, " +
+                        $"parent-background={rendering.ParentBackground}, " +
+                        $"parent-filter={rendering.ParentBackdropFilter}, " +
+                        $"parent-shadow={rendering.ParentBoxShadow}, " +
+                        $"pseudo-content={rendering.PseudoContent}, " +
+                        $"pseudo-background={rendering.PseudoBackground}, " +
+                        $"pseudo-left={rendering.PseudoLeft:F2}, " +
+                        $"pseudo-right={rendering.PseudoRight:F2}, " +
+                        $"pseudo-transform-x={rendering.PseudoTransformX:F2}, " +
+                        $"pseudo-width={rendering.PseudoWidth:F2}.");
+                    Assert.InRange(
+                        rendering.ScrollerRight - rendering.ScrollerLeft,
+                        expectedScrollerWidth - 0.5,
+                        expectedScrollerWidth + 0.5);
+                    Assert.Equal(1, rendering.ScrollerCount);
+                    Assert.True(
+                        rendering.ScrollerHasHorizontalOverflow &&
+                        rendering.HorizontalScrollReachable,
+                        $"Native Markdown table scroller must remain horizontally usable; " +
+                        $"direction={writingDirection}, viewport={viewportWidth}, " +
+                        $"client-width={rendering.ScrollerClientWidth:F2}, " +
+                        $"scroll-width={rendering.ScrollerScrollWidth:F2}, " +
+                        $"terminal-scroll-left={rendering.TerminalScrollLeft:F2}.");
+                    Assert.False(
+                        rendering.DocumentHasHorizontalOverflow,
+                        $"Adaptive table glass must not create document-level horizontal overflow; " +
+                        $"direction={writingDirection}, viewport={viewportWidth}.");
+                    Assert.False(
+                        rendering.ParentOwnsGlass,
+                        $"Assistant background must be transparent when ::before owns adaptive glass; " +
+                        $"background={rendering.ParentBackground}, " +
+                        $"backdrop-filter={rendering.ParentBackdropFilter}, " +
+                        $"webkit-backdrop-filter={rendering.ParentWebkitBackdropFilter}, " +
+                        $"box-shadow={rendering.ParentBoxShadow}.");
+                    Assert.True(
+                        rendering.PseudoOwnsGlass,
+                        $"assistant::before must own the adaptive nontransparent glass; " +
+                        $"content={rendering.PseudoContent}, " +
+                        $"background={rendering.PseudoBackground}, " +
+                        $"backdrop-filter={rendering.PseudoBackdropFilter}, " +
+                        $"width={rendering.PseudoWidth:F2}.");
+                    Assert.Equal("absolute", rendering.PseudoPosition);
+                    Assert.Equal("none", rendering.PseudoPointerEvents);
+                    Assert.Equal("-1", rendering.PseudoZIndex);
+                    Assert.NotEqual("none", rendering.PseudoBoxShadow);
+                }
+            }
+        }
+        finally
+        {
+            browser?.Disconnect();
+            await session.StopAsync();
+            if (edge is { HasExited: false })
+            {
+                edge.Kill(entireProcessTree: true);
+                await edge.WaitForExitAsync();
+            }
+
+            edge?.Dispose();
+            if (Directory.Exists(testDirectory))
+            {
+                await DeleteDirectoryWithRetryAsync(testDirectory);
+            }
+        }
+    }
+
+    [IntegrationFact(OptInVariable)]
+    [Trait("Category", "Integration")]
     public async Task ApplyAsync_LightThemeGlassSurfacesMeetWcagContrast_WhenOptedIn()
     {
         var edgePath = FindEdge();
@@ -3008,6 +3464,47 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
         string NearMissBorderWidth,
         string NearMissBackdropFilter,
         SpaReplacementRendering[] SpaReplacements);
+
+    private sealed record MarkdownTableGlassRendering(
+        bool OwnedStylePresent,
+        string ParentBackground,
+        string ParentBackdropFilter,
+        string ParentWebkitBackdropFilter,
+        string ParentBoxShadow,
+        string PseudoContent,
+        string PseudoBackground,
+        string PseudoBackdropFilter,
+        string PseudoWebkitBackdropFilter,
+        string PseudoBoxShadow,
+        string PseudoPosition,
+        string PseudoPointerEvents,
+        string PseudoZIndex,
+        double PseudoLeft,
+        double PseudoRight,
+        double PseudoTransformX,
+        double PseudoWidth,
+        bool ParentOwnsGlass,
+        bool PseudoOwnsGlass,
+        double GlassLeft,
+        double GlassRight,
+        double EffectiveGlassLeft,
+        double EffectiveGlassRight,
+        string EffectiveGlassSource,
+        double ScrollerLeft,
+        double ScrollerRight,
+        double TableLeft,
+        double TableRight,
+        double RightProbeX,
+        string RightProbeHit,
+        bool ScrollerMatchesEffectiveGlass,
+        int ScrollerCount,
+        double ScrollerClientWidth,
+        double ScrollerScrollWidth,
+        double TerminalScrollLeft,
+        bool ScrollerHasHorizontalOverflow,
+        bool HorizontalScrollReachable,
+        bool DocumentHasHorizontalOverflow,
+        bool RightProbeHitsTable);
 
     private sealed record BrowserPortalRendering(
         string WallpaperRootZIndex,

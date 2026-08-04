@@ -564,7 +564,14 @@ public sealed class InjectionScriptBuilderTests
             script,
             StringComparison.Ordinal);
         Assert.Contains("[data-user-message-bubble=\"true\"]", script, StringComparison.Ordinal);
-        Assert.Contains("padding: 12px 16px", script, StringComparison.Ordinal);
+        Assert.Contains(
+            "--codex-wallpaper-conversation-inline-padding: 16px",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "padding: 12px var(--codex-wallpaper-conversation-inline-padding)",
+            script,
+            StringComparison.Ordinal);
         Assert.Contains("[data-local-conversation-item-target-ids]", script, StringComparison.Ordinal);
         Assert.Contains(
             "--codex-wallpaper-activity-dark: rgba(16, 18, 24, 0.58)",
@@ -603,7 +610,8 @@ public sealed class InjectionScriptBuilderTests
             compactScript,
             StringComparison.Ordinal);
         Assert.Contains(
-            Fallback + "{padding:12px16px;}",
+            Fallback +
+            "{padding:12pxvar(--codex-wallpaper-conversation-inline-padding);}",
             compactScript,
             StringComparison.Ordinal);
         Assert.DoesNotContain(

@@ -295,7 +295,7 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
     }
 
     [Fact]
-    public void ReviewedConversationSelectors_GlassOnlyUnannotatedChatGptAssistantMessages()
+    public void ReviewedConversationSelectors_GlassOnlyReviewedAssistantMessagesAndTheirWideTables()
     {
         var styleSheet = ExtractGeneratedStyleSheet();
         var forcedColorsNone = ExtractBlock(styleSheet, "@media (forced-colors: none)");
@@ -308,16 +308,108 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
         var fallbackPaddingRule = Assert.Single(
             rules,
             IsReviewedChatGptAssistantFallbackPaddingRule);
+        var wideTableHostRule = Assert.Single(
+            rules,
+            IsReviewedWideTableAssistantHostRule);
+        var wideTablePseudoRule = Assert.Single(
+            rules,
+            IsReviewedWideTableAssistantPseudoRule);
+        var rtlWideTablePseudoRule = Assert.Single(
+            rules,
+            IsReviewedRtlWideTableAssistantPseudoRule);
         var fallbackSelector = CanonicalizeSelector(
             """
             body main [data-content-search-unit-key] > h4[class~="sr-only"][class~="select-none"] + div[class~="group"][class~="flex"][class~="min-w-0"][class~="flex-col"]:not([data-response-annotation-target]):has(> [data-selected-text-overlay-target])
             """);
+        var wideTableSelector = CanonicalizeSelector(
+            """
+            body main :is(
+              [data-response-annotation-conversation][data-response-annotation-target],
+              [data-content-search-unit-key]
+                > h4[class~="sr-only"][class~="select-none"]
+                + div[class~="group"][class~="flex"][class~="min-w-0"][class~="flex-col"]:not([data-response-annotation-target]):has(> [data-selected-text-overlay-target])
+            ):has(
+              :is([class^="_tableContainer_"], [class*=" _tableContainer_"]):is([class^="_tableWideBlock_"], [class*=" _tableWideBlock_"])
+                > :is([class^="_tableScroller_"], [class*=" _tableScroller_"])
+                > :is([class^="_tableWrapper_"], [class*=" _tableWrapper_"])
+                > table:is([class^="_table_"], [class*=" _table_"])
+            )
+            """);
+        string[] hostDeclarations =
+        [
+            "--codex-wallpaper-wide-table-glass-width: min(",
+            "position: relative",
+            "isolation: isolate",
+            "background-color: transparent !important",
+            "-webkit-backdrop-filter: none",
+            "backdrop-filter: none",
+            "border-color: transparent",
+            "box-shadow: none",
+        ];
+        string[] pseudoDeclarations =
+        [
+            "content: \"\"",
+            "position: absolute",
+            "z-index: -1",
+            "inset-block: 0",
+            "left: 50%",
+            "width: var(--codex-wallpaper-wide-table-glass-width)",
+            "transform: translateX(-50%)",
+            "pointer-events: none",
+            "background-color: var(--codex-wallpaper-glass) !important",
+            "-webkit-backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation))",
+            "backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation))",
+            "border: 1px solid var(--codex-wallpaper-border)",
+            "border-radius: var(--codex-wallpaper-radius)",
+            "box-shadow: 0 8px 28px rgb(0 0 0 / 0.18)",
+        ];
+        string[] rtlPseudoDeclarations =
+        [
+            "left: auto",
+            "right: calc(",
+            "var(--codex-wallpaper-conversation-inline-padding, 16px)",
+            "var(--thread-content-margin, 24px)",
+            "transform: none",
+        ];
 
         Assert.Contains(fallbackSelector, fallbackGlassRule.Selectors);
         Assert.Contains(fallbackSelector, fallbackPaddingRule.Selectors);
+        Assert.Equal([wideTableSelector], wideTableHostRule.Selectors);
+        Assert.Equal([$"{wideTableSelector}::before"], wideTablePseudoRule.Selectors);
+        Assert.Equal(
+            [$"{wideTableSelector}:dir(rtl)::before"],
+            rtlWideTablePseudoRule.Selectors);
+        Assert.All(
+            hostDeclarations,
+            declaration => Assert.Contains(
+                declaration,
+                wideTableHostRule.Declarations,
+                StringComparison.Ordinal));
+        Assert.All(
+            pseudoDeclarations,
+            declaration => Assert.Contains(
+                declaration,
+                wideTablePseudoRule.Declarations,
+                StringComparison.Ordinal));
+        Assert.All(
+            rtlPseudoDeclarations,
+            declaration => Assert.Contains(
+                declaration,
+                rtlWideTablePseudoRule.Declarations,
+                StringComparison.Ordinal));
+        Assert.Equal(
+            3,
+            rules.Count(
+                rule => rule.Selectors.Any(
+                    selector => selector.Contains(
+                        "_tableContainer_",
+                        StringComparison.Ordinal))));
         Assert.Equal(
             ["chatgpt-assistant-message"],
             SelectFixtureIds(fixture, [fallbackSelector]));
+        Assert.Equal(
+            ["annotated-codex-assistant-message", "chatgpt-assistant-message"],
+            SelectFixtureIds(fixture, wideTableHostRule.Selectors));
 
         var changedIds = SelectFixtureIds(fixture, [fallbackSelector]);
         Assert.DoesNotContain("annotated-codex-assistant-message", changedIds);
@@ -330,6 +422,9 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
         Assert.DoesNotContain("assistant-target-not-direct-child", changedIds);
         Assert.DoesNotContain("user-message-bubble", changedIds);
         Assert.DoesNotContain("assistant-message-outside-main", changedIds);
+        Assert.DoesNotContain(
+            "wide-table-outside-assistant",
+            SelectFixtureIds(fixture, wideTableHostRule.Selectors));
     }
 
     [Fact]
@@ -852,17 +947,45 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
         rule.Declarations.Contains(
             "box-shadow: 0 8px 28px",
             StringComparison.Ordinal) &&
+        !rule.Selectors.Any(
+            selector => selector.Contains("_tableContainer_", StringComparison.Ordinal)) &&
         rule.Selectors.Any(
             selector => selector.Contains(
                 "[data-selected-text-overlay-target]",
                 StringComparison.Ordinal));
 
     private static bool IsReviewedChatGptAssistantFallbackPaddingRule(CssRule rule) =>
-        CanonicalizeWhitespace(rule.Declarations) == "padding: 12px 16px;" &&
+        CanonicalizeWhitespace(rule.Declarations) ==
+        "padding: 12px var(--codex-wallpaper-conversation-inline-padding);" &&
         rule.Selectors.Any(
             selector => selector.Contains(
                 "[data-selected-text-overlay-target]",
                 StringComparison.Ordinal));
+
+    private static bool IsReviewedWideTableAssistantHostRule(CssRule rule) =>
+        rule.Declarations.Contains(
+            "--codex-wallpaper-wide-table-glass-width",
+            StringComparison.Ordinal) &&
+        rule.Selectors.Any(
+            selector =>
+                selector.Contains("_tableContainer_", StringComparison.Ordinal) &&
+                !selector.EndsWith("::before", StringComparison.Ordinal));
+
+    private static bool IsReviewedWideTableAssistantPseudoRule(CssRule rule) =>
+        rule.Declarations.Contains(
+            "width: var(--codex-wallpaper-wide-table-glass-width)",
+            StringComparison.Ordinal) &&
+        rule.Selectors.Any(
+            selector =>
+                selector.Contains("_tableContainer_", StringComparison.Ordinal) &&
+                selector.EndsWith("::before", StringComparison.Ordinal));
+
+    private static bool IsReviewedRtlWideTableAssistantPseudoRule(CssRule rule) =>
+        rule.Declarations.Contains("right: calc(", StringComparison.Ordinal) &&
+        rule.Selectors.Any(
+            selector =>
+                selector.Contains("_tableContainer_", StringComparison.Ordinal) &&
+                selector.EndsWith(":dir(rtl)::before", StringComparison.Ordinal));
 
     private static bool IsReviewedBrowserHostStackingRule(CssRule rule) =>
         rule.Declarations.Contains("z-index: 2", StringComparison.Ordinal) &&
@@ -1299,17 +1422,21 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
 
     private static bool MatchesSimpleSelector(XElement element, string selector)
     {
-        if (selector.StartsWith(":is(", StringComparison.Ordinal))
+        for (var isIndex = FindTopLevelPseudo(selector, ":is(");
+             isIndex >= 0;
+             isIndex = FindTopLevelPseudo(selector, ":is("))
         {
-            var closingParenthesis = FindMatchingParenthesis(selector, 3);
-            if (closingParenthesis != selector.Length - 1)
+            var closingParenthesis = FindMatchingParenthesis(selector, isIndex + 3);
+            var alternatives = selector[(isIndex + 4)..closingParenthesis];
+            if (!SplitTopLevel(alternatives, ',')
+                    .Any(alternative => MatchesSelector(element, alternative)))
             {
-                throw new InvalidOperationException(
-                    $"Unsupported selector after :is(): '{selector}'.");
+                return false;
             }
 
-            return SplitTopLevel(selector[4..closingParenthesis], ',')
-                .Any(alternative => MatchesSimpleSelector(element, alternative));
+            selector = string.Concat(
+                selector.AsSpan(0, isIndex),
+                selector.AsSpan(closingParenthesis + 1));
         }
 
         for (var notIndex = FindTopLevelPseudo(selector, ":not(");
@@ -1945,6 +2072,13 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
                   <div data-selected-text-overlay-target="">
                     Assistant response
                   </div>
+                  <div class="_tableContainer_fixture _tableWideBlock_fixture">
+                    <div class="_tableScroller_fixture">
+                      <div class="_tableWrapper_fixture">
+                        <table class="_table_fixture" />
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -1957,8 +2091,25 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
                   <div data-selected-text-overlay-target="">
                     Annotated Codex response
                   </div>
+                  <div class="_tableContainer_fixture _tableWideBlock_fixture">
+                    <div class="_tableScroller_fixture">
+                      <div class="_tableWrapper_fixture">
+                        <table class="_table_fixture" />
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
+
+              <article data-fixture-id="wide-table-outside-assistant">
+                <div class="_tableContainer_fixture _tableWideBlock_fixture">
+                  <div class="_tableScroller_fixture">
+                    <div class="_tableWrapper_fixture">
+                      <table class="_table_fixture" />
+                    </div>
+                  </div>
+                </div>
+              </article>
 
               <article data-fixture-id="ordinary-selected-text-container">
                 <div data-selected-text-overlay-target="">
