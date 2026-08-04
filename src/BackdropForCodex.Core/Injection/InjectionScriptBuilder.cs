@@ -164,6 +164,7 @@ public static class InjectionScriptBuilder
                     var(--codex-wallpaper-activity-border-light),
                     var(--codex-wallpaper-activity-border-dark));
                   --codex-wallpaper-radius: 16px;
+                  --codex-wallpaper-conversation-inline-padding: 16px;
                   --codex-wallpaper-overlay: light-dark(
                     rgb(255 255 255 / ${cfg.lightOverlay}),
                     rgb(0 0 0 / ${cfg.darkOverlay}));
@@ -511,7 +512,97 @@ public static class InjectionScriptBuilder
                   {{advancedBodySelector}} main [data-content-search-unit-key]
                     > h4[class~="sr-only"][class~="select-none"]
                     + div[class~="group"][class~="flex"][class~="min-w-0"][class~="flex-col"]:not([data-response-annotation-target]):has(> [data-selected-text-overlay-target]) {
-                    padding: 12px 16px;
+                    padding: 12px var(--codex-wallpaper-conversation-inline-padding);
+                  }
+                  /*
+                   * Markdown tables intentionally escape the normal thread column through
+                   * a centered wide-block scroller. Keep that native layout and scrollbar,
+                   * but let one assistant glass layer cover the reviewed wide-table span.
+                   */
+                  {{advancedBodySelector}} main :is(
+                    [data-response-annotation-conversation][data-response-annotation-target],
+                    [data-content-search-unit-key]
+                      > h4[class~="sr-only"][class~="select-none"]
+                      + div[class~="group"][class~="flex"][class~="min-w-0"][class~="flex-col"]:not([data-response-annotation-target]):has(> [data-selected-text-overlay-target])
+                  ):has(
+                    :is([class^="_tableContainer_"], [class*=" _tableContainer_"]):is([class^="_tableWideBlock_"], [class*=" _tableWideBlock_"])
+                      > :is([class^="_tableScroller_"], [class*=" _tableScroller_"])
+                      > :is([class^="_tableWrapper_"], [class*=" _tableWrapper_"])
+                      > table:is([class^="_table_"], [class*=" _table_"])
+                  ) {
+                    --codex-wallpaper-wide-table-glass-width: min(
+                      calc(
+                        var(--markdown-wide-block-max-width, 56rem) + 8rem +
+                        (var(--thread-content-margin, 24px) * 2)
+                      ),
+                      max(
+                        calc(
+                          100% + (var(--thread-content-margin, 24px) * 2) -
+                          (var(--codex-wallpaper-conversation-inline-padding, 16px) * 2)
+                        ),
+                        calc(
+                          100cqi - (var(--padding-toolbar, 1rem) * 2) -
+                          (var(--spacing, 0.25rem) * 18) -
+                          (var(--thread-wide-block-inline-shift, 0px) * 2)
+                        )
+                      )
+                    );
+                    position: relative;
+                    isolation: isolate;
+                    background-color: transparent !important;
+                    -webkit-backdrop-filter: none;
+                    backdrop-filter: none;
+                    border-color: transparent;
+                    box-shadow: none;
+                  }
+                  {{advancedBodySelector}} main :is(
+                    [data-response-annotation-conversation][data-response-annotation-target],
+                    [data-content-search-unit-key]
+                      > h4[class~="sr-only"][class~="select-none"]
+                      + div[class~="group"][class~="flex"][class~="min-w-0"][class~="flex-col"]:not([data-response-annotation-target]):has(> [data-selected-text-overlay-target])
+                  ):has(
+                    :is([class^="_tableContainer_"], [class*=" _tableContainer_"]):is([class^="_tableWideBlock_"], [class*=" _tableWideBlock_"])
+                      > :is([class^="_tableScroller_"], [class*=" _tableScroller_"])
+                      > :is([class^="_tableWrapper_"], [class*=" _tableWrapper_"])
+                      > table:is([class^="_table_"], [class*=" _table_"])
+                  )::before {
+                    content: "";
+                    position: absolute;
+                    z-index: -1;
+                    inset-block: 0;
+                    left: 50%;
+                    width: var(--codex-wallpaper-wide-table-glass-width);
+                    transform: translateX(-50%);
+                    pointer-events: none;
+                    box-sizing: border-box;
+                    background-color: var(--codex-wallpaper-glass) !important;
+                    -webkit-backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
+                    backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
+                    border: 1px solid var(--codex-wallpaper-border);
+                    border-radius: var(--codex-wallpaper-radius);
+                    box-shadow: 0 8px 28px rgb(0 0 0 / 0.18);
+                  }
+                  /*
+                   * The native RTL wide block grows toward physical left because its
+                   * reviewed layout uses margin-left. Anchor glass to the same right edge.
+                   */
+                  {{advancedBodySelector}} main :is(
+                    [data-response-annotation-conversation][data-response-annotation-target],
+                    [data-content-search-unit-key]
+                      > h4[class~="sr-only"][class~="select-none"]
+                      + div[class~="group"][class~="flex"][class~="min-w-0"][class~="flex-col"]:not([data-response-annotation-target]):has(> [data-selected-text-overlay-target])
+                  ):has(
+                    :is([class^="_tableContainer_"], [class*=" _tableContainer_"]):is([class^="_tableWideBlock_"], [class*=" _tableWideBlock_"])
+                      > :is([class^="_tableScroller_"], [class*=" _tableScroller_"])
+                      > :is([class^="_tableWrapper_"], [class*=" _tableWrapper_"])
+                      > table:is([class^="_table_"], [class*=" _table_"])
+                  ):dir(rtl)::before {
+                    left: auto;
+                    right: calc(
+                      var(--codex-wallpaper-conversation-inline-padding, 16px) -
+                      var(--thread-content-margin, 24px)
+                    );
+                    transform: none;
                   }
                   {{advancedBodySelector}} main [data-local-conversation-item-target-ids] {
                     background-color: var(--codex-wallpaper-activity) !important;

@@ -384,6 +384,11 @@ public sealed class PresentationContractTests
             "pull-request-inbox-search",
             "data-settings-panel-slug",
         ];
+        string[] advancedRuleAnchors =
+        [
+            "[data-above-composer-portal]",
+            "_tableContainer_",
+        ];
 
         foreach (var anchor in glassRuleAnchors)
         {
@@ -393,10 +398,13 @@ public sealed class PresentationContractTests
                 "glass");
         }
 
-        AssertEveryOccurrenceIsInsideOwnedStyleBlocks(
-            installScript,
-            "[data-above-composer-portal]",
-            "advanced");
+        foreach (var anchor in advancedRuleAnchors)
+        {
+            AssertEveryOccurrenceIsInsideOwnedStyleBlocks(
+                installScript,
+                anchor,
+                "advanced");
+        }
 
         var baseline = RemoveOwnedStyleBlocks(
             installScript,
@@ -404,6 +412,12 @@ public sealed class PresentationContractTests
             "advanced");
         Assert.All(
             glassRuleAnchors,
+            anchor => Assert.DoesNotContain(
+                anchor,
+                baseline,
+                StringComparison.Ordinal));
+        Assert.All(
+            advancedRuleAnchors,
             anchor => Assert.DoesNotContain(
                 anchor,
                 baseline,
@@ -433,14 +447,32 @@ public sealed class PresentationContractTests
             "[data-codex-composer-root] [data-above-composer-portal]",
             degradedScript,
             StringComparison.Ordinal);
+        var glassDegradedAdvancedStyles = string.Join(
+            "\n",
+            ExtractOwnedStyleBlocks(degradedScript, "advanced"));
+        Assert.Contains(
+            "_tableContainer_",
+            glassDegradedAdvancedStyles,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "data-codex-wallpaper-glass-disabled",
+            glassDegradedAdvancedStyles,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "data-codex-wallpaper-advanced-disabled",
+            glassDegradedAdvancedStyles,
+            StringComparison.Ordinal);
 
         var degradedAdvancedStyles = string.Join(
             "\n",
             ExtractOwnedStyleBlocks(advancedDegradedScript, "advanced"));
-        AssertEveryOccurrenceUsesGuard(
-            degradedAdvancedStyles,
-            "[data-above-composer-portal]",
-            "body[data-codex-wallpaper-advanced-disabled]");
+        foreach (var anchor in advancedRuleAnchors)
+        {
+            AssertEveryOccurrenceUsesGuard(
+                degradedAdvancedStyles,
+                anchor,
+                "body[data-codex-wallpaper-advanced-disabled]");
+        }
     }
 
     [Fact]
