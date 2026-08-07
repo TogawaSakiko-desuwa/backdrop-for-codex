@@ -593,24 +593,35 @@ public sealed class InjectionScriptBuilderTests
     }
 
     [Fact]
-    public void BuildInstall_GlassesUnannotatedChatGptAssistantMessagesByAccessibleStructure()
+    public void BuildInstall_GlassesReviewedUnannotatedAssistantStructures()
     {
         var script = InjectionScriptBuilder.BuildInstall(CreateOptions());
         var compactScript = string.Concat(script.Where(character => !char.IsWhiteSpace(character)));
-        const string Fallback =
+        const string LegacyFallback =
             "bodymain" +
             "[data-content-search-unit-key]>" +
             "h4[class~=\"sr-only\"][class~=\"select-none\"]+" +
             "div[class~=\"group\"][class~=\"flex\"][class~=\"min-w-0\"][class~=\"flex-col\"]" +
             ":not([data-response-annotation-target])" +
             ":has(>[data-selected-text-overlay-target])";
+        const string CurrentFallback =
+            "bodymain" +
+            "[data-content-search-unit-key]>" +
+            "div[class~=\"group\"][class~=\"flex\"][class~=\"min-w-0\"][class~=\"flex-col\"]" +
+            ":not([data-response-annotation-target])" +
+            ":has(>[data-selected-text-overlay-target]" +
+            "[data-markdown-text-style=\"assistant-message\"])";
 
         Assert.Contains(
-            Fallback + ",",
+            LegacyFallback + ",",
             compactScript,
             StringComparison.Ordinal);
         Assert.Contains(
-            Fallback +
+            CurrentFallback + ",",
+            compactScript,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            LegacyFallback + "," + CurrentFallback +
             "{padding:12pxvar(--codex-wallpaper-conversation-inline-padding);}",
             compactScript,
             StringComparison.Ordinal);

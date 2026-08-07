@@ -321,18 +321,35 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
             """
             body main [data-content-search-unit-key] > h4[class~="sr-only"][class~="select-none"] + div[class~="group"][class~="flex"][class~="min-w-0"][class~="flex-col"]:not([data-response-annotation-target]):has(> [data-selected-text-overlay-target])
             """);
+        var currentSelector = CanonicalizeSelector(
+            """
+            body main [data-content-search-unit-key]
+              > div[class~="group"][class~="flex"][class~="min-w-0"][class~="flex-col"]:not([data-response-annotation-target]):has(
+                > [data-selected-text-overlay-target][data-markdown-text-style="assistant-message"]
+              )
+            """);
         var wideTableSelector = CanonicalizeSelector(
             """
             body main :is(
               [data-response-annotation-conversation][data-response-annotation-target],
               [data-content-search-unit-key]
                 > h4[class~="sr-only"][class~="select-none"]
-                + div[class~="group"][class~="flex"][class~="min-w-0"][class~="flex-col"]:not([data-response-annotation-target]):has(> [data-selected-text-overlay-target])
+                + div[class~="group"][class~="flex"][class~="min-w-0"][class~="flex-col"]:not([data-response-annotation-target]):has(> [data-selected-text-overlay-target]),
+              [data-content-search-unit-key]
+                > div[class~="group"][class~="flex"][class~="min-w-0"][class~="flex-col"]:not([data-response-annotation-target]):has(
+                  > [data-selected-text-overlay-target][data-markdown-text-style="assistant-message"]
+                )
             ):has(
-              :is([class^="_tableContainer_"], [class*=" _tableContainer_"]):is([class^="_tableWideBlock_"], [class*=" _tableWideBlock_"])
-                > :is([class^="_tableScroller_"], [class*=" _tableScroller_"])
-                > :is([class^="_tableWrapper_"], [class*=" _tableWrapper_"])
-                > table:is([class^="_table_"], [class*=" _table_"])
+              :is(
+                :is([class^="_tableContainer_"], [class*=" _tableContainer_"]):is([class^="_tableWideBlock_"], [class*=" _tableWideBlock_"])
+                  > :is([class^="_tableScroller_"], [class*=" _tableScroller_"])
+                  > :is([class^="_tableWrapper_"], [class*=" _tableWrapper_"])
+                  > table:is([class^="_table_"], [class*=" _table_"]),
+                [data-markdown-table="true"][data-wide-block]
+                  > :is([class^="_TableScroller_"], [class*=" _TableScroller_"])
+                  > :is([class^="_TableWrapper_"], [class*=" _TableWrapper_"])
+                  > table:is([class^="_Table_"], [class*=" _Table_"])
+              )
             )
             """);
         string[] hostDeclarations =
@@ -374,6 +391,20 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
 
         Assert.Contains(fallbackSelector, fallbackGlassRule.Selectors);
         Assert.Contains(fallbackSelector, fallbackPaddingRule.Selectors);
+        Assert.Equal(
+            currentSelector,
+            Assert.Single(
+                fallbackGlassRule.Selectors,
+                selector => selector.Contains(
+                    "data-markdown-text-style",
+                    StringComparison.Ordinal)));
+        Assert.Equal(
+            currentSelector,
+            Assert.Single(
+                fallbackPaddingRule.Selectors,
+                selector => selector.Contains(
+                    "data-markdown-text-style",
+                    StringComparison.Ordinal)));
         Assert.Equal([wideTableSelector], wideTableHostRule.Selectors);
         Assert.Equal([$"{wideTableSelector}::before"], wideTablePseudoRule.Selectors);
         Assert.Equal(
@@ -405,13 +436,27 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
                         "_tableContainer_",
                         StringComparison.Ordinal))));
         Assert.Equal(
+            3,
+            rules.Count(
+                rule => rule.Selectors.Any(
+                    selector => selector.Contains(
+                        "data-markdown-table=\"true\"",
+                        StringComparison.Ordinal))));
+        Assert.Equal(
             ["chatgpt-assistant-message"],
             SelectFixtureIds(fixture, [fallbackSelector]));
         Assert.Equal(
-            ["annotated-codex-assistant-message", "chatgpt-assistant-message"],
+            ["codex-26-803-assistant-message", "codex-26-803-narrow-table-message"],
+            SelectFixtureIds(fixture, [currentSelector]));
+        Assert.Equal(
+            [
+                "annotated-codex-assistant-message",
+                "chatgpt-assistant-message",
+                "codex-26-803-assistant-message",
+            ],
             SelectFixtureIds(fixture, wideTableHostRule.Selectors));
 
-        var changedIds = SelectFixtureIds(fixture, [fallbackSelector]);
+        var changedIds = SelectFixtureIds(fixture, [fallbackSelector, currentSelector]);
         Assert.DoesNotContain("annotated-codex-assistant-message", changedIds);
         Assert.DoesNotContain("ordinary-selected-text-container", changedIds);
         Assert.DoesNotContain("non-adjacent-assistant-lookalike", changedIds);
@@ -422,8 +467,15 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
         Assert.DoesNotContain("assistant-target-not-direct-child", changedIds);
         Assert.DoesNotContain("user-message-bubble", changedIds);
         Assert.DoesNotContain("assistant-message-outside-main", changedIds);
+        Assert.DoesNotContain("codex-26-803-non-assistant-markdown", changedIds);
+        Assert.DoesNotContain(
+            "codex-26-803-narrow-table-message",
+            SelectFixtureIds(fixture, wideTableHostRule.Selectors));
         Assert.DoesNotContain(
             "wide-table-outside-assistant",
+            SelectFixtureIds(fixture, wideTableHostRule.Selectors));
+        Assert.DoesNotContain(
+            "codex-26-803-wide-table-outside-assistant",
             SelectFixtureIds(fixture, wideTableHostRule.Selectors));
     }
 
@@ -2101,11 +2153,72 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
                 </div>
               </div>
 
+              <div data-content-search-unit-key="assistant-26-803">
+                <div class="group flex min-w-0 flex-col"
+                     data-fixture-id="codex-26-803-assistant-message">
+                  <div class="_MarkdownRoot_n6hyy_1"
+                       data-selected-text-overlay-target=""
+                       data-markdown-text-style="assistant-message">
+                    Codex 26.803 response
+                    <div class="_TableContainer_n6hyy_77"
+                         data-markdown-table="true"
+                         data-wide-block="">
+                      <div class="_TableScroller_n6hyy_713">
+                        <div class="_TableWrapper_n6hyy_733">
+                          <table class="_Table_n6hyy_77" />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div data-content-search-unit-key="assistant-26-803-narrow-table">
+                <div class="group flex min-w-0 flex-col"
+                     data-fixture-id="codex-26-803-narrow-table-message">
+                  <div class="_MarkdownRoot_n6hyy_2"
+                       data-selected-text-overlay-target=""
+                       data-markdown-text-style="assistant-message">
+                    Narrow Codex 26.803 table
+                    <div class="_TableContainer_n6hyy_77" data-markdown-table="true">
+                      <div class="_TableScroller_n6hyy_713">
+                        <div class="_TableWrapper_n6hyy_733">
+                          <table class="_Table_n6hyy_77" />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div data-content-search-unit-key="non-assistant-26-803">
+                <div class="group flex min-w-0 flex-col"
+                     data-fixture-id="codex-26-803-non-assistant-markdown">
+                  <div class="_MarkdownRoot_n6hyy_3"
+                       data-selected-text-overlay-target=""
+                       data-markdown-text-style="user-message">
+                    Not an assistant message
+                  </div>
+                </div>
+              </div>
+
               <article data-fixture-id="wide-table-outside-assistant">
                 <div class="_tableContainer_fixture _tableWideBlock_fixture">
                   <div class="_tableScroller_fixture">
                     <div class="_tableWrapper_fixture">
                       <table class="_table_fixture" />
+                    </div>
+                  </div>
+                </div>
+              </article>
+
+              <article data-fixture-id="codex-26-803-wide-table-outside-assistant">
+                <div class="_TableContainer_n6hyy_77"
+                     data-markdown-table="true"
+                     data-wide-block="">
+                  <div class="_TableScroller_n6hyy_713">
+                    <div class="_TableWrapper_n6hyy_733">
+                      <table class="_Table_n6hyy_77" />
                     </div>
                   </div>
                 </div>

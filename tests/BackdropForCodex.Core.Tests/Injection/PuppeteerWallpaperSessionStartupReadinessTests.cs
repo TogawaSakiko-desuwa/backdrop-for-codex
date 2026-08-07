@@ -414,17 +414,17 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
                     --spacing: 4px;
                     --markdown-wide-block-max-width: 43.1875rem;
                   }
-                  #assistant-glass {
+                  #assistant-glass,
+                  #assistant-regular-glass {
                     width: 736px;
                     margin-inline: auto;
                   }
-                  [class^="_tableContainer_"],
-                  [class*=" _tableContainer_"] {
+                  [class^="_TableContainer_"],
+                  [class*=" _TableContainer_"] {
                     width: calc(100% + (var(--thread-content-margin, 24px) * 2));
                     margin-inline: calc(var(--thread-content-margin, 24px) * -1);
                   }
-                  [class^="_tableWideBlock_"],
-                  [class*=" _tableWideBlock_"] {
+                  [data-wide-block] {
                     --wide-block-container-max-width: max(
                       100%,
                       calc(
@@ -449,24 +449,22 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
                       var(--thread-content-margin, 24px)
                     );
                   }
-                  [class^="_tableScroller_"],
-                  [class*=" _tableScroller_"] {
+                  [class^="_TableScroller_"],
+                  [class*=" _TableScroller_"] {
                     overflow-x: auto;
                   }
-                  [class^="_tableWideBlock_"] > [class^="_tableScroller_"],
-                  [class*=" _tableWideBlock_"] > [class^="_tableScroller_"],
-                  [class^="_tableWideBlock_"] > [class*=" _tableScroller_"],
-                  [class*=" _tableWideBlock_"] > [class*=" _tableScroller_"] {
+                  [data-wide-block] > [class^="_TableScroller_"],
+                  [data-wide-block] > [class*=" _TableScroller_"] {
                     display: flex;
                     justify-content: safe center;
                   }
-                  [class^="_tableWrapper_"],
-                  [class*=" _tableWrapper_"] {
+                  [class^="_TableWrapper_"],
+                  [class*=" _TableWrapper_"] {
                     width: fit-content;
                     margin-inline: var(--thread-content-margin, 24px);
                   }
-                  table[class^="_table_"],
-                  table[class*=" _table_"] {
+                  table[class^="_Table_"],
+                  table[class*=" _Table_"] {
                     width: fit-content;
                     min-width: min(
                       calc(100cqw - (var(--padding-toolbar) * 2)),
@@ -496,33 +494,47 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
                             data-app-shell-header-edge-scroll="false"></header>
                     <div data-app-shell-main-content-layout="default"
                          data-app-shell-right-panel-full-width="false"></div>
-                    <div id="assistant-glass"
-                         class="group flex min-w-0 flex-col"
-                         data-response-annotation-conversation="conversation"
-                         data-response-annotation-target="message">
-                      <p>Wide Markdown table:</p>
-                      <div class="_tableContainer_fixture _tableWideBlock_fixture">
-                        <div class="_tableScroller_fixture">
-                          <div class="_tableWrapper_fixture">
-                            <table class="_table_fixture">
-                              <thead>
-                                <tr>
-                                  <th>Provider</th>
-                                  <th>Current plan</th>
-                                  <th>Best for</th>
-                                  <th>Important caveats</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                <tr>
-                                  <td>Example cloud</td>
-                                  <td>Four cores and sixteen gigabytes</td>
-                                  <td>Low-cost validation and automation</td>
-                                  <td>Verify disk allocation and refund terms before purchase</td>
-                                </tr>
-                              </tbody>
-                            </table>
+                    <div data-content-search-unit-key="assistant-current">
+                      <div id="assistant-glass" class="group flex min-w-0 flex-col">
+                        <div class="_MarkdownRoot_n6hyy_1"
+                             data-selected-text-overlay-target=""
+                             data-markdown-text-style="assistant-message">
+                          <p>Wide Markdown table:</p>
+                          <div class="_TableContainer_n6hyy_77"
+                               data-markdown-table="true"
+                               data-wide-block="">
+                            <div class="_TableScroller_n6hyy_713">
+                              <div class="_TableWrapper_n6hyy_733">
+                                <table class="_Table_n6hyy_77">
+                                  <thead>
+                                    <tr>
+                                      <th>Provider</th>
+                                      <th>Current plan</th>
+                                      <th>Best for</th>
+                                      <th>Important caveats</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    <tr>
+                                      <td>Example cloud</td>
+                                      <td>Four cores and sixteen gigabytes</td>
+                                      <td>Low-cost validation and automation</td>
+                                      <td>Verify disk allocation and refund terms before purchase</td>
+                                    </tr>
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
                           </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div data-content-search-unit-key="assistant-current-regular">
+                      <div id="assistant-regular-glass" class="group flex min-w-0 flex-col">
+                        <div class="_MarkdownRoot_n6hyy_2"
+                             data-selected-text-overlay-target=""
+                             data-markdown-text-style="assistant-message">
+                          <p>Regular assistant response without a table.</p>
                         </div>
                       </div>
                     </div>
@@ -575,14 +587,15 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
                 $$"""
                 (() => {
                   const glass = document.querySelector("#assistant-glass");
+                  const regularGlass = document.querySelector("#assistant-regular-glass");
                   const scroller = document.querySelector(
-                    '[class^="_tableScroller_"], [class*=" _tableScroller_"]'
+                    '[class^="_TableScroller_"], [class*=" _TableScroller_"]'
                   );
                   const table = document.querySelector(
-                    'table[class^="_table_"], table[class*=" _table_"]'
+                    'table[class^="_Table_"], table[class*=" _Table_"]'
                   );
                   const rowCell = table?.querySelector("tbody td");
-                  if (!glass || !scroller || !table || !rowCell) {
+                  if (!glass || !regularGlass || !scroller || !table || !rowCell) {
                     throw new Error("Missing Markdown table glass fixture nodes.");
                   }
 
@@ -591,6 +604,7 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
                   const tableRect = table.getBoundingClientRect();
                   const rowCellRect = rowCell.getBoundingClientRect();
                   const glassStyle = getComputedStyle(glass);
+                  const regularGlassStyle = getComputedStyle(regularGlass);
                   const pseudoStyle = getComputedStyle(glass, "::before");
                   const transparent = value =>
                     value === "rgba(0, 0, 0, 0)" || value === "transparent";
@@ -630,6 +644,10 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
                     !transparent(glassStyle.backgroundColor) ||
                     filterOwnsGlass(glassStyle) ||
                     glassStyle.boxShadow !== "none";
+                  const regularAssistantOwnsGlass =
+                    !transparent(regularGlassStyle.backgroundColor) &&
+                    filterOwnsGlass(regularGlassStyle) &&
+                    regularGlassStyle.boxShadow !== "none";
                   const effectiveGlassLeft = pseudoOwnsGlass
                     ? pseudoUsesLeftAnchor
                       ? glassRect.left + parentBorderLeft + pseudoLeft + pseudoTransformX
@@ -661,6 +679,12 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
                     ownedStylePresent: Boolean(document.querySelector(
                       "#{{InjectionScriptBuilder.StyleElementId}}"
                     )),
+                    regularAssistantOwnsGlass,
+                    regularAssistantBackground: regularGlassStyle.backgroundColor,
+                    regularAssistantBackdropFilter: regularGlassStyle.backdropFilter,
+                    regularAssistantWebkitBackdropFilter:
+                      String(regularGlassStyle.webkitBackdropFilter ?? "none"),
+                    regularAssistantBoxShadow: regularGlassStyle.boxShadow,
                     parentBackground: glassStyle.backgroundColor,
                     parentBackdropFilter: glassStyle.backdropFilter,
                     parentWebkitBackdropFilter:
@@ -699,7 +723,7 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
                       Math.abs(scrollerRect.left - effectiveGlassLeft) <= 0.5 &&
                       Math.abs(scrollerRect.right - effectiveGlassRight) <= 0.5,
                     scrollerCount: document.querySelectorAll(
-                      '[class^="_tableScroller_"], [class*=" _tableScroller_"]'
+                      '[class^="_TableScroller_"], [class*=" _TableScroller_"]'
                     ).length,
                     scrollerClientWidth: scroller.clientWidth,
                     scrollerScrollWidth: scroller.scrollWidth,
@@ -745,6 +769,13 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
                     };
 
                     Assert.True(rendering.OwnedStylePresent);
+                    Assert.True(
+                        rendering.RegularAssistantOwnsGlass,
+                        "Current regular assistant message must retain one visible glass surface; " +
+                        $"background={rendering.RegularAssistantBackground}, " +
+                        $"filter={rendering.RegularAssistantBackdropFilter}, " +
+                        $"webkit-filter={rendering.RegularAssistantWebkitBackdropFilter}, " +
+                        $"shadow={rendering.RegularAssistantBoxShadow}.");
                     Assert.True(
                         rendering.ParentOwnsGlass || rendering.PseudoOwnsGlass,
                         "The assistant fixture has no rendered glass owner.");
@@ -3467,6 +3498,11 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
 
     private sealed record MarkdownTableGlassRendering(
         bool OwnedStylePresent,
+        bool RegularAssistantOwnsGlass,
+        string RegularAssistantBackground,
+        string RegularAssistantBackdropFilter,
+        string RegularAssistantWebkitBackdropFilter,
+        string RegularAssistantBoxShadow,
         string ParentBackground,
         string ParentBackdropFilter,
         string ParentWebkitBackdropFilter,

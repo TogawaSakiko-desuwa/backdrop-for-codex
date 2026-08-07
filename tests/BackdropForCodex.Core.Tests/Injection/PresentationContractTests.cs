@@ -387,6 +387,8 @@ public sealed class PresentationContractTests
         string[] advancedRuleAnchors =
         [
             "[data-above-composer-portal]",
+            "data-markdown-text-style",
+            "data-markdown-table",
             "_tableContainer_",
         ];
 
