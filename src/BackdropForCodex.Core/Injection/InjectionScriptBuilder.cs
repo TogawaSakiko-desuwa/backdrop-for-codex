@@ -495,10 +495,18 @@ public static class InjectionScriptBuilder
                     > [class~="pointer-events-none"][class~="absolute"][class~="inset-x-0"][class~="-bottom-1"][class~="h-7"][class~="bg-gradient-to-t"][class~="from-token-main-surface-primary"][class~="to-transparent"] {
                     background-image: none !important;
                   }
+                  /*
+                   * Keep both reviewed assistant shells: the legacy accessible heading sibling
+                   * and the current semantic Markdown root introduced by Codex 26.803.
+                   */
                   {{advancedBodySelector}} main [data-response-annotation-conversation][data-response-annotation-target],
                   {{advancedBodySelector}} main [data-content-search-unit-key]
                     > h4[class~="sr-only"][class~="select-none"]
                     + div[class~="group"][class~="flex"][class~="min-w-0"][class~="flex-col"]:not([data-response-annotation-target]):has(> [data-selected-text-overlay-target]),
+                  {{advancedBodySelector}} main [data-content-search-unit-key]
+                    > div[class~="group"][class~="flex"][class~="min-w-0"][class~="flex-col"]:not([data-response-annotation-target]):has(
+                      > [data-selected-text-overlay-target][data-markdown-text-style="assistant-message"]
+                    ),
                   {{advancedBodySelector}} main [data-user-message-bubble="true"] {
                     background-color: var(--codex-wallpaper-glass) !important;
                     -webkit-backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
@@ -511,24 +519,40 @@ public static class InjectionScriptBuilder
                   {{advancedBodySelector}} main [data-response-annotation-conversation][data-response-annotation-target],
                   {{advancedBodySelector}} main [data-content-search-unit-key]
                     > h4[class~="sr-only"][class~="select-none"]
-                    + div[class~="group"][class~="flex"][class~="min-w-0"][class~="flex-col"]:not([data-response-annotation-target]):has(> [data-selected-text-overlay-target]) {
+                    + div[class~="group"][class~="flex"][class~="min-w-0"][class~="flex-col"]:not([data-response-annotation-target]):has(> [data-selected-text-overlay-target]),
+                  {{advancedBodySelector}} main [data-content-search-unit-key]
+                    > div[class~="group"][class~="flex"][class~="min-w-0"][class~="flex-col"]:not([data-response-annotation-target]):has(
+                      > [data-selected-text-overlay-target][data-markdown-text-style="assistant-message"]
+                    ) {
                     padding: 12px var(--codex-wallpaper-conversation-inline-padding);
                   }
                   /*
                    * Markdown tables intentionally escape the normal thread column through
                    * a centered wide-block scroller. Keep that native layout and scrollbar,
-                   * but let one assistant glass layer cover the reviewed wide-table span.
+                   * but let one assistant glass layer cover the reviewed wide-table span. The
+                   * current DOM exposes table and wide-block semantics through data attributes;
+                   * the legacy CSS-module branch remains for older reviewed builds.
                    */
                   {{advancedBodySelector}} main :is(
                     [data-response-annotation-conversation][data-response-annotation-target],
                     [data-content-search-unit-key]
                       > h4[class~="sr-only"][class~="select-none"]
-                      + div[class~="group"][class~="flex"][class~="min-w-0"][class~="flex-col"]:not([data-response-annotation-target]):has(> [data-selected-text-overlay-target])
+                      + div[class~="group"][class~="flex"][class~="min-w-0"][class~="flex-col"]:not([data-response-annotation-target]):has(> [data-selected-text-overlay-target]),
+                    [data-content-search-unit-key]
+                      > div[class~="group"][class~="flex"][class~="min-w-0"][class~="flex-col"]:not([data-response-annotation-target]):has(
+                        > [data-selected-text-overlay-target][data-markdown-text-style="assistant-message"]
+                      )
                   ):has(
-                    :is([class^="_tableContainer_"], [class*=" _tableContainer_"]):is([class^="_tableWideBlock_"], [class*=" _tableWideBlock_"])
-                      > :is([class^="_tableScroller_"], [class*=" _tableScroller_"])
-                      > :is([class^="_tableWrapper_"], [class*=" _tableWrapper_"])
-                      > table:is([class^="_table_"], [class*=" _table_"])
+                    :is(
+                      :is([class^="_tableContainer_"], [class*=" _tableContainer_"]):is([class^="_tableWideBlock_"], [class*=" _tableWideBlock_"])
+                        > :is([class^="_tableScroller_"], [class*=" _tableScroller_"])
+                        > :is([class^="_tableWrapper_"], [class*=" _tableWrapper_"])
+                        > table:is([class^="_table_"], [class*=" _table_"]),
+                      [data-markdown-table="true"][data-wide-block]
+                        > :is([class^="_TableScroller_"], [class*=" _TableScroller_"])
+                        > :is([class^="_TableWrapper_"], [class*=" _TableWrapper_"])
+                        > table:is([class^="_Table_"], [class*=" _Table_"])
+                    )
                   ) {
                     --codex-wallpaper-wide-table-glass-width: min(
                       calc(
@@ -559,12 +583,22 @@ public static class InjectionScriptBuilder
                     [data-response-annotation-conversation][data-response-annotation-target],
                     [data-content-search-unit-key]
                       > h4[class~="sr-only"][class~="select-none"]
-                      + div[class~="group"][class~="flex"][class~="min-w-0"][class~="flex-col"]:not([data-response-annotation-target]):has(> [data-selected-text-overlay-target])
+                      + div[class~="group"][class~="flex"][class~="min-w-0"][class~="flex-col"]:not([data-response-annotation-target]):has(> [data-selected-text-overlay-target]),
+                    [data-content-search-unit-key]
+                      > div[class~="group"][class~="flex"][class~="min-w-0"][class~="flex-col"]:not([data-response-annotation-target]):has(
+                        > [data-selected-text-overlay-target][data-markdown-text-style="assistant-message"]
+                      )
                   ):has(
-                    :is([class^="_tableContainer_"], [class*=" _tableContainer_"]):is([class^="_tableWideBlock_"], [class*=" _tableWideBlock_"])
-                      > :is([class^="_tableScroller_"], [class*=" _tableScroller_"])
-                      > :is([class^="_tableWrapper_"], [class*=" _tableWrapper_"])
-                      > table:is([class^="_table_"], [class*=" _table_"])
+                    :is(
+                      :is([class^="_tableContainer_"], [class*=" _tableContainer_"]):is([class^="_tableWideBlock_"], [class*=" _tableWideBlock_"])
+                        > :is([class^="_tableScroller_"], [class*=" _tableScroller_"])
+                        > :is([class^="_tableWrapper_"], [class*=" _tableWrapper_"])
+                        > table:is([class^="_table_"], [class*=" _table_"]),
+                      [data-markdown-table="true"][data-wide-block]
+                        > :is([class^="_TableScroller_"], [class*=" _TableScroller_"])
+                        > :is([class^="_TableWrapper_"], [class*=" _TableWrapper_"])
+                        > table:is([class^="_Table_"], [class*=" _Table_"])
+                    )
                   )::before {
                     content: "";
                     position: absolute;
@@ -590,12 +624,22 @@ public static class InjectionScriptBuilder
                     [data-response-annotation-conversation][data-response-annotation-target],
                     [data-content-search-unit-key]
                       > h4[class~="sr-only"][class~="select-none"]
-                      + div[class~="group"][class~="flex"][class~="min-w-0"][class~="flex-col"]:not([data-response-annotation-target]):has(> [data-selected-text-overlay-target])
+                      + div[class~="group"][class~="flex"][class~="min-w-0"][class~="flex-col"]:not([data-response-annotation-target]):has(> [data-selected-text-overlay-target]),
+                    [data-content-search-unit-key]
+                      > div[class~="group"][class~="flex"][class~="min-w-0"][class~="flex-col"]:not([data-response-annotation-target]):has(
+                        > [data-selected-text-overlay-target][data-markdown-text-style="assistant-message"]
+                      )
                   ):has(
-                    :is([class^="_tableContainer_"], [class*=" _tableContainer_"]):is([class^="_tableWideBlock_"], [class*=" _tableWideBlock_"])
-                      > :is([class^="_tableScroller_"], [class*=" _tableScroller_"])
-                      > :is([class^="_tableWrapper_"], [class*=" _tableWrapper_"])
-                      > table:is([class^="_table_"], [class*=" _table_"])
+                    :is(
+                      :is([class^="_tableContainer_"], [class*=" _tableContainer_"]):is([class^="_tableWideBlock_"], [class*=" _tableWideBlock_"])
+                        > :is([class^="_tableScroller_"], [class*=" _tableScroller_"])
+                        > :is([class^="_tableWrapper_"], [class*=" _tableWrapper_"])
+                        > table:is([class^="_table_"], [class*=" _table_"]),
+                      [data-markdown-table="true"][data-wide-block]
+                        > :is([class^="_TableScroller_"], [class*=" _TableScroller_"])
+                        > :is([class^="_TableWrapper_"], [class*=" _TableWrapper_"])
+                        > table:is([class^="_Table_"], [class*=" _Table_"])
+                    )
                   ):dir(rtl)::before {
                     left: auto;
                     right: calc(

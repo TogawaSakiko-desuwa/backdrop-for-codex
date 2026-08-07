@@ -4,6 +4,16 @@
 
 ## [Unreleased]
 
+## [1.4.5] - 2026-08-07
+
+### Fixed
+
+- 适配 Codex `26.803` 的助手消息与 Markdown 表格 DOM 更新：普通助手玻璃改用 `data-markdown-text-style="assistant-message"` 语义锚点，宽表格改用 `data-markdown-table="true"` 与 `[data-wide-block]`，恢复新版页面中的消息玻璃和自适应宽表玻璃，同时保留 26.727 旧结构兼容。
+
+### Verification
+
+- Release 非集成测试 540 项全部通过；真实 Edge/CDP 回归覆盖新版普通助手消息、窄表与宽表，并确认 LTR/RTL 下玻璃边界、横向滚动和页面无溢出。
+
 ## [1.4.4] - 2026-08-04
 
 ### Fixed
