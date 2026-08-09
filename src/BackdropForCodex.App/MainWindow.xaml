@@ -1,13 +1,14 @@
 <ui:FluentWindow x:Class="BackdropForCodex.App.MainWindow"
                  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                 xmlns:converters="clr-namespace:BackdropForCodex.App.Converters"
                  xmlns:localization="clr-namespace:BackdropForCodex.App.Services.Localization"
                  xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 xmlns:viewModels="clr-namespace:BackdropForCodex.App.ViewModels"
                  xmlns:views="clr-namespace:BackdropForCodex.App.Views"
                  Title="{localization:Loc App_Title, Fallback='Backdrop for Codex'}"
-                 Width="1040"
-                 Height="700"
+                 Tag="precision-optical-proofing-bench:f91f3aae"
+                 Width="1440"
+                 Height="860"
                  MinWidth="640"
                  MinHeight="520"
                  WindowStartupLocation="CenterScreen"
@@ -15,11 +16,14 @@
                  WindowCornerPreference="Round"
                  ExtendsContentIntoTitleBar="True"
                  AllowDrop="True"
+                 UseLayoutRounding="True"
+                 SnapsToDevicePixels="True"
                  Closing="Window_Closing"
                  DragEnter="Window_DragEnter"
                  DragOver="Window_DragOver"
                  DragLeave="Window_DragLeave"
                  Drop="Window_Drop"
+                 PreviewKeyDown="Window_PreviewKeyDown"
                  SizeChanged="Window_SizeChanged">
   <!--
     THESIS: A precision optical proofing bench turns source, proof, calibration, and safe commit
@@ -36,14 +40,11 @@
   -->
   <ui:FluentWindow.Resources>
     <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
-    <converters:MediaThumbnailConverter x:Key="MediaThumbnailConverter" />
-    <converters:UiStatusToneToInfoBarSeverityConverter x:Key="StatusToneConverter" />
   </ui:FluentWindow.Resources>
 
-  <Grid>
+  <Grid TextElement.FontFamily="{DynamicResource WorkbenchTextFontFamily}">
     <Grid.RowDefinitions>
       <RowDefinition Height="48" />
-      <RowDefinition Height="Auto" />
       <RowDefinition Height="*" />
       <RowDefinition Height="Auto" />
     </Grid.RowDefinitions>
@@ -54,10 +55,10 @@
         <ui:ImageIcon Source="{StaticResource AppIconImage}" />
       </ui:TitleBar.Icon>
       <ui:TitleBar.TrailingContent>
-        <ui:Button Margin="0,0,138,0"
-                   Width="38"
+        <ui:Button Width="38"
                    Height="34"
-                   Appearance="Transparent"
+                   Margin="0,0,8,0"
+                   Style="{DynamicResource WorkbenchIconButtonStyle}"
                    ToolTip="{localization:Loc Action_Settings, Fallback=Settings}"
                    AutomationProperties.Name="{localization:Loc Action_Settings, Fallback=Settings}"
                    IsEnabled="{Binding CanOpenSettings}"
@@ -67,264 +68,440 @@
       </ui:TitleBar.TrailingContent>
     </ui:TitleBar>
 
-    <!-- Profile selection stays outside the responsive editor grid so it remains available in
-         both split and stacked layouts. -->
-    <views:WallpaperProfileStripView x:Name="ProfileStrip"
-                                       Grid.Row="1"
-                                       Margin="24,10,24,0"
-                                       ItemsSource="{Binding ProfileCards}"
-                                       SelectedItem="{Binding SelectedProfileCard, Mode=TwoWay}"
-                                       CreateProfileCommand="{Binding CreateProfileCommand}"
-                                       DuplicateProfileCommand="{Binding DuplicateProfileCommand}"
-                                       RenameProfileCommand="{Binding RenameProfileCommand}"
-                                       DeleteProfileCommand="{Binding DeleteProfileCommand}"
-                                       CanEditProfiles="{Binding CanEditDraft}" />
-
-    <!-- Code-behind reconfigures these named rows and columns when the window crosses the compact
-         layout threshold; the panes themselves retain the same bindings and event ownership. -->
-    <Grid x:Name="MainContentGrid" Grid.Row="2" Margin="24,12,24,14">
+    <Grid x:Name="WorkbenchSurface" Grid.Row="1" ClipToBounds="True">
       <Grid.RowDefinitions>
-        <RowDefinition x:Name="MainTopRow" Height="*" />
-        <RowDefinition x:Name="MainGapRow" Height="0" />
-        <RowDefinition x:Name="MainBottomRow" Height="0" />
+        <RowDefinition x:Name="MobileToolbarRow" Height="0" />
+        <RowDefinition Height="*" />
       </Grid.RowDefinitions>
       <Grid.ColumnDefinitions>
-        <ColumnDefinition x:Name="PreviewColumn" Width="3*" />
-        <ColumnDefinition x:Name="ColumnGap" Width="20" />
-        <ColumnDefinition x:Name="InspectorColumn" Width="2*" MinWidth="330" />
+        <ColumnDefinition x:Name="LibraryColumn" Width="224" />
+        <ColumnDefinition x:Name="PreviewColumn" Width="*" />
+        <ColumnDefinition x:Name="InspectorColumn" Width="360" />
       </Grid.ColumnDefinitions>
 
-      <Grid x:Name="PreviewPane" Grid.Row="0" Grid.Column="0">
-        <Grid.RowDefinitions>
-          <RowDefinition Height="*" />
-          <RowDefinition Height="14" />
-          <RowDefinition Height="Auto" />
-        </Grid.RowDefinitions>
-
-        <views:WallpaperPreviewView x:Name="PreviewView"
-                                    Grid.Row="0"
-                                    HorizontalAlignment="Stretch"
-                                    VerticalAlignment="Stretch"
-                                    DataContext="{Binding Editor}"
-                                    MediaReference="{Binding SelectedMediaReference}"
-                                    Fit="{Binding Fit}"
-                                    FocusX="{Binding FocusX}"
-                                    FocusY="{Binding FocusY}"
-                                    CanAdjustFocus="{Binding CanAdjustFocus}"
-                                    IsPlaybackPaused="{Binding DataContext.IsPaused, RelativeSource={RelativeSource AncestorType={x:Type ui:FluentWindow}}}"
-                                    DarkOverlay="{Binding DarkOverlay}"
-                                    LightOverlay="{Binding LightOverlay}"
-                                    FocusChangeRequested="PreviewView_FocusChangeRequested" />
-
-        <ui:Card x:Name="RecentMediaCard" Grid.Row="2">
-          <Grid Margin="14,12">
-            <Grid.RowDefinitions>
-              <RowDefinition Height="Auto" />
-              <RowDefinition Height="Auto" />
-            </Grid.RowDefinitions>
-            <Grid>
-              <TextBlock Style="{StaticResource SectionHeadingStyle}"
-                         Text="{localization:Loc Section_RecentMedia, Fallback='Recent media'}" />
-              <ui:Button HorizontalAlignment="Right"
-                         Appearance="Transparent"
-                         Padding="8,3"
-                         FontSize="12"
-                         Content="{localization:Loc Action_ClearRecent, Fallback='Clear recent'}"
-                         Command="{Binding ClearRecentsCommand}" />
-            </Grid>
-            <Grid Grid.Row="1" Margin="0,10,0,0">
-              <TextBlock Text="{localization:Loc Hint_NoRecentMedia, Fallback='Your recently used media will appear here.'}">
-                <TextBlock.Style>
-                  <Style TargetType="TextBlock" BasedOn="{StaticResource CaptionTextStyle}">
-                    <Setter Property="Visibility" Value="Collapsed" />
-                    <Style.Triggers>
-                      <DataTrigger Binding="{Binding Recents.Count}" Value="0">
-                        <Setter Property="Visibility" Value="Visible" />
-                      </DataTrigger>
-                    </Style.Triggers>
-                  </Style>
-                </TextBlock.Style>
-              </TextBlock>
-              <ListBox x:Name="RecentMediaList"
-                       ItemsSource="{Binding Recents}"
-                       IsEnabled="{Binding CanEdit}"
-                       AutomationProperties.Name="{localization:Loc Section_RecentMedia, Fallback='Recent media'}"
+      <Grid x:Name="MobileToolbar"
+            Grid.Row="0"
+            Grid.Column="0"
+            Grid.ColumnSpan="3"
+            Height="48"
+            Visibility="Collapsed"
+            Background="{DynamicResource LayerFillColorDefaultBrush}">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="Auto" />
+          <ColumnDefinition Width="*" />
+          <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+        <ui:Button x:Name="LibraryDrawerButton"
+                   Width="40"
+                   Height="40"
+                   Margin="8,4"
+                   Style="{DynamicResource WorkbenchIconButtonStyle}"
+                   ToolTip="{localization:Loc Action_ShowSources, Fallback='Show sources'}"
+                   AutomationProperties.Name="{localization:Loc Action_ShowSources, Fallback='Show sources'}"
+                   Click="LibraryDrawer_Click">
+          <ui:SymbolIcon Symbol="Library24" />
+        </ui:Button>
+        <Border Grid.Column="1"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Padding="2"
+                CornerRadius="{DynamicResource WorkbenchRadius8}"
+                Background="{DynamicResource ControlFillColorSecondaryBrush}">
+          <StackPanel Orientation="Horizontal">
+            <ui:Button x:Name="PreviewModeButton"
+                       MinWidth="92"
+                       MinHeight="32"
+                       Padding="14,5"
+                       Appearance="Transparent"
+                       Background="{DynamicResource ControlFillColorSecondaryBrush}"
+                       BorderThickness="0"
+                       CornerRadius="{DynamicResource WorkbenchRadius6}"
+                       Click="ShowPreviewMode_Click">
+              <Grid>
+                <TextBlock Text="{localization:Loc Section_Preview, Fallback=Preview}" />
+                <Border x:Name="PreviewModeIndicator"
+                        Height="2"
+                        Margin="0,0,0,-5"
+                        VerticalAlignment="Bottom"
+                        Background="{DynamicResource AccentFillColorDefaultBrush}"
+                        CornerRadius="1" />
+              </Grid>
+            </ui:Button>
+            <ui:Button x:Name="AdjustModeButton"
+                       MinWidth="92"
+                       MinHeight="32"
+                       Margin="2,0,0,0"
+                       Padding="14,5"
+                       Appearance="Transparent"
                        Background="Transparent"
                        BorderThickness="0"
-                       ScrollViewer.HorizontalScrollBarVisibility="Auto"
-                       ScrollViewer.VerticalScrollBarVisibility="Disabled"
-                       SelectionChanged="RecentMediaList_SelectionChanged">
-                <ListBox.ItemsPanel>
-                  <ItemsPanelTemplate>
-                    <StackPanel Orientation="Horizontal" />
-                  </ItemsPanelTemplate>
-                </ListBox.ItemsPanel>
-                <ListBox.ItemTemplate>
-                  <DataTemplate>
-                    <Grid Width="154" Margin="0,0,8,0">
-                      <Border Height="58"
-                              Padding="10"
-                              CornerRadius="8"
-                              Background="{DynamicResource ControlFillColorDefaultBrush}">
-                        <Grid>
-                          <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="30" />
-                            <ColumnDefinition Width="*" />
-                          </Grid.ColumnDefinitions>
-                          <Border Width="28" Height="28" CornerRadius="7"
-                                  Background="{DynamicResource AccentFillColorSecondaryBrush}"
-                                  ClipToBounds="True">
-                            <Grid>
-                              <Image x:Name="RecentThumbnail"
-                                     Source="{Binding Path, Converter={StaticResource MediaThumbnailConverter}}"
-                                     Stretch="UniformToFill" />
-                              <ui:SymbolIcon Symbol="Image24"
-                                             HorizontalAlignment="Center"
-                                             VerticalAlignment="Center">
-                                <ui:SymbolIcon.Style>
-                                  <Style TargetType="ui:SymbolIcon">
-                                    <Setter Property="Visibility" Value="Collapsed" />
-                                    <Style.Triggers>
-                                      <DataTrigger Binding="{Binding ElementName=RecentThumbnail, Path=Source}"
-                                                   Value="{x:Null}">
-                                        <Setter Property="Visibility" Value="Visible" />
-                                      </DataTrigger>
-                                    </Style.Triggers>
-                                  </Style>
-                                </ui:SymbolIcon.Style>
-                              </ui:SymbolIcon>
-                            </Grid>
-                          </Border>
-                          <StackPanel Grid.Column="1" Margin="8,0,0,0"
-                                      VerticalAlignment="Center">
-                            <TextBlock Text="{Binding DisplayName}"
-                                       TextTrimming="CharacterEllipsis"
-                                       FontWeight="SemiBold" />
-                            <TextBlock FontSize="11"
-                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}">
-                              <TextBlock.Style>
-                                <Style TargetType="TextBlock">
-                                  <Setter Property="Text" Value="{localization:Loc Media_Image, Fallback=Image}" />
-                                  <Style.Triggers>
-                                    <DataTrigger Binding="{Binding Kind}" Value="Video">
-                                      <Setter Property="Text" Value="{localization:Loc Media_Video, Fallback=Video}" />
-                                    </DataTrigger>
-                                    <DataTrigger Binding="{Binding Exists}" Value="False">
-                                      <Setter Property="Text" Value="{localization:Loc Hint_MissingMediaCompact, Fallback=Missing}" />
-                                    </DataTrigger>
-                                  </Style.Triggers>
-                                </Style>
-                              </TextBlock.Style>
-                            </TextBlock>
-                          </StackPanel>
-                        </Grid>
-                      </Border>
-                      <ui:Button Width="26"
-                                 Height="26"
-                                 Padding="0"
-                                 Margin="0,-8,-5,0"
-                                 HorizontalAlignment="Right"
-                                 VerticalAlignment="Top"
-                                 Appearance="Secondary"
-                                 ToolTip="{localization:Loc Action_Remove, Fallback=Remove}"
-                                 AutomationProperties.Name="{localization:Loc Action_Remove, Fallback=Remove}"
-                                 Tag="{Binding Path}"
-                                 Click="RemoveRecent_Click">
-                        <ui:SymbolIcon Symbol="Dismiss16" FontSize="12" />
-                      </ui:Button>
-                    </Grid>
-                  </DataTemplate>
-                </ListBox.ItemTemplate>
-              </ListBox>
-            </Grid>
-          </Grid>
-        </ui:Card>
+                       CornerRadius="{DynamicResource WorkbenchRadius6}"
+                       Click="ShowAdjustMode_Click">
+              <Grid>
+                <TextBlock Text="{localization:Loc Action_Adjust, Fallback=Adjust}" />
+                <Border x:Name="AdjustModeIndicator"
+                        Height="2"
+                        Margin="0,0,0,-5"
+                        VerticalAlignment="Bottom"
+                        Background="{DynamicResource AccentFillColorDefaultBrush}"
+                        CornerRadius="1"
+                        Visibility="Collapsed" />
+              </Grid>
+            </ui:Button>
+          </StackPanel>
+        </Border>
       </Grid>
 
-      <views:WallpaperInspectorView x:Name="InspectorPane"
-                                    Grid.Row="0"
-                                    Grid.Column="2"
-                                    DataContext="{Binding Editor}"
-                                    ChooseMediaRequested="ChooseMedia_Click"
-                                    ClearMediaRequested="ClearMedia_Click"
-                                    CenterFocusRequested="CenterFocus_Click"
-                                    ReviewRiskRequested="ReviewRisk_Click" />
-    </Grid>
+      <Border x:Name="LibraryScrim"
+              Grid.Row="0"
+              Grid.RowSpan="2"
+              Grid.Column="0"
+              Grid.ColumnSpan="3"
+              Panel.ZIndex="10"
+              Visibility="Collapsed"
+              Background="{DynamicResource SmokeFillColorDefaultBrush}"
+              MouseLeftButtonDown="LibraryScrim_MouseLeftButtonDown" />
 
-    <Border Grid.Row="3"
-            Padding="24,12,24,16"
-            Background="{DynamicResource ApplicationBackgroundBrush}"
-            BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
-            BorderThickness="0,1,0,0">
-      <Grid>
+      <views:WallpaperLibraryView x:Name="LibraryPane"
+                                  Grid.Row="1"
+                                  Grid.Column="0"
+                                  Panel.ZIndex="20"
+                                  ProfileItemsSource="{Binding ProfileCards}"
+                                  SelectedProfile="{Binding SelectedProfileCard, Mode=TwoWay}"
+                                  SourceItemsSource="{Binding SourceLibrary.Sources}"
+                                  HasSourceDiscoveryFailures="{Binding SourceLibrary.HasDiscoveryFailures}"
+                                  RefreshSourcesCommand="{Binding SourceLibrary.RefreshCommand}"
+                                  RecentItemsSource="{Binding Recents}"
+                                  CreateProfileCommand="{Binding CreateProfileCommand}"
+                                  DuplicateProfileCommand="{Binding DuplicateProfileCommand}"
+                                  RenameProfileCommand="{Binding RenameProfileCommand}"
+                                  DeleteProfileCommand="{Binding DeleteProfileCommand}"
+                                  ClearRecentsCommand="{Binding ClearRecentsCommand}"
+                                  RemoveRecentCommand="{Binding RemoveRecentCommand}"
+                                  CanEditProfiles="{Binding CanEditDraft}"
+                                  CanChooseMedia="{Binding CanEdit}"
+                                  SelectedProfileChanged="Library_SelectedProfileChanged"
+                                  SourceInvoked="Library_SourceInvoked"
+                                  SelectedRecentMediaChanged="Library_SelectedRecentMediaChanged"
+                                  ChooseLocalMediaRequested="Library_ChooseLocalMediaRequested"
+                                  ContextMenuOpening="LibraryPane_ContextMenuOpening">
+      <views:WallpaperLibraryView.ContextMenu>
+        <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+          <MenuItem Header="{localization:Loc Action_Remove, Fallback=Remove}"
+                    AutomationProperties.AutomationId="RemoveSelectedRecentMenuItem"
+                    Command="{Binding PlacementTarget.RemoveRecentCommand, RelativeSource={RelativeSource AncestorType={x:Type ContextMenu}}}" />
+          <MenuItem Header="{localization:Loc Action_ClearRecent, Fallback='Clear recent'}"
+                    AutomationProperties.AutomationId="ClearRecentsMenuItem"
+                    Command="{Binding PlacementTarget.ClearRecentsCommand, RelativeSource={RelativeSource AncestorType={x:Type ContextMenu}}}" />
+        </ContextMenu>
+      </views:WallpaperLibraryView.ContextMenu>
+      </views:WallpaperLibraryView>
+
+      <Grid x:Name="PreviewPane"
+            Grid.Row="1"
+            Grid.Column="1"
+            Style="{DynamicResource WorkbenchStageStyle}">
         <Grid.RowDefinitions>
-          <RowDefinition Height="Auto" />
-          <RowDefinition Height="Auto" />
+          <RowDefinition Height="52" />
+          <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <ui:InfoBar Grid.Row="0"
-                    Margin="0,0,0,10"
-                    AutomationProperties.LiveSetting="Polite"
-                    IsOpen="{Binding IsStatusOpen, Mode=TwoWay}"
-                    IsClosable="True"
-                    Title="{Binding StatusTitle}"
-                    Message="{Binding StatusMessage}"
-                    Severity="{Binding StatusTone, Converter={StaticResource StatusToneConverter}}" />
+        <Border x:Name="PreviewStageHeader"
+                Style="{DynamicResource WorkbenchStageHeaderStyle}">
+          <Grid Margin="20,0">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="3" />
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <Border Width="3"
+                    Height="20"
+                    CornerRadius="2"
+                    Background="{DynamicResource AccentFillColorDefaultBrush}" />
+            <TextBlock Grid.Column="1"
+                       Margin="10,0,0,0"
+                       Text="{localization:Loc Section_Preview, Fallback=Preview}"
+                       Style="{DynamicResource WorkbenchStageHeaderTextStyle}"
+                       VerticalAlignment="Center"
+                       AutomationProperties.HeadingLevel="Level2" />
+            <ui:SymbolIcon Grid.Column="2"
+                           Symbol="Info24"
+                           FontSize="16"
+                           Foreground="{DynamicResource WorkbenchStageMutedTextBrush}"
+                           VerticalAlignment="Center"
+                           ToolTip="{localization:Loc Focus_AutomationHelp, Fallback='Drag to set the crop focus. Arrow keys move one percent; hold Shift to move ten percent.'}"
+                           AutomationProperties.Name="{localization:Loc Label_Focus, Fallback='Crop focus'}"
+                           AutomationProperties.HelpText="{localization:Loc Focus_AutomationHelp, Fallback='Drag to set the crop focus. Arrow keys move one percent; hold Shift to move ten percent.'}" />
+          </Grid>
+        </Border>
 
-        <Grid Grid.Row="1">
-          <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="*" />
-            <ColumnDefinition Width="Auto" />
-          </Grid.ColumnDefinitions>
+        <Grid Grid.Row="1" Margin="20,16,20,20">
+          <Border x:Name="CalibrationFrame"
+                  Padding="8"
+                  Style="{DynamicResource WorkbenchCalibrationSurfaceStyle}">
+            <views:WallpaperPreviewView x:Name="PreviewView"
+                                        HorizontalAlignment="Stretch"
+                                        VerticalAlignment="Stretch"
+                                        DataContext="{Binding Editor}"
+                                        MediaReference="{Binding SelectedMediaReference}"
+                                        Fit="{Binding Fit}"
+                                        FocusX="{Binding FocusX}"
+                                        FocusY="{Binding FocusY}"
+                                        CanAdjustFocus="{Binding CanAdjustFocus}"
+                                        IsPlaybackPaused="{Binding DataContext.IsPaused, RelativeSource={RelativeSource AncestorType={x:Type ui:FluentWindow}}}"
+                                        DarkOverlay="{Binding DarkOverlay}"
+                                        LightOverlay="{Binding LightOverlay}"
+                                        FocusChangeRequested="PreviewView_FocusChangeRequested" />
+          </Border>
 
-          <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+          <Grid Width="16" Height="16" Margin="9" HorizontalAlignment="Left" VerticalAlignment="Top" Opacity="0.72" IsHitTestVisible="False">
+            <Border Height="1" VerticalAlignment="Top" Background="{DynamicResource AccentFillColorDefaultBrush}" />
+            <Border Width="1" HorizontalAlignment="Left" Background="{DynamicResource AccentFillColorDefaultBrush}" />
+          </Grid>
+          <Grid Width="16" Height="16" Margin="9" HorizontalAlignment="Right" VerticalAlignment="Top" Opacity="0.72" IsHitTestVisible="False">
+            <Border Height="1" VerticalAlignment="Top" Background="{DynamicResource AccentFillColorDefaultBrush}" />
+            <Border Width="1" HorizontalAlignment="Right" Background="{DynamicResource AccentFillColorDefaultBrush}" />
+          </Grid>
+          <Grid Width="16" Height="16" Margin="9" HorizontalAlignment="Left" VerticalAlignment="Bottom" Opacity="0.72" IsHitTestVisible="False">
+            <Border Height="1" VerticalAlignment="Bottom" Background="{DynamicResource AccentFillColorDefaultBrush}" />
+            <Border Width="1" HorizontalAlignment="Left" Background="{DynamicResource AccentFillColorDefaultBrush}" />
+          </Grid>
+          <Grid Width="16" Height="16" Margin="9" HorizontalAlignment="Right" VerticalAlignment="Bottom" Opacity="0.72" IsHitTestVisible="False">
+            <Border Height="1" VerticalAlignment="Bottom" Background="{DynamicResource AccentFillColorDefaultBrush}" />
+            <Border Width="1" HorizontalAlignment="Right" Background="{DynamicResource AccentFillColorDefaultBrush}" />
+          </Grid>
+        </Grid>
+      </Grid>
+
+      <Border x:Name="InspectorHost"
+              Grid.Row="1"
+              Grid.Column="2"
+              Style="{DynamicResource WorkbenchInspectorBorderStyle}">
+        <views:WallpaperInspectorView x:Name="InspectorPane"
+                                      DataContext="{Binding Editor}"
+                                      ChooseMediaRequested="ChooseMedia_Click"
+                                      ClearMediaRequested="ClearMedia_Click"
+                                      CenterFocusRequested="CenterFocus_Click"
+                                      ReviewRiskRequested="ReviewRisk_Click" />
+      </Border>
+    </Grid>
+
+    <Border x:Name="FooterCommandBar"
+            Grid.Row="2"
+            Style="{DynamicResource WorkbenchCommandBarStyle}">
+      <Grid x:Name="FooterLayout">
+        <Grid.RowDefinitions>
+          <RowDefinition Height="Auto" />
+          <RowDefinition x:Name="FooterSecondaryRow" Height="0" />
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*" MinWidth="0" />
+          <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+
+        <StatusBar x:Name="StatusLiveRegion"
+                   Grid.Row="0"
+                   Grid.Column="0"
+                   Padding="0"
+                   Background="Transparent"
+                   BorderThickness="0"
+                   AutomationProperties.LiveSetting="Polite">
+          <StatusBar.Style>
+            <Style TargetType="StatusBar">
+              <Setter Property="AutomationProperties.Name" Value="{Binding FooterStatusText}" />
+              <Style.Triggers>
+                <DataTrigger Binding="{Binding IsStatusOpen}" Value="True">
+                  <Setter Property="AutomationProperties.Name" Value="{Binding StatusTitle}" />
+                  <Setter Property="AutomationProperties.HelpText" Value="{Binding StatusMessage}" />
+                </DataTrigger>
+              </Style.Triggers>
+            </Style>
+          </StatusBar.Style>
+          <StatusBarItem Padding="0"
+                         HorizontalContentAlignment="Stretch">
+        <Grid x:Name="FooterStatusHost"
+              Margin="0,0,16,0"
+              VerticalAlignment="Center">
+          <StackPanel x:Name="PassiveWorkspaceStatus"
+                      Orientation="Horizontal"
+                      VerticalAlignment="Center">
+            <StackPanel.Style>
+              <Style TargetType="StackPanel">
+                <Setter Property="Visibility" Value="Visible" />
+                <Style.Triggers>
+                  <DataTrigger Binding="{Binding IsStatusOpen}" Value="True">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                  </DataTrigger>
+                </Style.Triggers>
+              </Style>
+            </StackPanel.Style>
             <ui:ProgressRing Width="22"
                              Height="22"
-                             Margin="0,0,9,0"
+                             Margin="0,0,8,0"
                              IsIndeterminate="True"
                              Visibility="{Binding IsBusy, Converter={StaticResource BooleanToVisibilityConverter}}" />
+            <Ellipse Width="7"
+                     Height="7"
+                     Margin="0,0,8,0"
+                     Fill="{DynamicResource AccentFillColorDefaultBrush}">
+              <Ellipse.Style>
+                <Style TargetType="Ellipse">
+                  <Setter Property="Visibility" Value="Visible" />
+                  <Style.Triggers>
+                    <DataTrigger Binding="{Binding IsBusy}" Value="True">
+                      <Setter Property="Visibility" Value="Collapsed" />
+                    </DataTrigger>
+                  </Style.Triggers>
+                </Style>
+              </Ellipse.Style>
+            </Ellipse>
             <TextBlock VerticalAlignment="Center"
                        Text="{Binding FooterStatusText}"
-                       AutomationProperties.LiveSetting="Polite"
-                       Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
-            <ui:Button Margin="10,0,0,0"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                       TextTrimming="CharacterEllipsis" />
+            <ui:Button MinHeight="32"
+                       Margin="10,0,0,0"
                        Appearance="Transparent"
                        Content="{localization:Loc Action_Cancel, Fallback=Cancel}"
                        Command="{Binding CancelCommand}"
                        Visibility="{Binding IsBusy, Converter={StaticResource BooleanToVisibilityConverter}}" />
-            <ui:Button Margin="10,0,0,0"
+            <ui:Button MinHeight="32"
+                       Margin="10,0,0,0"
                        Appearance="Transparent"
                        Content="{localization:Loc Action_Retry, Fallback=Retry}"
                        Command="{Binding RetryShortcutCommand}"
                        Visibility="{Binding ShortcutNeedsRetry, Converter={StaticResource BooleanToVisibilityConverter}}" />
           </StackPanel>
 
-          <WrapPanel Grid.Column="1" HorizontalAlignment="Right">
-            <ui:Button Margin="0,0,8,0"
+          <Border x:Name="ActiveStatusSurface"
+                  Padding="10,6"
+                  Background="{DynamicResource ControlFillColorSecondaryBrush}"
+                  BorderThickness="0"
+                  CornerRadius="{DynamicResource WorkbenchRadius6}"
+                  ToolTip="{Binding StatusMessage}"
+                  Visibility="{Binding IsStatusOpen, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <Grid>
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="Auto" />
+              <ColumnDefinition Width="Auto" />
+              <ColumnDefinition Width="*" MinWidth="0" />
+              <ColumnDefinition Width="Auto" />
+              <ColumnDefinition Width="Auto" />
+              <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+              <ui:SymbolIcon Symbol="Info24"
+                             FontSize="17"
+                             Margin="0,0,8,0"
+                             VerticalAlignment="Center"
+                             IsHitTestVisible="False">
+                <ui:SymbolIcon.Style>
+                  <Style TargetType="ui:SymbolIcon">
+                    <Setter Property="Foreground" Value="{DynamicResource AccentFillColorDefaultBrush}" />
+                    <Style.Triggers>
+                      <DataTrigger Binding="{Binding StatusTone}" Value="{x:Static viewModels:UiStatusTone.Success}">
+                        <Setter Property="Foreground" Value="{DynamicResource SystemFillColorSuccessBrush}" />
+                      </DataTrigger>
+                      <DataTrigger Binding="{Binding StatusTone}" Value="{x:Static viewModels:UiStatusTone.Warning}">
+                        <Setter Property="Foreground" Value="{DynamicResource SystemFillColorCautionBrush}" />
+                      </DataTrigger>
+                      <DataTrigger Binding="{Binding StatusTone}" Value="{x:Static viewModels:UiStatusTone.Error}">
+                        <Setter Property="Foreground" Value="{DynamicResource SystemFillColorCriticalBrush}" />
+                      </DataTrigger>
+                    </Style.Triggers>
+                  </Style>
+                </ui:SymbolIcon.Style>
+              </ui:SymbolIcon>
+              <TextBlock Grid.Column="1"
+                         MaxWidth="220"
+                         VerticalAlignment="Center"
+                         FontWeight="SemiBold"
+                         Text="{Binding StatusTitle}"
+                         TextTrimming="CharacterEllipsis" />
+              <TextBlock x:Name="StatusMessageText"
+                         Grid.Column="2"
+                         Margin="8,0"
+                         VerticalAlignment="Center"
+                         Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                         Text="{Binding StatusMessage}"
+                         TextTrimming="CharacterEllipsis"
+                         TextWrapping="NoWrap" />
+              <ui:Button Grid.Column="3"
+                         Style="{DynamicResource WorkbenchSecondaryButtonStyle}"
+                         MinHeight="32"
+                         Padding="10,5"
+                         Content="{localization:Loc Action_Retry, Fallback=Retry}"
+                         Visibility="{Binding CanRetryStatusApply, Converter={StaticResource BooleanToVisibilityConverter}}"
+                         Click="RetryStatusApply_Click" />
+              <ui:Button Grid.Column="4"
+                         Style="{DynamicResource WorkbenchQuietButtonStyle}"
+                         MinHeight="32"
+                         Margin="4,0,0,0"
+                         Padding="10,5"
+                         Content="{localization:Loc Action_ViewDetails, Fallback='View details'}"
+                         Visibility="{Binding HasStatusDetails, Converter={StaticResource BooleanToVisibilityConverter}}"
+                         Click="ViewStatusDetails_Click" />
+              <ui:Button x:Name="DismissStatusButton"
+                         Grid.Column="5"
+                         Width="32"
+                         Height="32"
+                         Margin="4,0,0,0"
+                         Style="{DynamicResource WorkbenchIconButtonStyle}"
+                         ToolTip="{localization:Loc Action_Close, Fallback=Close}"
+                         AutomationProperties.Name="{localization:Loc Action_Close, Fallback=Close}"
+                         Click="DismissStatus_Click">
+                <ui:SymbolIcon Symbol="Dismiss16" IsHitTestVisible="False" />
+              </ui:Button>
+            </Grid>
+          </Border>
+        </Grid>
+          </StatusBarItem>
+        </StatusBar>
+
+        <StackPanel x:Name="FooterActions"
+                    Grid.Row="0"
+                    Grid.Column="1"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Center"
+                    Orientation="Horizontal">
+            <ui:Button x:Name="PauseActionButton"
+                       Style="{DynamicResource WorkbenchQuietButtonStyle}"
+                       Appearance="Transparent"
+                       Background="Transparent"
+                       BorderBrush="Transparent"
+                       BorderThickness="0"
+                       Margin="0,0,4,0"
                        Content="{Binding PauseButtonText}"
                        Command="{Binding TogglePauseCommand}" />
-            <ui:Button Margin="0,0,8,0"
+            <ui:Button x:Name="RestoreActionButton"
+                       Style="{DynamicResource WorkbenchSecondaryButtonStyle}"
+                       Appearance="Secondary"
+                       Margin="0,0,8,0"
                        Content="{localization:Loc Action_RestoreOfficial, Fallback='Restore official'}"
                        Command="{Binding DisableCommand}" />
-            <ui:Button MinWidth="154"
+            <ui:Button x:Name="ApplyActionButton"
+                       MinWidth="184"
+                       MinHeight="44"
+                       Style="{DynamicResource WorkbenchPrimaryActionButtonStyle}"
                        Appearance="Primary"
+                       BorderThickness="0"
+                       CornerRadius="{DynamicResource WorkbenchRadius6}"
+                       FontWeight="SemiBold"
                        Content="{Binding ApplyButtonText}"
                        IsEnabled="{Binding CanSubmitApply}"
                        Click="Apply_Click" />
-          </WrapPanel>
-        </Grid>
+        </StackPanel>
       </Grid>
     </Border>
 
     <ui:SnackbarPresenter x:Name="SnackbarPresenter"
-                          Grid.Row="2"
+                          Grid.Row="1"
                           Grid.RowSpan="2"
                           HorizontalAlignment="Right"
                           VerticalAlignment="Bottom"
                           Margin="24,24,24,88" />
     <ui:ContentDialogHost x:Name="DialogHost"
                           Grid.Row="0"
-                          Grid.RowSpan="4"
+                          Grid.RowSpan="3"
                           IsDisableSiblingsEnabled="True" />
   </Grid>
 </ui:FluentWindow>

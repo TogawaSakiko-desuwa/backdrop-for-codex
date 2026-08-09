@@ -18,18 +18,28 @@
   <Thickness x:Key="WorkbenchInset32">32</Thickness>
 
   <CornerRadius x:Key="WorkbenchRadius8">8</CornerRadius>
+  <CornerRadius x:Key="WorkbenchRadius6">6</CornerRadius>
   <CornerRadius x:Key="WorkbenchRadius12">12</CornerRadius>
   <CornerRadius x:Key="WorkbenchRadius16">16</CornerRadius>
 
-  <sys:Double x:Key="WorkbenchTypeDisplay">24</sys:Double>
+  <sys:Double x:Key="WorkbenchTypeDisplay">20</sys:Double>
   <sys:Double x:Key="WorkbenchTypeSection">16</sys:Double>
   <sys:Double x:Key="WorkbenchTypeBody">14</sys:Double>
   <sys:Double x:Key="WorkbenchTypeCaption">12</sys:Double>
   <sys:Double x:Key="WorkbenchTargetMinimum">32</sys:Double>
-  <sys:Double x:Key="WorkbenchPrimaryTargetMinimum">36</sys:Double>
+  <sys:Double x:Key="WorkbenchPrimaryTargetMinimum">44</sys:Double>
 
   <FontFamily x:Key="WorkbenchDisplayFontFamily">Segoe UI Variable Display, Segoe UI</FontFamily>
   <FontFamily x:Key="WorkbenchTextFontFamily">Segoe UI Variable Text, Segoe UI</FontFamily>
+
+  <!-- The proof stage stays optically neutral in either app theme. Controls around it remain theme-aware. -->
+  <SolidColorBrush x:Key="WorkbenchStageBackgroundBrush" Color="#0B0D10" />
+  <SolidColorBrush x:Key="WorkbenchStageHeaderBrush" Color="#11161B" />
+  <SolidColorBrush x:Key="WorkbenchStageMatBrush" Color="#151B22" />
+  <SolidColorBrush x:Key="WorkbenchStageHairlineBrush" Color="#35404A" />
+  <SolidColorBrush x:Key="WorkbenchStageTextBrush" Color="#F5F7F9" />
+  <SolidColorBrush x:Key="WorkbenchStageMutedTextBrush" Color="#AAB4BE" />
+  <SolidColorBrush x:Key="WorkbenchTransparentBrush" Color="Transparent" />
 
   <!-- System and WPF UI dynamic resources own light, dark, accent, and high-contrast colors. -->
   <Style x:Key="WorkbenchFocusVisualStyle" TargetType="Control">
@@ -37,10 +47,17 @@
       <Setter.Value>
         <ControlTemplate>
           <Border Margin="-3"
-                  BorderBrush="{DynamicResource {x:Static SystemColors.HighlightBrushKey}}"
+                  BorderBrush="{DynamicResource FocusStrokeColorOuterBrush}"
                   BorderThickness="2"
                   CornerRadius="{DynamicResource WorkbenchRadius8}"
-                  SnapsToDevicePixels="True" />
+                  SnapsToDevicePixels="True">
+            <Border Margin="1"
+                    BorderBrush="{DynamicResource FocusStrokeColorInnerBrush}"
+                    BorderThickness="1"
+                    CornerRadius="{DynamicResource WorkbenchRadius6}">
+              <AdornedElementPlaceholder />
+            </Border>
+          </Border>
         </ControlTemplate>
       </Setter.Value>
     </Setter>
@@ -71,11 +88,60 @@
   </Style>
 
   <Style x:Key="WorkbenchCalibrationSurfaceStyle" TargetType="Border">
-    <Setter Property="Background" Value="{DynamicResource SolidBackgroundFillColorBaseBrush}" />
-    <Setter Property="BorderBrush" Value="{DynamicResource ControlStrokeColorDefaultBrush}" />
+    <Setter Property="Background" Value="{DynamicResource WorkbenchStageMatBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource WorkbenchStageHairlineBrush}" />
     <Setter Property="BorderThickness" Value="1" />
-    <Setter Property="CornerRadius" Value="{DynamicResource WorkbenchRadius12}" />
+    <Setter Property="CornerRadius" Value="{DynamicResource WorkbenchRadius8}" />
     <Setter Property="SnapsToDevicePixels" Value="True" />
+    <Style.Triggers>
+      <DataTrigger Binding="{Binding IsWorkbenchHighContrast, RelativeSource={RelativeSource AncestorType={x:Type Window}}}" Value="True">
+        <Setter Property="Background" Value="{DynamicResource {x:Static SystemColors.WindowBrushKey}}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource {x:Static SystemColors.WindowTextBrushKey}}" />
+      </DataTrigger>
+    </Style.Triggers>
+  </Style>
+
+  <Style x:Key="WorkbenchStageStyle" TargetType="Grid">
+    <Setter Property="Background" Value="{DynamicResource WorkbenchStageBackgroundBrush}" />
+    <Style.Triggers>
+      <DataTrigger Binding="{Binding IsWorkbenchHighContrast, RelativeSource={RelativeSource AncestorType={x:Type Window}}}" Value="True">
+        <Setter Property="Background" Value="{DynamicResource {x:Static SystemColors.WindowBrushKey}}" />
+      </DataTrigger>
+    </Style.Triggers>
+  </Style>
+
+  <Style x:Key="WorkbenchStageHeaderStyle" TargetType="Border">
+    <Setter Property="Background" Value="{DynamicResource WorkbenchStageHeaderBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource WorkbenchStageHairlineBrush}" />
+    <Setter Property="BorderThickness" Value="0,0,0,1" />
+    <Setter Property="SnapsToDevicePixels" Value="True" />
+    <Style.Triggers>
+      <DataTrigger Binding="{Binding IsWorkbenchHighContrast, RelativeSource={RelativeSource AncestorType={x:Type Window}}}" Value="True">
+        <Setter Property="Background" Value="{DynamicResource {x:Static SystemColors.WindowBrushKey}}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource {x:Static SystemColors.WindowTextBrushKey}}" />
+      </DataTrigger>
+    </Style.Triggers>
+  </Style>
+
+  <Style x:Key="WorkbenchStageHeaderTextStyle" TargetType="TextBlock">
+    <Setter Property="FontSize" Value="{DynamicResource WorkbenchTypeSection}" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Foreground" Value="{DynamicResource WorkbenchStageTextBrush}" />
+    <Style.Triggers>
+      <DataTrigger Binding="{Binding IsWorkbenchHighContrast, RelativeSource={RelativeSource AncestorType={x:Type Window}}}" Value="True">
+        <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.WindowTextBrushKey}}" />
+      </DataTrigger>
+    </Style.Triggers>
+  </Style>
+
+  <Style x:Key="WorkbenchStageCaptionTextStyle" TargetType="TextBlock">
+    <Setter Property="FontSize" Value="{DynamicResource WorkbenchTypeCaption}" />
+    <Setter Property="Foreground" Value="{DynamicResource WorkbenchStageMutedTextBrush}" />
+    <Style.Triggers>
+      <DataTrigger Binding="{Binding IsWorkbenchHighContrast, RelativeSource={RelativeSource AncestorType={x:Type Window}}}" Value="True">
+        <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.WindowTextBrushKey}}" />
+      </DataTrigger>
+    </Style.Triggers>
   </Style>
 
   <Style x:Key="WorkbenchDividerStyle" TargetType="Border">
@@ -116,6 +182,34 @@
     <Setter Property="MinHeight" Value="{DynamicResource WorkbenchTargetMinimum}" />
     <Setter Property="Padding" Value="4" />
     <Setter Property="Appearance" Value="Transparent" />
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="CornerRadius" Value="{DynamicResource WorkbenchRadius6}" />
+    <Setter Property="MouseOverBackground" Value="{DynamicResource ControlFillColorSecondaryBrush}" />
+    <Setter Property="MouseOverBorderBrush" Value="Transparent" />
+    <Setter Property="PressedBackground" Value="{DynamicResource ControlFillColorTertiaryBrush}" />
+    <Setter Property="PressedBorderBrush" Value="Transparent" />
+    <Setter Property="FocusVisualStyle" Value="{DynamicResource WorkbenchFocusVisualStyle}" />
+  </Style>
+
+  <Style x:Key="WorkbenchQuietButtonStyle" TargetType="ui:Button"
+         BasedOn="{StaticResource WorkbenchIconButtonStyle}">
+    <Setter Property="Padding" Value="10,6" />
+    <Setter Property="FontWeight" Value="Normal" />
+  </Style>
+
+  <Style x:Key="WorkbenchSecondaryButtonStyle" TargetType="ui:Button">
+    <Setter Property="MinHeight" Value="36" />
+    <Setter Property="Padding" Value="12,7" />
+    <Setter Property="Appearance" Value="Transparent" />
+    <Setter Property="Background" Value="{DynamicResource ControlFillColorSecondaryBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource DividerStrokeColorDefaultBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="{DynamicResource WorkbenchRadius6}" />
+    <Setter Property="MouseOverBackground" Value="{DynamicResource ControlFillColorTertiaryBrush}" />
+    <Setter Property="MouseOverBorderBrush" Value="{DynamicResource ControlStrokeColorDefaultBrush}" />
+    <Setter Property="PressedBackground" Value="{DynamicResource SubtleFillColorTertiaryBrush}" />
     <Setter Property="FocusVisualStyle" Value="{DynamicResource WorkbenchFocusVisualStyle}" />
   </Style>
 
@@ -124,7 +218,14 @@
     <Setter Property="MinHeight" Value="{DynamicResource WorkbenchTargetMinimum}" />
     <Setter Property="Padding" Value="10,6" />
     <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-    <Setter Property="Appearance" Value="Secondary" />
+    <Setter Property="Appearance" Value="Transparent" />
+    <Setter Property="Background" Value="{DynamicResource ControlFillColorSecondaryBrush}" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="CornerRadius" Value="{DynamicResource WorkbenchRadius8}" />
+    <Setter Property="MouseOverBackground" Value="{DynamicResource ControlFillColorTertiaryBrush}" />
+    <Setter Property="MouseOverBorderBrush" Value="Transparent" />
+    <Setter Property="PressedBackground" Value="{DynamicResource SubtleFillColorTertiaryBrush}" />
     <Setter Property="FocusVisualStyle" Value="{DynamicResource WorkbenchFocusVisualStyle}" />
   </Style>
 
@@ -132,7 +233,64 @@
     <Setter Property="MinHeight" Value="{DynamicResource WorkbenchPrimaryTargetMinimum}" />
     <Setter Property="Padding" Value="16,8" />
     <Setter Property="Appearance" Value="Primary" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="CornerRadius" Value="{DynamicResource WorkbenchRadius6}" />
+    <Setter Property="FontWeight" Value="SemiBold" />
     <Setter Property="FocusVisualStyle" Value="{DynamicResource WorkbenchFocusVisualStyle}" />
+  </Style>
+
+  <Style x:Key="WorkbenchCommandBarStyle" TargetType="Border">
+    <Setter Property="Padding" Value="16,10" />
+    <Setter Property="Background" Value="{DynamicResource LayerFillColorDefaultBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource DividerStrokeColorDefaultBrush}" />
+    <Setter Property="BorderThickness" Value="0,1,0,0" />
+    <Setter Property="SnapsToDevicePixels" Value="True" />
+  </Style>
+
+  <Style x:Key="WorkbenchMediaCardStyle" TargetType="Border">
+    <Setter Property="Padding" Value="12" />
+    <Setter Property="Background" Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="{DynamicResource WorkbenchRadius8}" />
+    <Setter Property="SnapsToDevicePixels" Value="True" />
+  </Style>
+
+  <Style x:Key="WorkbenchInspectorLabelStyle" TargetType="TextBlock">
+    <Setter Property="FontSize" Value="13" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+  </Style>
+
+  <Style x:Key="WorkbenchInspectorMetricIconStyle" TargetType="ui:SymbolIcon">
+    <Setter Property="Width" Value="20" />
+    <Setter Property="Height" Value="20" />
+    <Setter Property="Margin" Value="0,0,8,0" />
+    <Setter Property="FontSize" Value="17" />
+    <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+    <Setter Property="IsHitTestVisible" Value="False" />
+  </Style>
+
+  <Style x:Key="WorkbenchValueChipStyle" TargetType="Border">
+    <Setter Property="MinWidth" Value="56" />
+    <Setter Property="MinHeight" Value="28" />
+    <Setter Property="Padding" Value="8,4" />
+    <Setter Property="Background" Value="{DynamicResource ControlFillColorSecondaryBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource ControlStrokeColorDefaultBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="{DynamicResource WorkbenchRadius6}" />
+    <Setter Property="HorizontalAlignment" Value="Right" />
+  </Style>
+
+  <Style x:Key="WorkbenchValueTextStyle" TargetType="TextBlock">
+    <Setter Property="FontSize" Value="{DynamicResource WorkbenchTypeCaption}" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Foreground" Value="{DynamicResource AccentTextFillColorPrimaryBrush}" />
+    <Setter Property="HorizontalAlignment" Value="Center" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+    <Setter Property="TextAlignment" Value="Center" />
   </Style>
 
   <Style x:Key="WorkbenchListBoxStyle" TargetType="ListBox">

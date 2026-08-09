@@ -3,8 +3,8 @@ using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using System.Windows.Threading;
 using BackdropForCodex.App.ViewModels;
+using BackdropForCodex.Core.Media;
 
 namespace BackdropForCodex.App.Views;
 
@@ -30,6 +30,29 @@ public partial class WallpaperLibraryView : UserControl
                 null,
                 FrameworkPropertyMetadataOptions.BindsTwoWayByDefault,
                 OnSelectedProfileChanged));
+
+    public static readonly DependencyProperty SourceItemsSourceProperty =
+        DependencyProperty.Register(
+            nameof(SourceItemsSource),
+            typeof(IEnumerable),
+            typeof(WallpaperLibraryView),
+            new PropertyMetadata(null));
+
+    public static readonly DependencyProperty SelectedSourceProperty =
+        DependencyProperty.Register(
+            nameof(SelectedSource),
+            typeof(WallpaperSourceDescriptor),
+            typeof(WallpaperLibraryView),
+            new FrameworkPropertyMetadata(
+                null,
+                FrameworkPropertyMetadataOptions.BindsTwoWayByDefault));
+
+    public static readonly DependencyProperty HasSourceDiscoveryFailuresProperty =
+        DependencyProperty.Register(
+            nameof(HasSourceDiscoveryFailures),
+            typeof(bool),
+            typeof(WallpaperLibraryView),
+            new PropertyMetadata(false));
 
     public static readonly DependencyProperty RecentItemsSourceProperty =
         DependencyProperty.Register(
@@ -62,6 +85,9 @@ public partial class WallpaperLibraryView : UserControl
 
     public static readonly DependencyProperty ChooseLocalMediaCommandProperty =
         RegisterCommand(nameof(ChooseLocalMediaCommand));
+
+    public static readonly DependencyProperty RefreshSourcesCommandProperty =
+        RegisterCommand(nameof(RefreshSourcesCommand));
 
     public static readonly DependencyProperty OpenRecentMediaCommandProperty =
         RegisterCommand(nameof(OpenRecentMediaCommand));
@@ -114,6 +140,13 @@ public partial class WallpaperLibraryView : UserControl
             typeof(RoutedEventHandler),
             typeof(WallpaperLibraryView));
 
+    public static readonly RoutedEvent SourceInvokedEvent =
+        EventManager.RegisterRoutedEvent(
+            nameof(SourceInvoked),
+            RoutingStrategy.Bubble,
+            typeof(RoutedEventHandler),
+            typeof(WallpaperLibraryView));
+
     public static readonly RoutedEvent ChooseLocalMediaRequestedEvent =
         EventManager.RegisterRoutedEvent(
             nameof(ChooseLocalMediaRequested),
@@ -145,6 +178,12 @@ public partial class WallpaperLibraryView : UserControl
         remove => RemoveHandler(RecentMediaInvokedEvent, value);
     }
 
+    public event RoutedEventHandler SourceInvoked
+    {
+        add => AddHandler(SourceInvokedEvent, value);
+        remove => RemoveHandler(SourceInvokedEvent, value);
+    }
+
     public event RoutedEventHandler ChooseLocalMediaRequested
     {
         add => AddHandler(ChooseLocalMediaRequestedEvent, value);
@@ -161,6 +200,24 @@ public partial class WallpaperLibraryView : UserControl
     {
         get => (WallpaperProfileCardItem?)GetValue(SelectedProfileProperty);
         set => SetValue(SelectedProfileProperty, value);
+    }
+
+    public IEnumerable? SourceItemsSource
+    {
+        get => (IEnumerable?)GetValue(SourceItemsSourceProperty);
+        set => SetValue(SourceItemsSourceProperty, value);
+    }
+
+    public WallpaperSourceDescriptor? SelectedSource
+    {
+        get => (WallpaperSourceDescriptor?)GetValue(SelectedSourceProperty);
+        set => SetValue(SelectedSourceProperty, value);
+    }
+
+    public bool HasSourceDiscoveryFailures
+    {
+        get => (bool)GetValue(HasSourceDiscoveryFailuresProperty);
+        set => SetValue(HasSourceDiscoveryFailuresProperty, value);
     }
 
     public IEnumerable? RecentItemsSource
@@ -205,6 +262,12 @@ public partial class WallpaperLibraryView : UserControl
         set => SetValue(ChooseLocalMediaCommandProperty, value);
     }
 
+    public ICommand? RefreshSourcesCommand
+    {
+        get => GetCommand(RefreshSourcesCommandProperty);
+        set => SetValue(RefreshSourcesCommandProperty, value);
+    }
+
     public ICommand? OpenRecentMediaCommand
     {
         get => GetCommand(OpenRecentMediaCommandProperty);
@@ -241,23 +304,8 @@ public partial class WallpaperLibraryView : UserControl
         set => SetValue(IsCompactProperty, value);
     }
 
-    public void FocusSelectedProfile()
-    {
-        _ = Dispatcher.BeginInvoke(
-            DispatcherPriority.Input,
-            () =>
-            {
-                if (SelectedProfile is not null &&
-                    ProfileList.ItemContainerGenerator.ContainerFromItem(SelectedProfile)
-                        is ListBoxItem container)
-                {
-                    _ = container.Focus();
-                    return;
-                }
-
-                _ = ProfileList.Focus();
-            });
-    }
+    public void FocusSelectedProfile() =>
+        ProfilesSection.FocusSelectedProfile();
 
     private static DependencyProperty RegisterCommand(string propertyName) =>
         DependencyProperty.Register(
@@ -310,81 +358,14 @@ public partial class WallpaperLibraryView : UserControl
         }
 
         SetCurrentValue(WidthProperty, IsCompact ? CompactWidth : ExpandedWidth);
-        var expandedVisibility = IsCompact ? Visibility.Collapsed : Visibility.Visible;
-        var compactVisibility = IsCompact ? Visibility.Visible : Visibility.Collapsed;
-        ExpandedProfilesHeader.Visibility = expandedVisibility;
-        ExpandedCreateProfileButton.Visibility = expandedVisibility;
-        ExpandedChooseMediaButton.Visibility = expandedVisibility;
-        ExpandedRecentHeader.Visibility = expandedVisibility;
-        CompactProfilesHeader.Visibility = compactVisibility;
-        CompactCreateProfileButton.Visibility = compactVisibility;
-        CompactChooseMediaButton.Visibility = compactVisibility;
-        CompactRecentHeader.Visibility = compactVisibility;
+        ExpandedChooseMediaButton.Visibility =
+            IsCompact ? Visibility.Collapsed : Visibility.Visible;
+        CompactChooseMediaButton.Visibility =
+            IsCompact ? Visibility.Visible : Visibility.Collapsed;
         _ = VisualStateManager.GoToElementState(
             RailLayout,
             IsCompact ? "Compact" : "Expanded",
             useTransitions);
-    }
-
-    private void ProfileList_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        _ = sender;
-        if (e.AddedItems.Count > 0)
-        {
-            ProfileList.ScrollIntoView(e.AddedItems[0]);
-        }
-    }
-
-    private void RecentList_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        _ = sender;
-        if (e.AddedItems.Count > 0)
-        {
-            RecentList.ScrollIntoView(e.AddedItems[0]);
-        }
-    }
-
-    private void ProfileItem_ContextMenuOpening(
-        object sender,
-        ContextMenuEventArgs e)
-    {
-        _ = e;
-        if (sender is ListBoxItem item)
-        {
-            item.IsSelected = true;
-        }
-    }
-
-    private void ProfileActions_Click(object sender, RoutedEventArgs e)
-    {
-        if (sender is not Button { ContextMenu: { } menu } button)
-        {
-            return;
-        }
-
-        if (ItemsControl.ContainerFromElement(ProfileList, button) is ListBoxItem item)
-        {
-            item.IsSelected = true;
-        }
-
-        menu.PlacementTarget = button;
-        menu.IsOpen = true;
-        e.Handled = true;
-    }
-
-    private void RecentList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
-    {
-        _ = sender;
-        if (e.OriginalSource is not DependencyObject source ||
-            ItemsControl.ContainerFromElement(RecentList, source) is not ListBoxItem item ||
-            item.DataContext is not RecentMediaItem recent)
-        {
-            return;
-        }
-
-        SetCurrentValue(SelectedRecentMediaProperty, recent);
-        InvokeSelectedRecentMedia();
-        e.Handled = true;
     }
 
     private void ChooseLocalMedia_Click(object sender, RoutedEventArgs e)
@@ -400,32 +381,21 @@ public partial class WallpaperLibraryView : UserControl
         e.Handled = true;
     }
 
-    private void RecentList_PreviewKeyDown(object sender, KeyEventArgs e)
+    private void SourcesSection_SourceInvoked(object? sender, EventArgs e)
     {
         _ = sender;
-        if (e.Key != Key.Enter)
-        {
-            return;
-        }
-
-        InvokeSelectedRecentMedia();
-        e.Handled = true;
+        _ = e;
+        SetCurrentValue(SelectedSourceProperty, SourcesSection.SelectedSource);
+        RaiseEvent(new RoutedEventArgs(SourceInvokedEvent, this));
     }
 
-    private void InvokeSelectedRecentMedia()
+    private void RecentsSection_RecentMediaInvoked(object? sender, EventArgs e)
     {
-        if (SelectedRecentMedia is not { } recent)
-        {
-            return;
-        }
-
-        var command = OpenRecentMediaCommand;
-        if (command is not null && !command.CanExecute(recent))
-        {
-            return;
-        }
-
-        command?.Execute(recent);
+        _ = sender;
+        _ = e;
+        SetCurrentValue(
+            SelectedRecentMediaProperty,
+            RecentsSection.SelectedRecentMedia);
         RaiseEvent(new RoutedEventArgs(RecentMediaInvokedEvent, this));
     }
 }

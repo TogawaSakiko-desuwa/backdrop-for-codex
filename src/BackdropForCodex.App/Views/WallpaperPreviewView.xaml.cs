@@ -23,6 +23,7 @@ public sealed partial class WallpaperPreviewView : UserControl
 {
     internal const double PreviewDesignWidth = 960;
     internal const double PreviewDesignHeight = 540;
+    internal const double IdleFocusIndicatorOpacity = 0.58;
 
     public static readonly DependencyProperty MediaReferenceProperty =
         DependencyProperty.Register(
@@ -252,7 +253,10 @@ public sealed partial class WallpaperPreviewView : UserControl
         {
             preview.EndFocusDrag();
             preview.HideFocusIndicator();
+            return;
         }
+
+        preview.ShowIdleFocusIndicator();
     }
 
     private static void PlaybackPropertyChanged(
@@ -391,6 +395,7 @@ public sealed partial class WallpaperPreviewView : UserControl
             _previewMediaHeight = bitmap.PixelHeight;
             _previewMediaReady = true;
             ApplyPreviewLayout();
+            ShowIdleFocusIndicator();
             UpdatePreviewThemeOverlay();
         }
         catch (Exception exception) when (IsUnavailablePreviewException(exception))
@@ -497,6 +502,7 @@ public sealed partial class WallpaperPreviewView : UserControl
         if (_previewMediaReady)
         {
             ApplyPreviewLayout();
+            ShowIdleFocusIndicator();
         }
 
         if (_reducedMotion)
@@ -827,7 +833,7 @@ public sealed partial class WallpaperPreviewView : UserControl
 
     private void ShowFocusIndicator(bool scheduleFade)
     {
-        if (!CanAdjustFocus)
+        if (!HasAdjustablePreview())
         {
             HideFocusIndicator();
             return;
@@ -843,6 +849,20 @@ public sealed partial class WallpaperPreviewView : UserControl
         }
     }
 
+    private void ShowIdleFocusIndicator()
+    {
+        if (!HasAdjustablePreview())
+        {
+            HideFocusIndicator();
+            return;
+        }
+
+        _focusFadeTimer.Stop();
+        FocusIndicator.BeginAnimation(OpacityProperty, null);
+        FocusIndicator.Opacity = IdleFocusIndicatorOpacity;
+        UpdateFocusIndicatorPosition();
+    }
+
     private void HideFocusIndicator()
     {
         _focusFadeTimer.Stop();
@@ -855,9 +875,15 @@ public sealed partial class WallpaperPreviewView : UserControl
         _ = sender;
         _ = e;
         _focusFadeTimer.Stop();
-        if (!SystemParameters.ClientAreaAnimation)
+        if (!HasAdjustablePreview())
         {
             HideFocusIndicator();
+            return;
+        }
+
+        if (!SystemParameters.ClientAreaAnimation)
+        {
+            ShowIdleFocusIndicator();
             return;
         }
 
@@ -865,7 +891,7 @@ public sealed partial class WallpaperPreviewView : UserControl
             OpacityProperty,
             new DoubleAnimation(
                 fromValue: FocusIndicator.Opacity,
-                toValue: 0,
+                toValue: IdleFocusIndicatorOpacity,
                 duration: TimeSpan.FromMilliseconds(260))
             {
                 EasingFunction = new QuadraticEase
@@ -874,6 +900,11 @@ public sealed partial class WallpaperPreviewView : UserControl
                 },
             });
     }
+
+    private bool HasAdjustablePreview() =>
+        CanAdjustFocus &&
+        _previewMediaReady &&
+        _previewKind is MediaKind.Image or MediaKind.Video;
 
     private void UpdateFocusIndicatorPosition()
     {

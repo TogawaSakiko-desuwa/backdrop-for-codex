@@ -1,0 +1,8 @@
+{
+  "useCase": "ui-mockup",
+  "direction": "precision optical proofing bench",
+  "composition": "daylight preflight",
+  "sourceReference": "user-provided://current-workbench-screenshot",
+  "prompt": "Light Windows 11 WPF workbench with a 224px source rail, large proof stage, 360px aligned inspector, compact before/after control, and slim preflight bar. Cool paper-gray shell, graphite separators, system-blue accent, restrained corners, no warm cream or card grid; exclude the external yellow close overlay.",
+  "approved": false
+}

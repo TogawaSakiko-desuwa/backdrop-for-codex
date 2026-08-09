@@ -49,6 +49,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private WallpaperRuntimePhase _runtimePhase = WallpaperRuntimePhase.Idle;
     private WallpaperProfileCardItem? _selectedProfileCard;
     private bool _isSynchronizingProfileSelection;
+    private bool _sourceDiscoveryStatusActive;
     private long _latestApplySequence;
 
     public MainWindowViewModel(
@@ -69,6 +70,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             AppWallpaperSources.Registry;
         _profileProjection = new WallpaperProfileCardProjection(_text, mediaPreview);
         Editor = new WallpaperEditorViewModel(_text, mediaPreview);
+        SourceLibrary = new WallpaperSourceLibraryViewModel(_sourceRegistry);
+        SourceLibrary.PropertyChanged += SourceLibrary_PropertyChanged;
         Settings = new SettingsManagementViewModel(
             wallpaper,
             preferencesStore,
@@ -95,6 +98,12 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             new AsyncRelayCommand(
                 ClearRecentsAsync,
                 () => CanEdit && Recents.Count > 0);
+        RemoveRecentCommand =
+            new AsyncRelayCommand<RecentMediaItem>(
+                item => item is null
+                    ? Task.CompletedTask
+                    : RemoveRecentAsync(item.MediaId),
+                item => CanEdit && item is not null);
         CreateProfileCommand =
             new RelayCommand(CreateProfile, () => CanEditDraft);
         DuplicateProfileCommand =
@@ -115,6 +124,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     public WallpaperEditorViewModel Editor { get; }
 
+    public WallpaperSourceLibraryViewModel SourceLibrary { get; }
+
     public SettingsManagementViewModel Settings { get; }
 
     public IAsyncRelayCommand TogglePauseCommand { get; }
@@ -126,6 +137,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     public IAsyncRelayCommand RetryShortcutCommand { get; }
 
     public IAsyncRelayCommand ClearRecentsCommand { get; }
+
+    public IAsyncRelayCommand<RecentMediaItem> RemoveRecentCommand { get; }
 
     public IRelayCommand CreateProfileCommand { get; }
 
@@ -195,6 +208,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     public bool CanSubmitApply =>
         !HasProtectedSettings &&
+        !Editor.IsPreviewUnavailable &&
         OperationProgress.Stage is not
             WallpaperOperationStage.Resetting and not
             WallpaperOperationStage.Restoring;
@@ -290,7 +304,16 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     public bool IsStatusOpen
     {
         get => _isStatusOpen;
-        set => SetProperty(ref _isStatusOpen, value);
+        set
+        {
+            if (!SetProperty(ref _isStatusOpen, value) || value)
+            {
+                return;
+            }
+
+            CanRetryStatusApply = false;
+            HasStatusDetails = false;
+        }
     }
 
     public bool CanRetryStatusApply
@@ -518,6 +541,16 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         if (!CanEdit)
         {
             return;
+        }
+
+        if (descriptor.DeliveryKind == WallpaperDeliveryKind.WallpaperEngineWindow)
+        {
+            throw new WallpaperRendererUnavailableException(descriptor);
+        }
+
+        if (descriptor.DeliveryKind != WallpaperDeliveryKind.DirectMedia)
+        {
+            throw new WallpaperContentNotSupportedException(descriptor);
         }
 
         Editor.SelectSource(descriptor);
@@ -982,6 +1015,9 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
         Settings.ApplySavedSettingsToEditor(SavedDesired);
         RefreshProfileCards();
+        await SourceLibrary
+            .RefreshAsync(CancellationToken.None)
+            .ConfigureAwait(true);
         Settings.SetRuntimeActivity(_wallpaper.IsActive);
         IsPaused = _wallpaper.IsPaused;
         if (!preferenceWarning && !IsStatusOpen)
@@ -1304,6 +1340,11 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
         void Update()
         {
+            if (_isDisposed)
+            {
+                return;
+            }
+
             // A newer Apply can be submitted after the producer-side check but
             // before this callback reaches the UI dispatcher.
             if (eventArgs.Revision is { } dispatchedRevision &&
@@ -1388,6 +1429,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             OnPropertyChanged(nameof(ApplyButtonText));
             OnPropertyChanged(nameof(WorkspaceStatusText));
             OnPropertyChanged(nameof(FooterStatusText));
+            OnPropertyChanged(nameof(CanSubmitApply));
             OnPropertyChanged(nameof(CanClearSelectedMedia));
             NotifyCommandStateChanged();
         }
@@ -1412,8 +1454,83 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     private void Recents_CollectionChanged(
         object? sender,
-        NotifyCollectionChangedEventArgs eventArgs) =>
+        NotifyCollectionChangedEventArgs eventArgs)
+    {
+        _ = sender;
+        _ = eventArgs;
         ClearRecentsCommand.NotifyCanExecuteChanged();
+        RemoveRecentCommand.NotifyCanExecuteChanged();
+    }
+
+    private void SourceLibrary_PropertyChanged(
+        object? sender,
+        PropertyChangedEventArgs eventArgs)
+    {
+        _ = sender;
+        if (eventArgs.PropertyName !=
+            nameof(WallpaperSourceLibraryViewModel.HasDiscoveryFailures))
+        {
+            return;
+        }
+
+        void Update()
+        {
+            var failureTitle = _text.GetStringOrFallback(
+                "Status_SourceDiscoveryFailedTitle",
+                "Some sources are unavailable");
+            var failureMessage = _text.GetStringOrFallback(
+                "Status_SourceDiscoveryFailedMessage",
+                "Available sources can still be used. Retry the unavailable providers from Sources.");
+            if (SourceLibrary.HasDiscoveryFailures)
+            {
+                var canReplaceCurrentStatus =
+                    !IsBusy &&
+                    (!IsStatusOpen ||
+                     StatusTone is UiStatusTone.Informational or UiStatusTone.Success ||
+                     IsCurrentSourceDiscoveryStatus(failureTitle, failureMessage));
+                _sourceDiscoveryStatusActive = true;
+                if (canReplaceCurrentStatus)
+                {
+                    ShowStatus(
+                        failureTitle,
+                        failureMessage,
+                        UiStatusTone.Warning);
+                }
+
+                return;
+            }
+
+            if (!_sourceDiscoveryStatusActive)
+            {
+                return;
+            }
+
+            _sourceDiscoveryStatusActive = false;
+            if (IsCurrentSourceDiscoveryStatus(failureTitle, failureMessage))
+            {
+                ShowStatus(
+                    _text.GetStringOrFallback("Status_ReadyTitle", "Ready"),
+                    _text.GetStringOrFallback(
+                        "Status_ReadyMessage",
+                        "Choose local media, tune the glass panel, then apply when ready."),
+                    UiStatusTone.Informational);
+            }
+        }
+
+        if (_uiContext is null || ReferenceEquals(SynchronizationContext.Current, _uiContext))
+        {
+            Update();
+        }
+        else
+        {
+            _uiContext.Post(_ => Update(), null);
+        }
+    }
+
+    private bool IsCurrentSourceDiscoveryStatus(string title, string message) =>
+        IsStatusOpen &&
+        string.Equals(StatusTitle, title, StringComparison.Ordinal) &&
+        string.Equals(StatusMessage, message, StringComparison.Ordinal);
 
     private void RefreshProfileCards(Guid? selectedProfileId = null)
     {
@@ -1448,6 +1565,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         CancellationToken cancellationToken,
         WallpaperOperationStage operationStage = WallpaperOperationStage.Validating)
     {
+        IsStatusOpen = false;
         _operationCancellation?.Dispose();
         _operationCancellation =
             CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -1523,6 +1641,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         CancelCommand.NotifyCanExecuteChanged();
         RetryShortcutCommand.NotifyCanExecuteChanged();
         ClearRecentsCommand.NotifyCanExecuteChanged();
+        RemoveRecentCommand.NotifyCanExecuteChanged();
         CreateProfileCommand.NotifyCanExecuteChanged();
         DuplicateProfileCommand.NotifyCanExecuteChanged();
         RenameProfileCommand.NotifyCanExecuteChanged();
@@ -1655,6 +1774,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         }
         Settings.PropertyChanged -= Settings_PropertyChanged;
         Settings.Recents.CollectionChanged -= Recents_CollectionChanged;
+        SourceLibrary.PropertyChanged -= SourceLibrary_PropertyChanged;
+        SourceLibrary.Dispose();
         Settings.Dispose();
         _operationCancellation?.Cancel();
         _operationCancellation?.Dispose();

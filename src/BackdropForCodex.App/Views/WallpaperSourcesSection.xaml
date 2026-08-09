@@ -1,0 +1,387 @@
+<UserControl x:Class="BackdropForCodex.App.Views.WallpaperSourcesSection"
+             x:ClassModifier="internal"
+             x:Name="Root"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:localization="clr-namespace:BackdropForCodex.App.Services.Localization"
+             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+             Focusable="False"
+             Style="{DynamicResource WorkbenchRootStyle}">
+  <UserControl.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="/BackdropForCodex;component/Themes/WorkbenchTheme.xaml" />
+      </ResourceDictionary.MergedDictionaries>
+
+      <Style x:Key="SourceListItemStyle" TargetType="ListBoxItem">
+        <Setter Property="MinHeight" Value="48" />
+        <Setter Property="Margin" Value="4,2" />
+        <Setter Property="Padding" Value="8" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="FocusVisualStyle" Value="{DynamicResource WorkbenchFocusVisualStyle}" />
+        <Setter Property="AutomationProperties.Name" Value="{Binding DisplayName}" />
+        <Setter Property="AutomationProperties.HelpText" Value="{Binding DeliveryKind}" />
+        <Setter Property="AutomationProperties.ItemStatus" Value="{Binding ContentKind}" />
+        <Setter Property="Template">
+          <Setter.Value>
+            <ControlTemplate TargetType="ListBoxItem">
+              <Border x:Name="ItemSurface"
+                      Padding="{TemplateBinding Padding}"
+                      Background="{TemplateBinding Background}"
+                      BorderBrush="{TemplateBinding BorderBrush}"
+                      BorderThickness="{TemplateBinding BorderThickness}"
+                      CornerRadius="{DynamicResource WorkbenchRadius8}"
+                      SnapsToDevicePixels="True">
+                <Grid>
+                  <Border x:Name="SelectionRail"
+                          Width="3"
+                          Margin="0,6,0,6"
+                          HorizontalAlignment="Left"
+                          Background="{DynamicResource AccentFillColorDefaultBrush}"
+                          CornerRadius="2"
+                          Visibility="Collapsed" />
+                  <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                    VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                </Grid>
+              </Border>
+              <ControlTemplate.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                  <Setter TargetName="ItemSurface"
+                          Property="Background"
+                          Value="{DynamicResource ControlFillColorSecondaryBrush}" />
+                </Trigger>
+                <Trigger Property="IsSelected" Value="True">
+                  <Setter TargetName="ItemSurface"
+                          Property="Background"
+                          Value="{DynamicResource ControlFillColorSecondaryBrush}" />
+                  <Setter TargetName="SelectionRail" Property="Visibility" Value="Visible" />
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                  <Setter TargetName="ItemSurface" Property="Opacity" Value="0.55" />
+                </Trigger>
+              </ControlTemplate.Triggers>
+            </ControlTemplate>
+          </Setter.Value>
+        </Setter>
+        <Style.Triggers>
+          <DataTrigger Binding="{Binding IsCompact, ElementName=Root}" Value="True">
+            <Setter Property="Padding" Value="4" />
+          </DataTrigger>
+          <DataTrigger Binding="{Binding DeliveryKind}" Value="WallpaperEngineWindow">
+            <Setter Property="IsEnabled" Value="False" />
+            <Setter Property="AutomationProperties.HelpText"
+                    Value="{localization:Loc Source_RendererUnavailable, Fallback='Renderer not connected'}" />
+            <Setter Property="AutomationProperties.ItemStatus"
+                    Value="{localization:Loc Source_RendererUnavailable, Fallback='Renderer not connected'}" />
+          </DataTrigger>
+        </Style.Triggers>
+      </Style>
+
+      <Style x:Key="SourceContentKindTextStyle"
+             TargetType="TextBlock"
+             BasedOn="{StaticResource WorkbenchCaptionTextStyle}">
+        <Setter Property="Text"
+                Value="{localization:Loc Media_Source, Fallback='Wallpaper source'}" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        <Setter Property="TextWrapping" Value="NoWrap" />
+        <Style.Triggers>
+          <DataTrigger Binding="{Binding ContentKind}" Value="Image">
+            <Setter Property="Text" Value="{localization:Loc Media_Image, Fallback=Image}" />
+          </DataTrigger>
+          <DataTrigger Binding="{Binding ContentKind}" Value="Video">
+            <Setter Property="Text" Value="{localization:Loc Media_Video, Fallback=Video}" />
+          </DataTrigger>
+          <DataTrigger Binding="{Binding ContentKind}" Value="Scene">
+            <Setter Property="Text" Value="{localization:Loc Media_Scene, Fallback=Scene}" />
+          </DataTrigger>
+          <DataTrigger Binding="{Binding ContentKind}" Value="Web">
+            <Setter Property="Text" Value="{localization:Loc Media_Web, Fallback=Web}" />
+          </DataTrigger>
+        </Style.Triggers>
+      </Style>
+
+      <Style x:Key="SourceDeliveryTextStyle"
+             TargetType="TextBlock"
+             BasedOn="{StaticResource WorkbenchCaptionTextStyle}">
+        <Setter Property="Text"
+                Value="{localization:Loc Delivery_Unsupported, Fallback='Delivery unavailable'}" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        <Setter Property="TextWrapping" Value="NoWrap" />
+        <Style.Triggers>
+          <DataTrigger Binding="{Binding DeliveryKind}" Value="DirectMedia">
+            <Setter Property="Text"
+                    Value="{localization:Loc Delivery_DirectMedia, Fallback='Direct media'}" />
+          </DataTrigger>
+          <DataTrigger Binding="{Binding DeliveryKind}" Value="WallpaperEngineWindow">
+            <Setter Property="Text"
+                    Value="{localization:Loc Source_RendererUnavailable, Fallback='Renderer not connected'}" />
+          </DataTrigger>
+        </Style.Triggers>
+      </Style>
+
+      <DataTemplate x:Key="SourceIconTemplate">
+        <Border Width="32"
+                Height="32"
+                Background="{DynamicResource ControlFillColorSecondaryBrush}"
+                BorderThickness="0"
+                CornerRadius="{DynamicResource WorkbenchRadius8}">
+          <Grid>
+            <ui:SymbolIcon Symbol="Document24"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center">
+              <ui:SymbolIcon.Style>
+                <Style TargetType="ui:SymbolIcon">
+                  <Setter Property="Visibility" Value="Visible" />
+                  <Style.Triggers>
+                    <DataTrigger Binding="{Binding ContentKind}" Value="Image">
+                      <Setter Property="Visibility" Value="Collapsed" />
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding ContentKind}" Value="Video">
+                      <Setter Property="Visibility" Value="Collapsed" />
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding ContentKind}" Value="Scene">
+                      <Setter Property="Visibility" Value="Collapsed" />
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding ContentKind}" Value="Web">
+                      <Setter Property="Visibility" Value="Collapsed" />
+                    </DataTrigger>
+                  </Style.Triggers>
+                </Style>
+              </ui:SymbolIcon.Style>
+            </ui:SymbolIcon>
+            <ui:SymbolIcon Symbol="Image24"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center">
+              <ui:SymbolIcon.Style>
+                <Style TargetType="ui:SymbolIcon">
+                  <Setter Property="Visibility" Value="Collapsed" />
+                  <Style.Triggers>
+                    <DataTrigger Binding="{Binding ContentKind}" Value="Image">
+                      <Setter Property="Visibility" Value="Visible" />
+                    </DataTrigger>
+                  </Style.Triggers>
+                </Style>
+              </ui:SymbolIcon.Style>
+            </ui:SymbolIcon>
+            <ui:SymbolIcon Symbol="VideoClip24"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center">
+              <ui:SymbolIcon.Style>
+                <Style TargetType="ui:SymbolIcon">
+                  <Setter Property="Visibility" Value="Collapsed" />
+                  <Style.Triggers>
+                    <DataTrigger Binding="{Binding ContentKind}" Value="Video">
+                      <Setter Property="Visibility" Value="Visible" />
+                    </DataTrigger>
+                  </Style.Triggers>
+                </Style>
+              </ui:SymbolIcon.Style>
+            </ui:SymbolIcon>
+            <ui:SymbolIcon Symbol="PuzzleCube24"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center">
+              <ui:SymbolIcon.Style>
+                <Style TargetType="ui:SymbolIcon">
+                  <Setter Property="Visibility" Value="Collapsed" />
+                  <Style.Triggers>
+                    <DataTrigger Binding="{Binding ContentKind}" Value="Scene">
+                      <Setter Property="Visibility" Value="Visible" />
+                    </DataTrigger>
+                  </Style.Triggers>
+                </Style>
+              </ui:SymbolIcon.Style>
+            </ui:SymbolIcon>
+            <ui:SymbolIcon Symbol="Globe24"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center">
+              <ui:SymbolIcon.Style>
+                <Style TargetType="ui:SymbolIcon">
+                  <Setter Property="Visibility" Value="Collapsed" />
+                  <Style.Triggers>
+                    <DataTrigger Binding="{Binding ContentKind}" Value="Web">
+                      <Setter Property="Visibility" Value="Visible" />
+                    </DataTrigger>
+                  </Style.Triggers>
+                </Style>
+              </ui:SymbolIcon.Style>
+            </ui:SymbolIcon>
+          </Grid>
+        </Border>
+      </DataTemplate>
+
+      <DataTemplate x:Key="ExpandedSourceTemplate">
+        <Grid>
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="36" />
+            <ColumnDefinition Width="*" />
+          </Grid.ColumnDefinitions>
+          <ContentControl Content="{Binding}"
+                          ContentTemplate="{StaticResource SourceIconTemplate}"
+                          IsHitTestVisible="False" />
+          <StackPanel Grid.Column="1"
+                      Margin="8,0,0,0"
+                      VerticalAlignment="Center"
+                      ToolTip="{Binding DisplayName}">
+            <TextBlock Text="{Binding DisplayName}"
+                       FontSize="{DynamicResource WorkbenchTypeBody}"
+                       FontWeight="SemiBold"
+                       TextTrimming="CharacterEllipsis" />
+            <Grid Margin="0,2,0,0">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="12" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+              <TextBlock Style="{StaticResource SourceContentKindTextStyle}" />
+              <TextBlock Grid.Column="1"
+                         Text="·"
+                         TextAlignment="Center"
+                         Style="{StaticResource WorkbenchCaptionTextStyle}" />
+              <TextBlock Grid.Column="2" Style="{StaticResource SourceDeliveryTextStyle}" />
+            </Grid>
+          </StackPanel>
+        </Grid>
+      </DataTemplate>
+
+      <DataTemplate x:Key="CompactSourceTemplate">
+        <ContentControl HorizontalAlignment="Center"
+                        Content="{Binding}"
+                        ContentTemplate="{StaticResource SourceIconTemplate}">
+          <ContentControl.ToolTip>
+            <ToolTip DataContext="{Binding}">
+              <StackPanel>
+                <TextBlock Text="{Binding DisplayName}"
+                           FontWeight="SemiBold"
+                           TextTrimming="CharacterEllipsis" />
+                <TextBlock Margin="0,2,0,0" Style="{StaticResource SourceContentKindTextStyle}" />
+                <TextBlock Style="{StaticResource SourceDeliveryTextStyle}" />
+              </StackPanel>
+            </ToolTip>
+          </ContentControl.ToolTip>
+        </ContentControl>
+      </DataTemplate>
+    </ResourceDictionary>
+  </UserControl.Resources>
+
+  <StackPanel x:Name="SourceSection" Margin="0,16,0,0">
+    <StackPanel.Style>
+      <Style TargetType="StackPanel">
+        <Setter Property="Visibility" Value="Collapsed" />
+        <Style.Triggers>
+          <DataTrigger Binding="{Binding HasItems, ElementName=SourceList}" Value="True">
+            <Setter Property="Visibility" Value="Visible" />
+          </DataTrigger>
+          <DataTrigger Binding="{Binding HasDiscoveryFailures, ElementName=Root}" Value="True">
+            <Setter Property="Visibility" Value="Visible" />
+          </DataTrigger>
+        </Style.Triggers>
+      </Style>
+    </StackPanel.Style>
+
+    <StackPanel x:Name="ExpandedSourcesHeader" Margin="8,0,8,8">
+      <TextBlock Text="{localization:Loc Section_Sources, Fallback=Sources}"
+                 FontSize="16"
+                 Style="{DynamicResource WorkbenchSectionHeadingTextStyle}" />
+    </StackPanel>
+
+    <Border x:Name="CompactSourcesHeader"
+            Height="32"
+            Margin="8,0,8,6"
+            Visibility="Collapsed"
+            ToolTip="{localization:Loc Section_Sources, Fallback=Sources}">
+      <ui:SymbolIcon Symbol="Apps24"
+                     HorizontalAlignment="Center"
+                     VerticalAlignment="Center" />
+    </Border>
+
+    <Border x:Name="ExpandedSourceFailure"
+            Margin="4,0,4,8"
+            Padding="8"
+            Background="{DynamicResource ControlFillColorSecondaryBrush}"
+            BorderBrush="{DynamicResource SystemFillColorCautionBrush}"
+            BorderThickness="1"
+            CornerRadius="{DynamicResource WorkbenchRadius6}"
+            Visibility="Collapsed">
+      <Grid>
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="20" />
+          <ColumnDefinition Width="*" />
+          <ColumnDefinition Width="32" />
+        </Grid.ColumnDefinitions>
+        <ui:SymbolIcon Symbol="ErrorCircle24"
+                       Width="16"
+                       Height="16"
+                       HorizontalAlignment="Left"
+                       VerticalAlignment="Top"
+                       Foreground="{DynamicResource SystemFillColorCautionBrush}" />
+        <TextBlock Grid.Column="1"
+                   Margin="4,0,8,0"
+                   Text="{localization:Loc Source_DiscoveryFailed, Fallback='Some wallpaper sources could not be loaded.'}"
+                   TextWrapping="Wrap"
+                   Style="{StaticResource WorkbenchCaptionTextStyle}" />
+        <ui:Button x:Name="ExpandedSourceRetryButton"
+                   Grid.Column="2"
+                   Width="28"
+                   Height="28"
+                   Padding="0"
+                   HorizontalAlignment="Right"
+                   VerticalAlignment="Center"
+                   Command="{Binding RefreshSourcesCommand, ElementName=Root}"
+                   Style="{DynamicResource WorkbenchIconButtonStyle}"
+                   ToolTip="{localization:Loc Action_RetrySources, Fallback='Retry sources'}"
+                   AutomationProperties.Name="{localization:Loc Action_RetrySources, Fallback='Retry sources'}">
+          <ui:SymbolIcon Symbol="ArrowClockwise24" />
+        </ui:Button>
+      </Grid>
+    </Border>
+
+    <ui:Button x:Name="CompactSourceFailureButton"
+               Width="40"
+               Height="40"
+               Margin="4,0,4,8"
+               Padding="0"
+               Visibility="Collapsed"
+               Command="{Binding RefreshSourcesCommand, ElementName=Root}"
+               Style="{DynamicResource WorkbenchIconButtonStyle}"
+               ToolTip="{localization:Loc Source_DiscoveryFailed, Fallback='Some wallpaper sources could not be loaded.'}"
+               AutomationProperties.Name="{localization:Loc Action_RetrySources, Fallback='Retry sources'}"
+               AutomationProperties.HelpText="{localization:Loc Source_DiscoveryFailed, Fallback='Some wallpaper sources could not be loaded.'}">
+      <ui:SymbolIcon Symbol="ErrorCircle24"
+                     Foreground="{DynamicResource SystemFillColorCautionBrush}" />
+    </ui:Button>
+
+    <ListBox x:Name="SourceList"
+             ItemsSource="{Binding SourceItemsSource, ElementName=Root}"
+             SelectedItem="{Binding SelectedSource, ElementName=Root, Mode=TwoWay}"
+             ItemContainerStyle="{StaticResource SourceListItemStyle}"
+             SelectionMode="Single"
+             IsEnabled="{Binding CanChooseSources, ElementName=Root}"
+             ScrollViewer.CanContentScroll="True"
+             ScrollViewer.VerticalScrollBarVisibility="Auto"
+             VirtualizingPanel.IsVirtualizing="True"
+             VirtualizingPanel.VirtualizationMode="Recycling"
+             AutomationProperties.Name="{localization:Loc Section_Sources, Fallback=Sources}"
+             AutomationProperties.HelpText="{localization:Loc Hint_SourceLibrary, Fallback='Choose a source discovered by an installed provider.'}"
+             SelectionChanged="SourceList_SelectionChanged"
+             MouseDoubleClick="SourceList_MouseDoubleClick"
+             PreviewKeyDown="SourceList_PreviewKeyDown">
+      <ListBox.Style>
+        <Style TargetType="ListBox"
+               BasedOn="{StaticResource WorkbenchListBoxStyle}">
+          <Setter Property="MaxHeight" Value="320" />
+          <Setter Property="ItemTemplate" Value="{StaticResource ExpandedSourceTemplate}" />
+          <Style.Triggers>
+            <DataTrigger Binding="{Binding IsCompact, ElementName=Root}" Value="True">
+              <Setter Property="MaxHeight" Value="240" />
+              <Setter Property="ItemTemplate" Value="{StaticResource CompactSourceTemplate}" />
+            </DataTrigger>
+          </Style.Triggers>
+        </Style>
+      </ListBox.Style>
+    </ListBox>
+  </StackPanel>
+</UserControl>

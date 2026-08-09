@@ -24,7 +24,12 @@
   <data name="Action_ResumeVideo" xml:space="preserve"><value>Resume video</value></data>
   <data name="Action_RestoreOfficial" xml:space="preserve"><value>Restore official background</value></data>
   <data name="Action_Retry" xml:space="preserve"><value>Retry</value></data>
+  <data name="Action_RetrySources" xml:space="preserve"><value>Retry sources</value></data>
   <data name="Action_ViewDetails" xml:space="preserve"><value>View details</value></data>
+  <data name="Action_ShowSources" xml:space="preserve"><value>Show sources</value></data>
+  <data name="Action_Adjust" xml:space="preserve"><value>Adjust</value></data>
+  <data name="State_Selected" xml:space="preserve"><value>Selected</value></data>
+  <data name="State_NotSelected" xml:space="preserve"><value>Not selected</value></data>
   <data name="Action_Settings" xml:space="preserve"><value>Settings</value></data>
   <data name="Action_Remove" xml:space="preserve"><value>Remove</value></data>
   <data name="Action_ClearRecent" xml:space="preserve"><value>Clear recent</value></data>
@@ -42,9 +47,14 @@
   <data name="Action_LearnMore" xml:space="preserve"><value>Learn more</value></data>
   <data name="Section_Preview" xml:space="preserve"><value>Preview</value></data>
   <data name="Section_Profiles" xml:space="preserve"><value>Wallpaper profiles</value></data>
+  <data name="Section_Sources" xml:space="preserve"><value>Sources</value></data>
+  <data name="Source_DiscoveryFailed" xml:space="preserve"><value>Some wallpaper sources could not be loaded.</value></data>
+  <data name="Source_RendererUnavailable" xml:space="preserve"><value>Renderer not connected</value></data>
   <data name="Section_Wallpaper" xml:space="preserve"><value>Wallpaper</value></data>
   <data name="Section_RecentMedia" xml:space="preserve"><value>Recent media</value></data>
   <data name="Section_Appearance" xml:space="preserve"><value>Appearance</value></data>
+  <data name="Section_Basics" xml:space="preserve"><value>Basics</value></data>
+  <data name="Section_Effects" xml:space="preserve"><value>Effects</value></data>
   <data name="Section_SafetyPrivacy" xml:space="preserve"><value>Safety &amp; privacy</value></data>
   <data name="Section_Privacy" xml:space="preserve"><value>Privacy</value></data>
   <data name="Section_About" xml:space="preserve"><value>About</value></data>
@@ -69,7 +79,13 @@
   <data name="Fit_Stretch" xml:space="preserve"><value>Stretch to fit</value></data>
   <data name="Media_Image" xml:space="preserve"><value>Image</value></data>
   <data name="Media_Video" xml:space="preserve"><value>Video</value></data>
+  <data name="Media_Scene" xml:space="preserve"><value>Scene</value></data>
+  <data name="Media_Web" xml:space="preserve"><value>Web</value></data>
+  <data name="Media_Source" xml:space="preserve"><value>Wallpaper source</value></data>
   <data name="Media_None" xml:space="preserve"><value>No media selected</value></data>
+  <data name="Delivery_Unsupported" xml:space="preserve"><value>Delivery unavailable</value></data>
+  <data name="Delivery_DirectMedia" xml:space="preserve"><value>Direct media</value></data>
+  <data name="Delivery_WallpaperEngineWindow" xml:space="preserve"><value>Wallpaper Engine window</value></data>
   <data name="Profile_Official" xml:space="preserve"><value>Official background</value></data>
   <data name="Profile_Media" xml:space="preserve"><value>Media</value></data>
   <data name="Profile_MediaMissing" xml:space="preserve"><value>Media missing</value></data>
@@ -87,9 +103,11 @@
   <data name="Workspace_ActivationFailed" xml:space="preserve"><value>Activation failed</value></data>
   <data name="Workspace_Disconnected" xml:space="preserve"><value>Codex disconnected</value></data>
   <data name="Hint_ProfileStrip" xml:space="preserve"><value>Choose the draft profile to preview and edit.</value></data>
+  <data name="Hint_SourceLibrary" xml:space="preserve"><value>Choose a source discovered by an installed provider.</value></data>
   <data name="Hint_DropMedia" xml:space="preserve"><value>Drop one image or video here</value></data>
   <data name="Hint_SupportedFormats" xml:space="preserve"><value>PNG, JPEG, WebP, MP4, or WebM</value></data>
   <data name="Hint_NoMedia" xml:space="preserve"><value>Choose media to start designing your wallpaper.</value></data>
+  <data name="Inspector_EditPrefix" xml:space="preserve"><value>Edit </value></data>
   <data name="Preview_Unavailable_Title" xml:space="preserve"><value>Preview unavailable</value></data>
   <data name="Preview_Unavailable_Message" xml:space="preserve"><value>This source needs a provider or renderer that is not connected yet.</value></data>
   <data name="Hint_NoRecentMedia" xml:space="preserve"><value>Your recently used media will appear here.</value></data>
@@ -146,6 +164,8 @@
   <data name="Status_PausedMessage" xml:space="preserve"><value>Codex and the local preview are paused.</value></data>
   <data name="Status_ReadyTitle" xml:space="preserve"><value>Ready</value></data>
   <data name="Status_ReadyMessage" xml:space="preserve"><value>Choose local media, tune the glass panel, then apply when ready.</value></data>
+  <data name="Status_SourceDiscoveryFailedTitle" xml:space="preserve"><value>Some sources are unavailable</value></data>
+  <data name="Status_SourceDiscoveryFailedMessage" xml:space="preserve"><value>Available sources can still be used. Retry the unavailable providers from Sources.</value></data>
   <data name="Status_RecentsClearedTitle" xml:space="preserve"><value>Recent media cleared</value></data>
   <data name="Status_RecentsClearedMessage" xml:space="preserve"><value>No wallpaper files were deleted from disk.</value></data>
   <data name="Status_ResetCompleteTitle" xml:space="preserve"><value>Reset complete</value></data>

@@ -24,7 +24,12 @@
   <data name="Action_ResumeVideo" xml:space="preserve"><value>继续视频</value></data>
   <data name="Action_RestoreOfficial" xml:space="preserve"><value>恢复官方背景</value></data>
   <data name="Action_Retry" xml:space="preserve"><value>重试</value></data>
+  <data name="Action_RetrySources" xml:space="preserve"><value>重试来源</value></data>
   <data name="Action_ViewDetails" xml:space="preserve"><value>查看详细信息</value></data>
+  <data name="Action_ShowSources" xml:space="preserve"><value>显示来源</value></data>
+  <data name="Action_Adjust" xml:space="preserve"><value>调整</value></data>
+  <data name="State_Selected" xml:space="preserve"><value>已选择</value></data>
+  <data name="State_NotSelected" xml:space="preserve"><value>未选择</value></data>
   <data name="Action_Settings" xml:space="preserve"><value>设置</value></data>
   <data name="Action_Remove" xml:space="preserve"><value>移除</value></data>
   <data name="Action_ClearRecent" xml:space="preserve"><value>清空最近使用</value></data>
@@ -42,9 +47,14 @@
   <data name="Action_LearnMore" xml:space="preserve"><value>了解详情</value></data>
   <data name="Section_Preview" xml:space="preserve"><value>预览</value></data>
   <data name="Section_Profiles" xml:space="preserve"><value>背景方案</value></data>
+  <data name="Section_Sources" xml:space="preserve"><value>来源</value></data>
+  <data name="Source_DiscoveryFailed" xml:space="preserve"><value>部分壁纸来源未能加载。</value></data>
+  <data name="Source_RendererUnavailable" xml:space="preserve"><value>渲染器尚未接入</value></data>
   <data name="Section_Wallpaper" xml:space="preserve"><value>壁纸</value></data>
   <data name="Section_RecentMedia" xml:space="preserve"><value>最近使用</value></data>
   <data name="Section_Appearance" xml:space="preserve"><value>外观</value></data>
+  <data name="Section_Basics" xml:space="preserve"><value>基础</value></data>
+  <data name="Section_Effects" xml:space="preserve"><value>效果</value></data>
   <data name="Section_SafetyPrivacy" xml:space="preserve"><value>安全与隐私</value></data>
   <data name="Section_Privacy" xml:space="preserve"><value>隐私</value></data>
   <data name="Section_About" xml:space="preserve"><value>关于</value></data>
@@ -69,7 +79,13 @@
   <data name="Fit_Stretch" xml:space="preserve"><value>拉伸</value></data>
   <data name="Media_Image" xml:space="preserve"><value>图片</value></data>
   <data name="Media_Video" xml:space="preserve"><value>视频</value></data>
+  <data name="Media_Scene" xml:space="preserve"><value>场景</value></data>
+  <data name="Media_Web" xml:space="preserve"><value>网页</value></data>
+  <data name="Media_Source" xml:space="preserve"><value>壁纸来源</value></data>
   <data name="Media_None" xml:space="preserve"><value>未选择媒体</value></data>
+  <data name="Delivery_Unsupported" xml:space="preserve"><value>交付不可用</value></data>
+  <data name="Delivery_DirectMedia" xml:space="preserve"><value>直接媒体</value></data>
+  <data name="Delivery_WallpaperEngineWindow" xml:space="preserve"><value>Wallpaper Engine 窗口</value></data>
   <data name="Profile_Official" xml:space="preserve"><value>官方背景</value></data>
   <data name="Profile_Media" xml:space="preserve"><value>媒体</value></data>
   <data name="Profile_MediaMissing" xml:space="preserve"><value>媒体不可用</value></data>
@@ -87,9 +103,11 @@
   <data name="Workspace_ActivationFailed" xml:space="preserve"><value>激活失败</value></data>
   <data name="Workspace_Disconnected" xml:space="preserve"><value>Codex 已断开</value></data>
   <data name="Hint_ProfileStrip" xml:space="preserve"><value>选择要预览和编辑的草稿方案。</value></data>
+  <data name="Hint_SourceLibrary" xml:space="preserve"><value>选择已安装来源提供程序发现的壁纸。</value></data>
   <data name="Hint_DropMedia" xml:space="preserve"><value>将一张图片或一个视频拖到这里</value></data>
   <data name="Hint_SupportedFormats" xml:space="preserve"><value>支持 PNG、JPEG、WebP、MP4 或 WebM</value></data>
   <data name="Hint_NoMedia" xml:space="preserve"><value>选择媒体后即可开始设计壁纸。</value></data>
+  <data name="Inspector_EditPrefix" xml:space="preserve"><value>编辑 </value></data>
   <data name="Preview_Unavailable_Title" xml:space="preserve"><value>暂时无法预览</value></data>
   <data name="Preview_Unavailable_Message" xml:space="preserve"><value>此来源需要尚未接入的来源提供程序或渲染器。</value></data>
   <data name="Hint_NoRecentMedia" xml:space="preserve"><value>最近使用过的媒体会显示在这里。</value></data>
@@ -146,6 +164,8 @@
   <data name="Status_PausedMessage" xml:space="preserve"><value>Codex 与本地预览均已暂停。</value></data>
   <data name="Status_ReadyTitle" xml:space="preserve"><value>就绪</value></data>
   <data name="Status_ReadyMessage" xml:space="preserve"><value>选择本地媒体，调整玻璃面板，准备好后即可应用。</value></data>
+  <data name="Status_SourceDiscoveryFailedTitle" xml:space="preserve"><value>部分来源不可用</value></data>
+  <data name="Status_SourceDiscoveryFailedMessage" xml:space="preserve"><value>可用来源仍可继续使用；请在“来源”中重试未加载的提供程序。</value></data>
   <data name="Status_RecentsClearedTitle" xml:space="preserve"><value>最近使用已清空</value></data>
   <data name="Status_RecentsClearedMessage" xml:space="preserve"><value>没有从磁盘删除任何壁纸文件。</value></data>
   <data name="Status_ResetCompleteTitle" xml:space="preserve"><value>重置完成</value></data>

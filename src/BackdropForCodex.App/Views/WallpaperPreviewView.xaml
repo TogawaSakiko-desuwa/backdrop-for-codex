@@ -10,6 +10,52 @@
              Unloaded="WallpaperPreviewView_Unloaded">
   <UserControl.Resources>
     <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+
+    <Style x:Key="CalibrationUnderlayShapeStyle" TargetType="Rectangle">
+      <Setter Property="Stroke" Value="#FF0B0D10" />
+      <Setter Property="StrokeThickness" Value="2" />
+      <Style.Triggers>
+        <DataTrigger Binding="{Binding IsWorkbenchHighContrast, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
+                     Value="True">
+          <Setter Property="Stroke"
+                  Value="{DynamicResource {x:Static SystemColors.WindowBrushKey}}" />
+        </DataTrigger>
+      </Style.Triggers>
+    </Style>
+
+    <Style x:Key="CalibrationForegroundShapeStyle" TargetType="Rectangle">
+      <Setter Property="Stroke" Value="White" />
+      <Setter Property="StrokeThickness" Value="1" />
+      <Style.Triggers>
+        <DataTrigger Binding="{Binding IsWorkbenchHighContrast, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
+                     Value="True">
+          <Setter Property="Stroke"
+                  Value="{DynamicResource {x:Static SystemColors.WindowTextBrushKey}}" />
+        </DataTrigger>
+      </Style.Triggers>
+    </Style>
+
+    <Style x:Key="CalibrationUnderlayAxisStyle" TargetType="Border">
+      <Setter Property="Background" Value="#FF0B0D10" />
+      <Style.Triggers>
+        <DataTrigger Binding="{Binding IsWorkbenchHighContrast, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
+                     Value="True">
+          <Setter Property="Background"
+                  Value="{DynamicResource {x:Static SystemColors.WindowBrushKey}}" />
+        </DataTrigger>
+      </Style.Triggers>
+    </Style>
+
+    <Style x:Key="CalibrationForegroundAxisStyle" TargetType="Border">
+      <Setter Property="Background" Value="White" />
+      <Style.Triggers>
+        <DataTrigger Binding="{Binding IsWorkbenchHighContrast, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
+                     Value="True">
+          <Setter Property="Background"
+                  Value="{DynamicResource {x:Static SystemColors.WindowTextBrushKey}}" />
+        </DataTrigger>
+      </Style.Triggers>
+    </Style>
   </UserControl.Resources>
 
   <Grid x:Name="PreviewHost"
@@ -333,6 +379,61 @@
             </Grid>
           </Grid>
 
+          <Grid x:Name="CalibrationOverlay"
+                Margin="18"
+                IsHitTestVisible="False"
+                Visibility="{Binding HasSelectedMedia, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <Grid.Style>
+              <Style TargetType="Grid">
+                <Setter Property="Opacity" Value="0.55" />
+                <Style.Triggers>
+                  <DataTrigger Binding="{Binding IsWorkbenchHighContrast, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
+                               Value="True">
+                    <Setter Property="Opacity" Value="1" />
+                  </DataTrigger>
+                </Style.Triggers>
+              </Style>
+            </Grid.Style>
+
+            <Rectangle x:Name="ProofBoundaryContrastUnderlay"
+                       Margin="8"
+                       Style="{StaticResource CalibrationUnderlayShapeStyle}" />
+            <Rectangle x:Name="SafeAreaBoundaryContrastUnderlay"
+                       Margin="42,32"
+                       StrokeDashArray="1.5,2.5"
+                       StrokeDashCap="Round"
+                       Style="{StaticResource CalibrationUnderlayShapeStyle}" />
+            <Border x:Name="VerticalProofAxisContrastUnderlay"
+                    Width="2"
+                    Margin="0,8"
+                    HorizontalAlignment="Center"
+                    Style="{StaticResource CalibrationUnderlayAxisStyle}" />
+            <Border x:Name="HorizontalProofAxisContrastUnderlay"
+                    Height="2"
+                    Margin="8,0"
+                    VerticalAlignment="Center"
+                    Style="{StaticResource CalibrationUnderlayAxisStyle}" />
+
+            <Rectangle x:Name="ProofBoundary"
+                       Margin="8"
+                       Style="{StaticResource CalibrationForegroundShapeStyle}" />
+            <Rectangle x:Name="SafeAreaBoundary"
+                       Margin="42,32"
+                       StrokeDashArray="3,5"
+                       StrokeDashCap="Round"
+                       Style="{StaticResource CalibrationForegroundShapeStyle}" />
+            <Border x:Name="VerticalProofAxis"
+                    Width="1"
+                    Margin="0,8"
+                    HorizontalAlignment="Center"
+                    Style="{StaticResource CalibrationForegroundAxisStyle}" />
+            <Border x:Name="HorizontalProofAxis"
+                    Height="1"
+                    Margin="8,0"
+                    VerticalAlignment="Center"
+                    Style="{StaticResource CalibrationForegroundAxisStyle}" />
+          </Grid>
+
           <Border x:Name="FocusInteractionSurface"
                   Background="#01FFFFFF"
                   IsEnabled="{Binding CanAdjustFocus, RelativeSource={RelativeSource AncestorType={x:Type views:WallpaperPreviewView}}}"
@@ -340,7 +441,6 @@
                   Focusable="{Binding CanAdjustFocus, RelativeSource={RelativeSource AncestorType={x:Type views:WallpaperPreviewView}}}"
                   ClipToBounds="True"
                   Cursor="SizeAll"
-                  ToolTip="{localization:Loc Focus_AutomationHelp, Fallback='Drag to set the crop focus. Arrow keys move one percent; hold Shift to move ten percent.'}"
                   AutomationProperties.Name="{localization:Loc Focus_AutomationName, Fallback='Wallpaper crop focus'}"
                   AutomationProperties.HelpText="{localization:Loc Focus_AutomationHelp, Fallback='Drag to set the crop focus. Arrow keys move one percent; hold Shift to move ten percent.'}"
                   AutomationProperties.ItemStatus="{Binding FocusLabel}"
@@ -351,20 +451,33 @@
                   KeyDown="FocusInteractionSurface_KeyDown">
             <Canvas IsHitTestVisible="False">
               <Grid x:Name="FocusIndicator"
-                    Width="34"
-                    Height="34"
+                    Width="40"
+                    Height="40"
+                    SnapsToDevicePixels="True"
+                    UseLayoutRounding="True"
                     Opacity="0">
-                <Ellipse Fill="#66000000"
-                         Stroke="White"
+                <Ellipse Width="38"
+                         Height="38"
+                         HorizontalAlignment="Center"
+                         VerticalAlignment="Center"
+                         Fill="#260B1018"
+                         Stroke="{DynamicResource AccentFillColorDefaultBrush}"
                          StrokeThickness="2" />
-                <Line X1="17" Y1="5" X2="17" Y2="29"
-                      Stroke="White"
-                      StrokeThickness="1" />
-                <Line X1="5" Y1="17" X2="29" Y2="17"
-                      Stroke="White"
-                      StrokeThickness="1" />
-                <Ellipse Width="5"
-                         Height="5"
+                <Line X1="20" Y1="6" X2="20" Y2="34"
+                      Stroke="#F7FFFFFF"
+                      StrokeThickness="1.25" />
+                <Line X1="6" Y1="20" X2="34" Y2="20"
+                      Stroke="#F7FFFFFF"
+                      StrokeThickness="1.25" />
+                <Ellipse Width="8"
+                         Height="8"
+                         Fill="{DynamicResource AccentFillColorDefaultBrush}"
+                         Stroke="White"
+                         StrokeThickness="1.5"
+                         HorizontalAlignment="Center"
+                         VerticalAlignment="Center" />
+                <Ellipse Width="2"
+                         Height="2"
                          Fill="White"
                          HorizontalAlignment="Center"
                          VerticalAlignment="Center" />
@@ -372,11 +485,13 @@
             </Canvas>
           </Border>
 
-          <Border HorizontalAlignment="Left"
+          <Border x:Name="MediaNamePill"
+                  HorizontalAlignment="Left"
                   VerticalAlignment="Bottom"
                   Margin="16"
                   Padding="10,6"
-                  CornerRadius="8"
+                  CornerRadius="7"
+                  BorderThickness="0"
                   Background="#B020242B"
                   Visibility="{Binding HasSelectedMedia, Converter={StaticResource BooleanToVisibilityConverter}}">
             <StackPanel Orientation="Horizontal">
@@ -394,7 +509,7 @@
           <Border x:Name="DropOverlay"
                   Visibility="Collapsed"
                   Margin="10"
-                  CornerRadius="14"
+                  CornerRadius="8"
                   BorderBrush="{DynamicResource AccentFillColorDefaultBrush}"
                   BorderThickness="2"
                   Background="#D9192636"
