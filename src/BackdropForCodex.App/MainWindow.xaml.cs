@@ -161,7 +161,9 @@ public partial class MainWindow : FluentWindow
         {
             var dialog = new OpenFileDialog
             {
-                Title = _text.GetStringOrFallback("Action_SelectMedia", "Choose wallpaper media"),
+                Title = _text.GetStringOrFallback(
+                    "Dialog_SelectWallpaperMediaTitle",
+                    "Choose wallpaper media"),
                 Filter =
                     "Supported media|*.png;*.jpg;*.jpeg;*.webp;*.mp4;*.webm|" +
                     "Images|*.png;*.jpg;*.jpeg;*.webp|Videos|*.mp4;*.webm",
@@ -234,7 +236,9 @@ public partial class MainWindow : FluentWindow
 
             var dialog = new ContentDialog(DialogHost)
             {
-                Title = _text.GetStringOrFallback("Action_RenameProfile", "Rename profile"),
+                Title = _text.GetStringOrFallback(
+                    "Dialog_RenameProfileTitle",
+                    "Rename profile"),
                 Content = content,
                 PrimaryButtonText = _text.GetStringOrFallback("Action_Confirm", "Confirm"),
                 CloseButtonText = _text.GetStringOrFallback("Action_Cancel", "Cancel"),
@@ -478,7 +482,9 @@ public partial class MainWindow : FluentWindow
     {
         var disclosure = new ContentDialog(DialogHost)
         {
-            Title = _text.GetStringOrFallback("Diagnostics_Title", "Export diagnostic report?"),
+            Title = _text.GetStringOrFallback(
+                "Dialog_DiagnosticsExportTitle",
+                "Export diagnostic report?"),
             Content = new TextBlock
             {
                 Text = _text.GetStringOrFallback(
@@ -487,7 +493,9 @@ public partial class MainWindow : FluentWindow
                 MaxWidth = 520,
                 TextWrapping = TextWrapping.Wrap,
             },
-            PrimaryButtonText = _text.GetStringOrFallback("Diagnostics_Export", "Choose save location"),
+            PrimaryButtonText = _text.GetStringOrFallback(
+                "Action_ChooseSaveLocation",
+                "Choose save location"),
             CloseButtonText = _text.GetStringOrFallback("Action_Cancel", "Cancel"),
             PrimaryButtonAppearance = ControlAppearance.Primary,
             DialogMaxWidth = 600,

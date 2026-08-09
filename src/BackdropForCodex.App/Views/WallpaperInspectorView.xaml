@@ -100,7 +100,7 @@
                            Appearance="Secondary"
                            Content="{localization:Loc Action_CenterFocus, Fallback=Center}"
                            IsEnabled="{Binding CanAdjustFocus}"
-                           AutomationProperties.Name="{localization:Loc Action_CenterFocus, Fallback='Center crop focus'}"
+                           AutomationProperties.Name="{localization:Loc Action_CenterFocusAutomationName, Fallback='Center crop focus'}"
                            Click="CenterFocus_Click" />
               </StackPanel>
             </Grid>
@@ -189,7 +189,7 @@
                        Text="{localization:Loc Section_SafetyPrivacy, Fallback='Safety &amp; privacy'}" />
             <TextBlock Margin="0,3,0,0"
                        Style="{StaticResource CaptionTextStyle}"
-                       Text="{localization:Loc Risk_Summary, Fallback='Enhanced launch uses a local Chromium debugging endpoint.'}" />
+                       Text="{localization:Loc Settings_RiskSummary, Fallback='Enhanced launch uses a local Chromium debugging endpoint.'}" />
           </StackPanel>
           <ui:Button Grid.Column="2"
                      VerticalAlignment="Center"

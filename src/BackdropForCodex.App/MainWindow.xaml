@@ -193,7 +193,7 @@
                                       <Setter Property="Text" Value="{localization:Loc Media_Video, Fallback=Video}" />
                                     </DataTrigger>
                                     <DataTrigger Binding="{Binding Exists}" Value="False">
-                                      <Setter Property="Text" Value="{localization:Loc Hint_MissingMedia, Fallback=Missing}" />
+                                      <Setter Property="Text" Value="{localization:Loc Hint_MissingMediaCompact, Fallback=Missing}" />
                                     </DataTrigger>
                                   </Style.Triggers>
                                 </Style>

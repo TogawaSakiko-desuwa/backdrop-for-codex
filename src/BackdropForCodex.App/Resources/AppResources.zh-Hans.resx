@@ -15,6 +15,7 @@
   <data name="App_Title" xml:space="preserve"><value>Backdrop for Codex</value></data>
   <data name="App_Description" xml:space="preserve"><value>为 Codex 添加仅在本机运行的私密背景层。</value></data>
   <data name="Action_SelectMedia" xml:space="preserve"><value>选择媒体</value></data>
+  <data name="Dialog_SelectWallpaperMediaTitle" xml:space="preserve"><value>选择壁纸媒体</value></data>
   <data name="Action_ClearMedia" xml:space="preserve"><value>清除媒体</value></data>
   <data name="Action_ApplyChanges" xml:space="preserve"><value>应用更改</value></data>
   <data name="Action_ApplyAndLaunch" xml:space="preserve"><value>应用并启动 Codex</value></data>
@@ -29,11 +30,13 @@
   <data name="Action_NewProfile" xml:space="preserve"><value>新建方案</value></data>
   <data name="Action_DuplicateProfile" xml:space="preserve"><value>复制</value></data>
   <data name="Action_RenameProfile" xml:space="preserve"><value>重命名</value></data>
+  <data name="Dialog_RenameProfileTitle" xml:space="preserve"><value>重命名方案</value></data>
   <data name="Action_DeleteProfile" xml:space="preserve"><value>删除</value></data>
   <data name="Action_Close" xml:space="preserve"><value>关闭</value></data>
   <data name="Action_Confirm" xml:space="preserve"><value>确认</value></data>
   <data name="Action_GotIt" xml:space="preserve"><value>知道了</value></data>
   <data name="Action_Reset" xml:space="preserve"><value>重置</value></data>
+  <data name="Action_ResetApp" xml:space="preserve"><value>重置应用</value></data>
   <data name="Action_RevokeRisk" xml:space="preserve"><value>撤销风险确认</value></data>
   <data name="Action_LearnMore" xml:space="preserve"><value>了解详情</value></data>
   <data name="Section_Preview" xml:space="preserve"><value>预览</value></data>
@@ -42,12 +45,14 @@
   <data name="Section_RecentMedia" xml:space="preserve"><value>最近使用</value></data>
   <data name="Section_Appearance" xml:space="preserve"><value>外观</value></data>
   <data name="Section_SafetyPrivacy" xml:space="preserve"><value>安全与隐私</value></data>
+  <data name="Section_Privacy" xml:space="preserve"><value>隐私</value></data>
   <data name="Section_About" xml:space="preserve"><value>关于</value></data>
   <data name="Section_DangerZone" xml:space="preserve"><value>危险区域</value></data>
   <data name="Label_Fit" xml:space="preserve"><value>媒体适配</value></data>
   <data name="Label_Focus" xml:space="preserve"><value>裁剪焦点</value></data>
   <data name="Hint_FocusControl" xml:space="preserve"><value>拖动标记或使用方向键；按住 Shift 可大幅移动。</value></data>
   <data name="Action_CenterFocus" xml:space="preserve"><value>回到中心</value></data>
+  <data name="Action_CenterFocusAutomationName" xml:space="preserve"><value>将裁剪焦点移到中心</value></data>
   <data name="Focus_AutomationName" xml:space="preserve"><value>壁纸裁剪焦点</value></data>
   <data name="Focus_AutomationHelp" xml:space="preserve"><value>拖动可设置裁剪焦点。方向键每次移动 1%，按住 Shift 时每次移动 10%。</value></data>
   <data name="Label_PanelOpacity" xml:space="preserve"><value>面板不透明度</value></data>
@@ -86,6 +91,7 @@
   <data name="Hint_NoMedia" xml:space="preserve"><value>选择媒体后即可开始设计壁纸。</value></data>
   <data name="Hint_NoRecentMedia" xml:space="preserve"><value>最近使用过的媒体会显示在这里。</value></data>
   <data name="Hint_MissingMedia" xml:space="preserve"><value>此文件已不在当前设备上。</value></data>
+  <data name="Hint_MissingMediaCompact" xml:space="preserve"><value>文件缺失</value></data>
   <data name="Status_Ready" xml:space="preserve"><value>就绪</value></data>
   <data name="Status_ChangesPending" xml:space="preserve"><value>预览已更新，准备好后即可应用。</value></data>
   <data name="Status_SavedNotActive" xml:space="preserve"><value>设置已保存，但壁纸尚未生效。</value></data>
@@ -163,6 +169,8 @@
   <data name="Status_ShortcutReadyMessage" xml:space="preserve"><value>增强启动桌面快捷方式已创建或更新。</value></data>
   <data name="Risk_Title" xml:space="preserve"><value>允许 Codex 本机调试？</value></data>
   <data name="Risk_Summary" xml:space="preserve"><value>此功能会使用本机 Chromium 调试端点启动 Codex。</value></data>
+  <data name="Settings_RiskTitle" xml:space="preserve"><value>Codex 本机调试</value></data>
+  <data name="Settings_RiskSummary" xml:space="preserve"><value>增强启动会使用本机 Chromium 调试端点。</value></data>
   <data name="Risk_Detail" xml:space="preserve"><value>端点仅限当前设备访问，并会持续到 Codex 退出。Backdrop 会先核验官方软件包、进程、会话、端点和目标，再由运行时能力探针决定可启用的视觉效果。</value></data>
   <data name="Risk_Acknowledgement" xml:space="preserve"><value>我已了解并希望继续</value></data>
   <data name="Risk_AcknowledgementSaved" xml:space="preserve"><value>风险确认已保存</value></data>
@@ -178,6 +186,7 @@
   <data name="Settings_Licenses" xml:space="preserve"><value>开源许可证</value></data>
   <data name="Settings_ResetTitle" xml:space="preserve"><value>重置 Backdrop for Codex？</value></data>
   <data name="Settings_ResetDescription" xml:space="preserve"><value>这会恢复官方背景，永久删除设置、最近媒体及任何保留的 V1 迁移备份，撤销风险确认，重置界面偏好，并且只移除经核验确由本应用创建的快捷方式。</value></data>
+  <data name="Settings_ResetSummary" xml:space="preserve"><value>恢复官方背景，并永久删除此应用拥有的全部状态，包括保留的 V1 迁移备份。</value></data>
   <data name="Exit_DirtyTitle" xml:space="preserve"><value>丢弃草稿并退出？</value></data>
   <data name="Exit_DirtyMessage" xml:space="preserve"><value>当前方案草稿有未保存的更改。退出将丢弃这些更改，且不会应用。</value></data>
   <data name="Exit_DiscardAction" xml:space="preserve"><value>丢弃并退出</value></data>
@@ -244,9 +253,11 @@
   <data name="Error_AccessDenied_Message" xml:space="preserve"><value>Windows 拒绝了此操作所需的访问权限。</value></data>
   <data name="Error_AccessDenied_Recovery" xml:space="preserve"><value>请检查文件权限后重试。</value></data>
   <data name="Diagnostics_Title" xml:space="preserve"><value>诊断报告</value></data>
+  <data name="Dialog_DiagnosticsExportTitle" xml:space="preserve"><value>导出诊断报告？</value></data>
   <data name="Diagnostics_Description" xml:space="preserve"><value>创建仅含允许字段的本地报告，用于排查兼容性与运行故障。</value></data>
   <data name="Diagnostics_Disclosure" xml:space="preserve"><value>schema 2 报告仅包含允许的环境、运行与兼容摘要：Codex 版本、类型化安全结果、活动表现契约、匹配状态和逐项能力原因；不包含媒体路径或文件名、包身份、Publisher、进程/会话/端口、页面标题或 URL、DOM 或选择器、聊天或设置内容、原始异常、CDP Detail 和稳定标识。</value></data>
   <data name="Diagnostics_Export" xml:space="preserve"><value>导出诊断报告</value></data>
+  <data name="Action_ChooseSaveLocation" xml:space="preserve"><value>选择保存位置</value></data>
   <data name="Diagnostics_SaveTitle" xml:space="preserve"><value>保存诊断报告</value></data>
   <data name="Diagnostics_CompleteTitle" xml:space="preserve"><value>诊断报告已保存</value></data>
   <data name="Diagnostics_CompleteMessage" xml:space="preserve"><value>仅含允许字段的本地报告已保存到你选择的位置。</value></data>

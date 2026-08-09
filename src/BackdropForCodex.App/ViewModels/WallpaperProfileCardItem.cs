@@ -177,12 +177,12 @@ public sealed class WallpaperProfileCardProjection
         string mediaDisplayName,
         string subtitle)
     {
-        var automationName = Format(
+        var automationName = FormatLocalized(
             "Profile_AutomationName",
             "{0}, {1}",
             profile.Name,
             subtitle);
-        var actionsAutomationName = Format(
+        var actionsAutomationName = FormatLocalized(
             "Profile_ActionsAutomationName",
             "More actions for {0}",
             profile.Name);
@@ -200,7 +200,7 @@ public sealed class WallpaperProfileCardProjection
             actionsAutomationName);
     }
 
-    private string Format(string key, string fallback, params object[] arguments) =>
+    private string FormatLocalized(string key, string fallback, params object[] arguments) =>
         string.Format(
             CultureInfo.CurrentCulture,
             _text.GetStringOrFallback(key, fallback),

@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Globalization;
+using System.Net;
 using System.Reflection;
 using System.Resources;
 using System.Text.RegularExpressions;
@@ -15,7 +16,7 @@ public sealed class LocalizationResourceTests
     private const string SourceResourcePrefix = "LocalizationSources/";
 
     private static readonly Regex CSharpKeyPattern = new(
-        "\\b(?:Text|GetString|GetStringOrFallback)\\s*\\(\\s*\"(?<key>[A-Za-z][A-Za-z0-9_]*)\"",
+        "\\b(?:Text|GetString|GetStringOrFallback|FormatLocalized)\\s*\\(\\s*\"(?<key>[A-Za-z][A-Za-z0-9_]*)\"",
         RegexOptions.CultureInvariant,
         TimeSpan.FromSeconds(1));
 
@@ -25,7 +26,12 @@ public sealed class LocalizationResourceTests
         TimeSpan.FromSeconds(1));
 
     private static readonly Regex CSharpFallbackPattern = new(
-        "\\bGetStringOrFallback\\s*\\(\\s*\"(?<key>[A-Za-z][A-Za-z0-9_]*)\"\\s*,\\s*\"(?<fallback>(?:\\\\.|[^\"\\\\])*)\"",
+        "\\b(?:GetStringOrFallback|FormatLocalized)\\s*\\(\\s*\"(?<key>[A-Za-z][A-Za-z0-9_]*)\"\\s*,\\s*\"(?<fallback>(?:\\\\.|[^\"\\\\])*)\"",
+        RegexOptions.CultureInvariant,
+        TimeSpan.FromSeconds(1));
+
+    private static readonly Regex XamlFallbackPattern = new(
+        """\{[^}\r\n]*?:Loc\s+(?<key>[A-Za-z][A-Za-z0-9_]*)\s*,\s*Fallback=(?:(?<single>'[^']*')|(?<double>"[^"]*")|(?<bare>[^,}\s]+))""",
         RegexOptions.CultureInvariant,
         TimeSpan.FromSeconds(1));
 
@@ -50,6 +56,8 @@ public sealed class LocalizationResourceTests
         var missingChinese = referencedKeys.Except(chineseKeys, StringComparer.Ordinal);
 
         Assert.NotEmpty(referencedKeys);
+        Assert.Contains("Profile_AutomationName", referencedKeys);
+        Assert.Contains("Profile_ActionsAutomationName", referencedKeys);
         Assert.Empty(missingNeutral);
         Assert.Empty(missingChinese);
     }
@@ -65,21 +73,28 @@ public sealed class LocalizationResourceTests
     }
 
     [Fact]
-    public void ReusedCSharpResourceKeysHaveConsistentFallbacks()
+    public void ReusedResourceKeysHaveConsistentFallbacks()
     {
         var fallbacksByKey = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
         foreach (var source in LoadEmbeddedSources(".cs"))
         {
             foreach (Match match in CSharpFallbackPattern.Matches(source))
             {
-                var key = match.Groups["key"].Value;
-                if (!fallbacksByKey.TryGetValue(key, out var fallbacks))
-                {
-                    fallbacks = new HashSet<string>(StringComparer.Ordinal);
-                    fallbacksByKey.Add(key, fallbacks);
-                }
+                AddFallback(
+                    fallbacksByKey,
+                    match.Groups["key"].Value,
+                    Regex.Unescape(match.Groups["fallback"].Value));
+            }
+        }
 
-                _ = fallbacks.Add(match.Groups["fallback"].Value);
+        foreach (var source in LoadEmbeddedSources(".xaml"))
+        {
+            foreach (Match match in XamlFallbackPattern.Matches(source))
+            {
+                AddFallback(
+                    fallbacksByKey,
+                    match.Groups["key"].Value,
+                    ReadXamlFallback(match));
             }
         }
 
@@ -89,7 +104,33 @@ public sealed class LocalizationResourceTests
             .Select(pair =>
                 $"{pair.Key}: {string.Join(" | ", pair.Value.OrderBy(value => value, StringComparer.Ordinal))}")
             .ToArray();
-        Assert.Empty(conflicts);
+        Assert.True(
+            conflicts.Length == 0,
+            $"Conflicting localization fallbacks:{Environment.NewLine}{string.Join(Environment.NewLine, conflicts)}");
+    }
+
+    private static void AddFallback(
+        Dictionary<string, HashSet<string>> fallbacksByKey,
+        string key,
+        string fallback)
+    {
+        if (!fallbacksByKey.TryGetValue(key, out var fallbacks))
+        {
+            fallbacks = new HashSet<string>(StringComparer.Ordinal);
+            fallbacksByKey.Add(key, fallbacks);
+        }
+
+        _ = fallbacks.Add(fallback);
+    }
+
+    private static string ReadXamlFallback(Match match)
+    {
+        var value = match.Groups["single"].Success
+            ? match.Groups["single"].Value[1..^1]
+            : match.Groups["double"].Success
+                ? match.Groups["double"].Value[1..^1]
+                : match.Groups["bare"].Value;
+        return WebUtility.HtmlDecode(value);
     }
 
     private static HashSet<string> LoadResourceKeys(CultureInfo culture)

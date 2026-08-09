@@ -15,6 +15,7 @@
   <data name="App_Title" xml:space="preserve"><value>Backdrop for Codex</value></data>
   <data name="App_Description" xml:space="preserve"><value>A private, local wallpaper layer for Codex.</value></data>
   <data name="Action_SelectMedia" xml:space="preserve"><value>Choose media</value></data>
+  <data name="Dialog_SelectWallpaperMediaTitle" xml:space="preserve"><value>Choose wallpaper media</value></data>
   <data name="Action_ClearMedia" xml:space="preserve"><value>Clear media</value></data>
   <data name="Action_ApplyChanges" xml:space="preserve"><value>Apply changes</value></data>
   <data name="Action_ApplyAndLaunch" xml:space="preserve"><value>Apply &amp; launch Codex</value></data>
@@ -29,11 +30,13 @@
   <data name="Action_NewProfile" xml:space="preserve"><value>New profile</value></data>
   <data name="Action_DuplicateProfile" xml:space="preserve"><value>Duplicate</value></data>
   <data name="Action_RenameProfile" xml:space="preserve"><value>Rename</value></data>
+  <data name="Dialog_RenameProfileTitle" xml:space="preserve"><value>Rename profile</value></data>
   <data name="Action_DeleteProfile" xml:space="preserve"><value>Delete</value></data>
   <data name="Action_Close" xml:space="preserve"><value>Close</value></data>
   <data name="Action_Confirm" xml:space="preserve"><value>Confirm</value></data>
   <data name="Action_GotIt" xml:space="preserve"><value>Got it</value></data>
   <data name="Action_Reset" xml:space="preserve"><value>Reset</value></data>
+  <data name="Action_ResetApp" xml:space="preserve"><value>Reset app</value></data>
   <data name="Action_RevokeRisk" xml:space="preserve"><value>Revoke acknowledgement</value></data>
   <data name="Action_LearnMore" xml:space="preserve"><value>Learn more</value></data>
   <data name="Section_Preview" xml:space="preserve"><value>Preview</value></data>
@@ -42,12 +45,14 @@
   <data name="Section_RecentMedia" xml:space="preserve"><value>Recent media</value></data>
   <data name="Section_Appearance" xml:space="preserve"><value>Appearance</value></data>
   <data name="Section_SafetyPrivacy" xml:space="preserve"><value>Safety &amp; privacy</value></data>
+  <data name="Section_Privacy" xml:space="preserve"><value>Privacy</value></data>
   <data name="Section_About" xml:space="preserve"><value>About</value></data>
   <data name="Section_DangerZone" xml:space="preserve"><value>Danger zone</value></data>
   <data name="Label_Fit" xml:space="preserve"><value>Media fit</value></data>
   <data name="Label_Focus" xml:space="preserve"><value>Crop focus</value></data>
   <data name="Hint_FocusControl" xml:space="preserve"><value>Drag the marker or use the arrow keys. Hold Shift for larger steps.</value></data>
   <data name="Action_CenterFocus" xml:space="preserve"><value>Center</value></data>
+  <data name="Action_CenterFocusAutomationName" xml:space="preserve"><value>Center crop focus</value></data>
   <data name="Focus_AutomationName" xml:space="preserve"><value>Wallpaper crop focus</value></data>
   <data name="Focus_AutomationHelp" xml:space="preserve"><value>Drag to set the crop focus. Arrow keys move one percent; hold Shift to move ten percent.</value></data>
   <data name="Label_PanelOpacity" xml:space="preserve"><value>Panel opacity</value></data>
@@ -86,6 +91,7 @@
   <data name="Hint_NoMedia" xml:space="preserve"><value>Choose media to start designing your wallpaper.</value></data>
   <data name="Hint_NoRecentMedia" xml:space="preserve"><value>Your recently used media will appear here.</value></data>
   <data name="Hint_MissingMedia" xml:space="preserve"><value>This file is no longer available on this device.</value></data>
+  <data name="Hint_MissingMediaCompact" xml:space="preserve"><value>Missing</value></data>
   <data name="Status_Ready" xml:space="preserve"><value>Ready</value></data>
   <data name="Status_ChangesPending" xml:space="preserve"><value>Preview updated. Apply when you are ready.</value></data>
   <data name="Status_SavedNotActive" xml:space="preserve"><value>Settings are saved, but the wallpaper is not active.</value></data>
@@ -163,6 +169,8 @@
   <data name="Status_ShortcutReadyMessage" xml:space="preserve"><value>The enhanced desktop shortcut was created or updated.</value></data>
   <data name="Risk_Title" xml:space="preserve"><value>Allow local Codex debugging?</value></data>
   <data name="Risk_Summary" xml:space="preserve"><value>This feature starts Codex with a local Chromium debugging endpoint.</value></data>
+  <data name="Settings_RiskTitle" xml:space="preserve"><value>Local Codex debugging</value></data>
+  <data name="Settings_RiskSummary" xml:space="preserve"><value>Enhanced launch uses a local Chromium debugging endpoint.</value></data>
   <data name="Risk_Detail" xml:space="preserve"><value>The endpoint is limited to this device and remains available until Codex exits. Backdrop verifies the official package, process, session, endpoint, and target before runtime capability probes decide which visual effects may run.</value></data>
   <data name="Risk_Acknowledgement" xml:space="preserve"><value>I understand and want to continue</value></data>
   <data name="Risk_AcknowledgementSaved" xml:space="preserve"><value>Acknowledgement saved</value></data>
@@ -178,6 +186,7 @@
   <data name="Settings_Licenses" xml:space="preserve"><value>Open-source licenses</value></data>
   <data name="Settings_ResetTitle" xml:space="preserve"><value>Reset Backdrop for Codex?</value></data>
   <data name="Settings_ResetDescription" xml:space="preserve"><value>This restores the official background; permanently deletes settings, recent media, and any preserved V1 migration backup; revokes acknowledgement; resets UI preferences; and removes only a shortcut verified as owned by this app.</value></data>
+  <data name="Settings_ResetSummary" xml:space="preserve"><value>Restore the official background and permanently delete all app-owned state, including any preserved V1 migration backup.</value></data>
   <data name="Exit_DirtyTitle" xml:space="preserve"><value>Discard draft and exit?</value></data>
   <data name="Exit_DirtyMessage" xml:space="preserve"><value>The current profile draft has unsaved changes. Exit will discard them without applying.</value></data>
   <data name="Exit_DiscardAction" xml:space="preserve"><value>Discard and exit</value></data>
@@ -244,9 +253,11 @@
   <data name="Error_AccessDenied_Message" xml:space="preserve"><value>Windows denied access needed for this action.</value></data>
   <data name="Error_AccessDenied_Recovery" xml:space="preserve"><value>Check file permissions and retry.</value></data>
   <data name="Diagnostics_Title" xml:space="preserve"><value>Diagnostic report</value></data>
+  <data name="Dialog_DiagnosticsExportTitle" xml:space="preserve"><value>Export diagnostic report?</value></data>
   <data name="Diagnostics_Description" xml:space="preserve"><value>Create an allow-listed local report to help investigate compatibility and runtime failures.</value></data>
   <data name="Diagnostics_Disclosure" xml:space="preserve"><value>The schema 2 report contains allow-listed environment, runtime, and compatibility summaries: Codex version, typed security result, active presentation contract, match state, and per-capability reasons. It excludes media paths or names, package identity, publisher, process/session/port details, page titles or URLs, DOM or selectors, chat/settings content, raw exceptions, CDP details, and stable identifiers.</value></data>
   <data name="Diagnostics_Export" xml:space="preserve"><value>Export diagnostic report</value></data>
+  <data name="Action_ChooseSaveLocation" xml:space="preserve"><value>Choose save location</value></data>
   <data name="Diagnostics_SaveTitle" xml:space="preserve"><value>Save diagnostic report</value></data>
   <data name="Diagnostics_CompleteTitle" xml:space="preserve"><value>Diagnostic report saved</value></data>
   <data name="Diagnostics_CompleteMessage" xml:space="preserve"><value>The allow-listed local report was saved to the location you selected.</value></data>

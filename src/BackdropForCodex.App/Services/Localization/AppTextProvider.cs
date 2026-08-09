@@ -8,7 +8,7 @@ public interface IAppTextProvider
     string GetString(string key);
 }
 
-public static class AppTextProviderExtensions
+internal static class AppTextProviderExtensions
 {
     public static string GetStringOrFallback(
         this IAppTextProvider text,
