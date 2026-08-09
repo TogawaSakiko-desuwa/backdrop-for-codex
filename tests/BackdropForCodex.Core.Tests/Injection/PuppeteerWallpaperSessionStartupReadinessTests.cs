@@ -117,7 +117,6 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
                 new Version(26, 721, 4000, 0));
             var options = new WallpaperInjectionOptions(
                 generation: 1,
-                source: new Uri("http://127.0.0.1:9/wallpaper.png"),
                 localMediaPath: mediaPath,
                 expectedContentLength: new FileInfo(mediaPath).Length,
                 WallpaperMediaKind.Image);
@@ -323,7 +322,6 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
                 new Version(26, 721, 3996, 0));
             var knownOptions = new WallpaperInjectionOptions(
                 generation: 1,
-                source: new Uri("http://127.0.0.1:9/known-wallpaper.png"),
                 localMediaPath: mediaPath,
                 expectedContentLength: new FileInfo(mediaPath).Length,
                 WallpaperMediaKind.Image);
@@ -339,7 +337,6 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
                 new Version(999, 4, 5, 6));
             var futureOptions = new WallpaperInjectionOptions(
                 generation: 2,
-                source: new Uri("http://127.0.0.1:9/future-wallpaper.png"),
                 localMediaPath: mediaPath,
                 expectedContentLength: new FileInfo(mediaPath).Length,
                 WallpaperMediaKind.Image);
@@ -544,7 +541,6 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
             var endpoint = await WaitForEndpointAsync(port, pagePath, TimeSpan.FromSeconds(8));
             var options = new WallpaperInjectionOptions(
                 generation: 1,
-                source: new Uri("http://127.0.0.1:9/wallpaper.png"),
                 localMediaPath: mediaPath,
                 expectedContentLength: new FileInfo(mediaPath).Length,
                 WallpaperMediaKind.Image);
@@ -1050,7 +1046,6 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
 
             var options = new WallpaperInjectionOptions(
                 generation: 1,
-                source: new Uri("http://127.0.0.1:9/black-wallpaper.png"),
                 localMediaPath: mediaPath,
                 expectedContentLength: new FileInfo(mediaPath).Length,
                 WallpaperMediaKind.Image,
@@ -1265,8 +1260,8 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
 
             var endpoint = await WaitForEndpointAsync(port, pagePath, TimeSpan.FromSeconds(8));
             var sourceProvider = new LocalFileWallpaperSourceProvider();
-            await using var mediaLease = await sourceProvider.AcquireLeaseAsync(
-                CreateLocalMediaReference(mediaPath));
+            await using var mediaLease = await sourceProvider.AcquireDirectMediaLeaseAsync(
+                    CreateLocalMediaReference(mediaPath));
             await using var session = new PuppeteerWallpaperSession();
             var glass = new GlassEffectOptions(
                 opacity: 0.78,
@@ -1274,7 +1269,6 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
                 saturation: 1.2);
             var options = new WallpaperInjectionOptions(
                 generation: 1,
-                source: CreateFileUri(mediaLease.ResolvedPath),
                 localMediaPath: mediaLease.ResolvedPath,
                 expectedContentLength: mediaLease.Metadata.ContentLength,
                 WallpaperMediaKind.Image,
@@ -1330,11 +1324,10 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
             Assert.Equal("none", homeSuggestions.UnrelatedBackdropFilter);
             Assert.Equal("none", homeSuggestions.ListBackdropFilter);
 
-            await using var replacementMediaLease = await sourceProvider.AcquireLeaseAsync(
-                CreateLocalMediaReference(replacementMediaPath));
+            await using var replacementMediaLease = await sourceProvider.AcquireDirectMediaLeaseAsync(
+                    CreateLocalMediaReference(replacementMediaPath));
             var replacementOptions = new WallpaperInjectionOptions(
                 generation: 2,
-                source: CreateFileUri(replacementMediaLease.ResolvedPath),
                 localMediaPath: replacementMediaLease.ResolvedPath,
                 expectedContentLength: replacementMediaLease.Metadata.ContentLength,
                 WallpaperMediaKind.Image,
@@ -1545,12 +1538,6 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
         SourceIdentifier = mediaPath,
         LastKnownKind = MediaKind.Image,
     };
-
-    private static Uri CreateFileUri(string mediaPath) =>
-        new UriBuilder(Uri.UriSchemeFile, string.Empty)
-        {
-            Path = mediaPath,
-        }.Uri;
 
     private static string FindEdge()
     {

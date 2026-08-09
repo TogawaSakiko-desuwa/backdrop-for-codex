@@ -79,3 +79,59 @@ public sealed class WallpaperSourceProviderRegistry : IWallpaperSourceProviderRe
             ? provider
             : throw new MediaSourceNotSupportedException(sourceKind);
 }
+
+public static class WallpaperSourceProviderRegistryExtensions
+{
+    /// <summary>
+    /// Resolves through the provider registered for the requested source kind. Providers may
+    /// canonicalize their own identifier, but cannot substitute a different media ID or source
+    /// namespace.
+    /// </summary>
+    public static async ValueTask<WallpaperSourceResolution> ResolveRequiredAsync(
+        this IWallpaperSourceProviderRegistry registry,
+        MediaReference reference,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(registry);
+        ArgumentNullException.ThrowIfNull(reference);
+
+        var requested = reference.Snapshot();
+        var provider = registry.GetRequired(requested.SourceKind);
+        if (provider.SourceKind != requested.SourceKind)
+        {
+            throw new WallpaperSourceCapabilityException(
+                "The registered wallpaper provider changed its declared source kind.");
+        }
+
+        var resolution = await provider
+            .ResolveAsync(requested, cancellationToken)
+            .ConfigureAwait(false);
+        if (resolution is null ||
+            resolution.CanonicalReference.MediaId != requested.MediaId ||
+            resolution.CanonicalReference.SourceKind != requested.SourceKind)
+        {
+            throw new WallpaperSourceCapabilityException(
+                "The wallpaper provider resolved a different source than the one requested.");
+        }
+
+        return resolution;
+    }
+
+    public static IDirectMediaSourceProvider GetRequiredDirectMediaProvider(
+        this IWallpaperSourceProviderRegistry registry,
+        WallpaperSourceResolution resolution)
+    {
+        ArgumentNullException.ThrowIfNull(registry);
+        ArgumentNullException.ThrowIfNull(resolution);
+        if (resolution.Descriptor.DeliveryKind != WallpaperDeliveryKind.DirectMedia)
+        {
+            throw new WallpaperSourceCapabilityException(
+                "The resolved wallpaper source is not direct media.");
+        }
+
+        var provider = registry.GetRequired(resolution.Descriptor.SourceKind);
+        return provider as IDirectMediaSourceProvider ??
+            throw new WallpaperSourceCapabilityException(
+                "The registered provider cannot acquire its declared direct media source.");
+    }
+}

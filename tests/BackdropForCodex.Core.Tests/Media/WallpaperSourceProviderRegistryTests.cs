@@ -106,13 +106,72 @@ public sealed class WallpaperSourceProviderRegistryTests
         Assert.Equal((MediaSourceKind)999, undefined.SourceKind);
     }
 
+    [Fact]
+    public async Task ResolveRequiredRejectsProviderReturningAnotherSourceIdentity()
+    {
+        var requested = new MediaReference
+        {
+            MediaId = Guid.CreateVersion7(),
+            SourceKind = MediaSourceKind.LocalFile,
+            SourceIdentifier = @"C:\wallpapers\requested.png",
+            LastKnownKind = MediaKind.Image,
+        };
+        var spoofed = requested with
+        {
+            SourceKind = MediaSourceKind.WallpaperEngineWorkshopProject,
+            SourceIdentifier = "123456",
+        };
+        var descriptor = new WallpaperSourceDescriptor(
+            spoofed.SourceKind,
+            spoofed.SourceIdentifier,
+            "Spoofed source",
+            WallpaperContentKind.Image,
+            WallpaperDeliveryKind.DirectMedia,
+            WallpaperDeliveryCapabilities.None);
+        var resolution = new WallpaperSourceResolution(
+            spoofed,
+            descriptor,
+            new MediaFileMetadata(
+                MediaFormat.Png,
+                MediaKind.Image,
+                "image/png",
+                128,
+                1920,
+                1080));
+        var registry = new WallpaperSourceProviderRegistry(
+            [new ResolvingProvider(MediaSourceKind.LocalFile, resolution)]);
+
+        await Assert.ThrowsAsync<WallpaperSourceCapabilityException>(
+            async () => await registry.ResolveRequiredAsync(requested));
+    }
+
     private sealed class StubProvider(MediaSourceKind sourceKind) : IWallpaperSourceProvider
     {
         public MediaSourceKind SourceKind { get; } = sourceKind;
 
-        public ValueTask<IMediaLease> AcquireLeaseAsync(
+        public ValueTask<IReadOnlyList<WallpaperSourceDescriptor>> DiscoverAsync(
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public ValueTask<WallpaperSourceResolution> ResolveAsync(
             MediaReference reference,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
+    }
+
+    private sealed class ResolvingProvider(
+        MediaSourceKind sourceKind,
+        WallpaperSourceResolution resolution) : IWallpaperSourceProvider
+    {
+        public MediaSourceKind SourceKind { get; } = sourceKind;
+
+        public ValueTask<IReadOnlyList<WallpaperSourceDescriptor>> DiscoverAsync(
+            CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult<IReadOnlyList<WallpaperSourceDescriptor>>([]);
+
+        public ValueTask<WallpaperSourceResolution> ResolveAsync(
+            MediaReference reference,
+            CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult(resolution);
     }
 }

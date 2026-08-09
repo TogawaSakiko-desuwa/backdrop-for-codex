@@ -5,6 +5,7 @@ using System.Windows;
 using BackdropForCodex.App.Services.Diagnostics;
 using BackdropForCodex.App.Services.Errors;
 using BackdropForCodex.App.Services.Localization;
+using BackdropForCodex.App.Services.Media;
 using BackdropForCodex.App.Services.Preferences;
 using BackdropForCodex.App.Services.Wallpaper;
 using BackdropForCodex.App.ViewModels;
@@ -68,12 +69,15 @@ public partial class App : System.Windows.Application
             var text = new AppTextProvider();
             _errorMapper = new UserFacingErrorMapper(text);
             _preferencesStore = AppPreferencesStore.CreateForCurrentUser();
-            _wallpaperService = WallpaperApplicationService.CreateDefault(settingsPath);
+            _wallpaperService = WallpaperApplicationService.CreateDefault(
+                settingsPath,
+                AppWallpaperSources.Registry);
             var viewModel = new MainWindowViewModel(
                 _wallpaperService,
                 _preferencesStore,
                 _errorMapper,
-                text);
+                text,
+                AppWallpaperSources.Preview);
             _mainWindow = new MainWindow(
                 viewModel,
                 text,

@@ -33,7 +33,7 @@ internal sealed class ActivationAttemptContext
 
     public VerifiedCodexIdentity? Identity { get; private set; }
 
-    public IMediaLease? PendingLease { get; private set; }
+    public IDirectMediaLease? PendingLease { get; private set; }
 
     public bool RuntimeMutationStarted { get; private set; }
 
@@ -62,7 +62,7 @@ internal sealed class ActivationAttemptContext
         throw new InvalidOperationException(
             "The activation attempt has no verified Codex identity.");
 
-    public void AcceptPendingLease(IMediaLease lease)
+    public void AcceptPendingLease(IDirectMediaLease lease)
     {
         ArgumentNullException.ThrowIfNull(lease);
         if (PendingLease is not null || PlaybackLeasePublished)
@@ -74,7 +74,7 @@ internal sealed class ActivationAttemptContext
         PendingLease = lease;
     }
 
-    public IMediaLease RequirePendingLease() =>
+    public IDirectMediaLease RequirePendingLease() =>
         PendingLease ??
         throw new InvalidOperationException("No validated media lease is available.");
 

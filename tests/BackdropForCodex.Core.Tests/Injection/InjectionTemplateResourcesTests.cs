@@ -84,14 +84,11 @@ public sealed partial class InjectionTemplateResourcesTests
     }
 
     [Fact]
-    public void BuildInstall_ConsumesTokensWithoutLeakingSourceOrLocalPath()
+    public void BuildInstall_ConsumesTokensWithoutLeakingLocalPath()
     {
-        var source = new Uri(
-            "https://127.0.0.1:49152/media/template-resource-secret.jpg?token=private");
         const string LocalPath = @"C:\Users\Private\template-resource-secret.jpg";
         var options = new WallpaperInjectionOptions(
             9,
-            source,
             LocalPath,
             321,
             WallpaperMediaKind.Image);
@@ -101,7 +98,6 @@ public sealed partial class InjectionTemplateResourcesTests
         Assert.DoesNotContain(InjectionInstallScriptModule.PayloadToken, script, StringComparison.Ordinal);
         Assert.DoesNotContain("__BACKDROP_FOR_CODEX_", script, StringComparison.Ordinal);
         Assert.DoesNotContain("__BFC_", script, StringComparison.Ordinal);
-        Assert.DoesNotContain(source.AbsoluteUri, script, StringComparison.Ordinal);
         Assert.DoesNotContain(LocalPath, script, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("localMediaPath", script, StringComparison.Ordinal);
     }
@@ -112,7 +108,6 @@ public sealed partial class InjectionTemplateResourcesTests
         const string StyleSheet = "body::before { content: `literal ${notCode}`; }\u2028/* line separator */";
         var options = new WallpaperInjectionOptions(
             9,
-            new Uri("https://127.0.0.1:49152/media/wallpaper"),
             @"C:\Wallpapers\wallpaper.png",
             321,
             WallpaperMediaKind.Image);
@@ -142,7 +137,6 @@ public sealed partial class InjectionTemplateResourcesTests
             CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("fr-FR");
             var options = new WallpaperInjectionOptions(
                 1,
-                new Uri("https://127.0.0.1:49152/media/wallpaper"),
                 @"C:\Wallpapers\wallpaper.png",
                 1234,
                 WallpaperMediaKind.Image,

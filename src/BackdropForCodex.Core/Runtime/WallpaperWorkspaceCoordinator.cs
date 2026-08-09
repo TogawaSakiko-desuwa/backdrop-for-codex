@@ -19,7 +19,7 @@ public sealed class WallpaperWorkspaceCoordinator : IAsyncDisposable
 {
     private readonly ISettingsRepository _settingsRepository;
     private readonly IWallpaperRuntime _runtime;
-    private readonly IWallpaperSourceProvider _preflightProvider;
+    private readonly IWallpaperSourceProviderRegistry _sourceRegistry;
     private readonly bool _ownsSettingsRepository;
     private readonly bool _ownsRuntime;
     private readonly object _mailboxLock = new();
@@ -39,21 +39,15 @@ public sealed class WallpaperWorkspaceCoordinator : IAsyncDisposable
     public WallpaperWorkspaceCoordinator(
         ISettingsRepository settingsRepository,
         IWallpaperRuntime runtime,
-        IWallpaperSourceProvider preflightProvider,
+        IWallpaperSourceProviderRegistry sourceRegistry,
         bool ownsSettingsRepository = true,
         bool ownsRuntime = true)
     {
         _settingsRepository = settingsRepository ??
             throw new ArgumentNullException(nameof(settingsRepository));
         _runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
-        _preflightProvider = preflightProvider ??
-            throw new ArgumentNullException(nameof(preflightProvider));
-        if (_preflightProvider.SourceKind != MediaSourceKind.LocalFile)
-        {
-            throw new ArgumentException(
-                "The 1.4 workspace requires the directly registered LocalFile provider.",
-                nameof(preflightProvider));
-        }
+        _sourceRegistry = sourceRegistry ??
+            throw new ArgumentNullException(nameof(sourceRegistry));
 
         _ownsSettingsRepository = ownsSettingsRepository;
         _ownsRuntime = ownsRuntime;
@@ -919,24 +913,26 @@ public sealed class WallpaperWorkspaceCoordinator : IAsyncDisposable
         var media = snapshot.FindMedia(mediaId) ??
             throw new SettingsValidationException(
                 ["The Global profile media is missing from MediaCatalog."]);
-        if (media.SourceKind != MediaSourceKind.LocalFile)
+        var resolution = await _sourceRegistry
+            .ResolveRequiredAsync(media, cancellationToken)
+            .ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        var metadata = resolution.Descriptor.DeliveryKind switch
         {
-            throw new MediaSourceNotSupportedException(media.SourceKind);
-        }
+            WallpaperDeliveryKind.DirectMedia =>
+                RequireDirectMediaMetadata(_sourceRegistry, resolution),
+            WallpaperDeliveryKind.WallpaperEngineWindow =>
+                throw new WallpaperRendererUnavailableException(resolution.Descriptor),
+            WallpaperDeliveryKind.Unsupported =>
+                throw new WallpaperContentNotSupportedException(resolution.Descriptor),
+            _ => throw new WallpaperSourceCapabilityException(
+                "The wallpaper source declared an unknown delivery path."),
+        };
 
-        var resolved = await _preflightProvider
-            .ResolveAsync(media, cancellationToken)
-            .ConfigureAwait(false);
-        cancellationToken.ThrowIfCancellationRequested();
-        var validation = await _preflightProvider
-            .ValidateAsync(resolved, cancellationToken)
-            .ConfigureAwait(false);
-        cancellationToken.ThrowIfCancellationRequested();
-
-        var canonicalMedia = validation.Reference with
+        var canonicalMedia = resolution.CanonicalReference with
         {
             MediaId = media.MediaId,
-            LastKnownKind = validation.Metadata.Kind,
+            LastKnownKind = metadata.Kind,
         };
         var catalog = snapshot.MediaCatalog
             .Select(item => item.MediaId == mediaId ? canonicalMedia : item)
@@ -949,10 +945,12 @@ public sealed class WallpaperWorkspaceCoordinator : IAsyncDisposable
         }).CreateSnapshot();
     }
 
-    private static Guid[] PromoteRecentMedia(SettingsV2 settings, Guid mediaId)
+    private Guid[] PromoteRecentMedia(SettingsV2 settings, Guid mediaId)
     {
         var hiddenIds = settings.RecentMediaIds
-            .Where(id => settings.FindMedia(id)?.SourceKind != MediaSourceKind.LocalFile)
+            .Where(
+                id => settings.FindMedia(id) is not { } media ||
+                    !_sourceRegistry.TryGet(media.SourceKind, out _))
             .ToArray();
         var hiddenSet = hiddenIds.ToHashSet();
         var localIds = new[] { mediaId }
@@ -983,6 +981,16 @@ public sealed class WallpaperWorkspaceCoordinator : IAsyncDisposable
         }
 
         return result.Take(SettingsV2.MaximumRecentMediaIds).ToArray();
+    }
+
+    private static MediaFileMetadata RequireDirectMediaMetadata(
+        IWallpaperSourceProviderRegistry sourceRegistry,
+        WallpaperSourceResolution resolution)
+    {
+        _ = sourceRegistry.GetRequiredDirectMediaProvider(resolution);
+        return resolution.DirectMediaMetadata ??
+            throw new WallpaperSourceCapabilityException(
+                "A direct wallpaper source resolution has no validated metadata.");
     }
 
     private Task<SettingsV2> MutateRecentMediaAsync(

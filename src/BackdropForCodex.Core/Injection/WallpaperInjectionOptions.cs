@@ -15,6 +15,9 @@ public enum WallpaperObjectFit
     Fill,
 }
 
+/// <summary>
+/// Validated tint and backdrop-filter values applied to supported Codex glass surfaces.
+/// </summary>
 public sealed record GlassEffectOptions
 {
     public GlassEffectOptions(
@@ -65,6 +68,9 @@ public sealed record GlassEffectOptions
     public double Saturation { get; }
 }
 
+/// <summary>
+/// Validated viewport focus and theme-specific overlay values used to compose the wallpaper.
+/// </summary>
 public sealed record WallpaperCompositionOptions
 {
     public const double MaximumOverlayOpacity = 0.60;
@@ -115,11 +121,15 @@ public sealed record WallpaperCompositionOptions
     }
 }
 
+/// <summary>
+/// Immutable injection inputs whose path shapes, enum values, and numeric ranges are
+/// validated for one generation. Media existence, content, length, and file identity are
+/// established separately by the caller's media lease.
+/// </summary>
 public sealed record WallpaperInjectionOptions
 {
     public WallpaperInjectionOptions(
         long generation,
-        Uri source,
         string localMediaPath,
         long expectedContentLength,
         WallpaperMediaKind mediaKind,
@@ -128,7 +138,6 @@ public sealed record WallpaperInjectionOptions
         GlassEffectOptions? glass = null)
         : this(
             generation,
-            source,
             localMediaPath,
             expectedContentLength,
             mediaKind,
@@ -141,7 +150,6 @@ public sealed record WallpaperInjectionOptions
 
     public WallpaperInjectionOptions(
         long generation,
-        Uri source,
         string localMediaPath,
         long expectedContentLength,
         WallpaperMediaKind mediaKind,
@@ -153,14 +161,6 @@ public sealed record WallpaperInjectionOptions
         if (generation <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(generation), "Generation must be positive.");
-        }
-
-        ArgumentNullException.ThrowIfNull(source);
-        if (!source.IsAbsoluteUri || !IsAllowedSourceScheme(source.Scheme))
-        {
-            throw new ArgumentException(
-                "Wallpaper source must use an absolute file, http, or https URI.",
-                nameof(source));
         }
 
         ArgumentException.ThrowIfNullOrWhiteSpace(localMediaPath);
@@ -196,7 +196,6 @@ public sealed record WallpaperInjectionOptions
         }
 
         Generation = generation;
-        Source = source;
         LocalMediaPath = localMediaPath;
         ExpectedContentLength = expectedContentLength;
         MediaKind = mediaKind;
@@ -207,8 +206,6 @@ public sealed record WallpaperInjectionOptions
     }
 
     public long Generation { get; }
-
-    public Uri Source { get; }
 
     public string LocalMediaPath { get; }
 
@@ -224,11 +221,12 @@ public sealed record WallpaperInjectionOptions
 
     public WallpaperCompositionOptions Composition { get; }
 
+    // Record ToString delegates here. Local paths can contain user identifiers, so diagnostics
+    // retain only safe configuration fields.
     private bool PrintMembers(StringBuilder builder)
     {
         builder.Append("Generation = ");
         builder.Append(Generation);
-        builder.Append(", Source = <redacted>");
         builder.Append(", LocalMediaPath = <redacted>");
         builder.Append(", ExpectedContentLength = ");
         builder.Append(ExpectedContentLength);
@@ -245,8 +243,4 @@ public sealed record WallpaperInjectionOptions
         return true;
     }
 
-    private static bool IsAllowedSourceScheme(string scheme) =>
-        string.Equals(scheme, Uri.UriSchemeFile, StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase);
 }

@@ -10,7 +10,7 @@ namespace BackdropForCodex.Core.Runtime;
 /// </summary>
 public interface IPlaybackPool : IAsyncDisposable
 {
-    IMediaLease? ActiveLease { get; }
+    IDirectMediaLease? ActiveLease { get; }
 
     /// <summary>
     /// Identifies the operation that owns the active slot.
@@ -23,7 +23,7 @@ public interface IPlaybackPool : IAsyncDisposable
     /// the prior lease leaves the new lease active and pool-owned.
     /// </summary>
     ValueTask ActivateAsync(
-        IMediaLease lease,
+        IDirectMediaLease lease,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -37,7 +37,7 @@ public interface IPlaybackPool : IAsyncDisposable
     /// the same ownership and replacement-failure semantics as <see cref="ActivateAsync"/>.
     /// </summary>
     ValueTask ActivateOwnedAsync(
-        IMediaLease lease,
+        IDirectMediaLease lease,
         PlaybackOwnershipToken ownership,
         CancellationToken cancellationToken = default);
 
@@ -75,13 +75,13 @@ public sealed class SingleSlotPlaybackPool : IPlaybackPool
     private PlaybackSlot? _activeSlot;
     private int _disposed;
 
-    public IMediaLease? ActiveLease => Volatile.Read(ref _activeSlot)?.Lease;
+    public IDirectMediaLease? ActiveLease => Volatile.Read(ref _activeSlot)?.Lease;
 
     public PlaybackOwnershipToken? ActiveOwnership =>
         Volatile.Read(ref _activeSlot)?.Ownership;
 
     public ValueTask ActivateAsync(
-        IMediaLease lease,
+        IDirectMediaLease lease,
         CancellationToken cancellationToken = default) =>
         ActivateOwnedAsync(
             lease,
@@ -89,7 +89,7 @@ public sealed class SingleSlotPlaybackPool : IPlaybackPool
             cancellationToken);
 
     public async ValueTask ActivateOwnedAsync(
-        IMediaLease lease,
+        IDirectMediaLease lease,
         PlaybackOwnershipToken ownership,
         CancellationToken cancellationToken = default)
     {
@@ -191,5 +191,5 @@ public sealed class SingleSlotPlaybackPool : IPlaybackPool
 
     private sealed record PlaybackSlot(
         PlaybackOwnershipToken Ownership,
-        IMediaLease Lease);
+        IDirectMediaLease Lease);
 }

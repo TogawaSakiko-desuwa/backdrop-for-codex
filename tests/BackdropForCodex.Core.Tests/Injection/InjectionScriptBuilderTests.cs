@@ -80,28 +80,22 @@ public sealed class InjectionScriptBuilderTests
     }
 
     [Fact]
-    public void BuildInstall_DoesNotSerializeSourceOrLocalPath()
+    public void BuildInstall_DoesNotSerializeLocalPath()
     {
-        var source = new Uri(
-            "https://127.0.0.1:49152/media/secret-source-do-not-serialize.jpg");
         const string LocalPath = @"C:\Wallpapers\secret-path-do-not-serialize.jpg";
         var options = new WallpaperInjectionOptions(
             1,
-            source,
             LocalPath,
             1234,
             WallpaperMediaKind.Image);
 
         var script = InjectionScriptBuilder.BuildInstall(options);
 
-        Assert.Equal(source, options.Source);
         Assert.Equal(LocalPath, options.LocalMediaPath);
-        Assert.DoesNotContain(source.AbsoluteUri, script, StringComparison.Ordinal);
         Assert.DoesNotContain(LocalPath, script, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("cfg.source", script, StringComparison.Ordinal);
 
         var activate = InjectionScriptBuilder.BuildActivateMedia(options.Generation);
-        Assert.DoesNotContain(source.AbsoluteUri, activate, StringComparison.Ordinal);
         Assert.DoesNotContain(LocalPath, activate, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -706,18 +700,6 @@ public sealed class InjectionScriptBuilderTests
         Assert.Throws<ArgumentOutOfRangeException>(() => InjectionScriptBuilder.BuildCleanup(generation));
         Assert.Throws<ArgumentOutOfRangeException>(() => new WallpaperInjectionOptions(
             generation,
-            new Uri("file:///C:/wallpaper.jpg"),
-            @"C:\wallpaper.jpg",
-            1234,
-            WallpaperMediaKind.Image));
-    }
-
-    [Fact]
-    public void Options_RejectJavascriptSource()
-    {
-        Assert.Throws<ArgumentException>(() => new WallpaperInjectionOptions(
-            1,
-            new Uri("javascript:alert(1)"),
             @"C:\wallpaper.jpg",
             1234,
             WallpaperMediaKind.Image));
@@ -728,7 +710,6 @@ public sealed class InjectionScriptBuilderTests
     {
         Assert.Throws<ArgumentException>(() => new WallpaperInjectionOptions(
             1,
-            new Uri("file:///C:/wallpaper.jpg"),
             @"wallpaper.jpg",
             1234,
             WallpaperMediaKind.Image));
@@ -741,7 +722,6 @@ public sealed class InjectionScriptBuilderTests
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new WallpaperInjectionOptions(
             1,
-            new Uri("file:///C:/wallpaper.jpg"),
             @"C:\wallpaper.jpg",
             expectedContentLength,
             WallpaperMediaKind.Image));
@@ -760,7 +740,6 @@ public sealed class InjectionScriptBuilderTests
         WallpaperCompositionOptions? composition = null) =>
         new(
             generation,
-            new Uri("https://127.0.0.1:49152/media/wallpaper"),
             @"C:\Wallpapers\wallpaper.png",
             1234,
             mediaKind,

@@ -174,7 +174,7 @@ public sealed class PlaybackPoolTests
         Assert.Null(pool.ActiveLease);
     }
 
-    internal sealed class FakeLease(string name, List<string> events) : IMediaLease
+    internal sealed class FakeLease(string name, List<string> events) : IDirectMediaLease
     {
         public int DisposeCount { get; private set; }
 
@@ -201,7 +201,7 @@ public sealed class PlaybackPoolTests
         }
     }
 
-    private sealed class BlockingDisposeLease(string name) : IMediaLease
+    private sealed class BlockingDisposeLease(string name) : IDirectMediaLease
     {
         public TaskCompletionSource DisposeStarted { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);

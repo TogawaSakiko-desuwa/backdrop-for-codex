@@ -19,7 +19,11 @@ public interface ISafeMediaPreviewLease : IDisposable, IAsyncDisposable
 
 public interface ISafeMediaPreviewService
 {
+    ISafeMediaPreviewLease Acquire(MediaReference reference);
+
     ISafeMediaPreviewLease Acquire(string mediaPath);
+
+    bool IsAvailable(MediaReference reference);
 
     bool IsAvailable(string mediaPath);
 }
@@ -31,37 +35,35 @@ public interface ISafeMediaPreviewService
 /// </summary>
 public sealed class SafeMediaPreviewService : ISafeMediaPreviewService
 {
-    private readonly IWallpaperSourceProvider _sourceProvider;
+    private readonly IWallpaperSourceProviderRegistry _sourceRegistry;
 
-    public SafeMediaPreviewService(IWallpaperSourceProvider? sourceProvider = null)
+    public SafeMediaPreviewService(IWallpaperSourceProviderRegistry sourceRegistry)
     {
-        _sourceProvider = sourceProvider ?? new LocalFileWallpaperSourceProvider();
-        if (_sourceProvider.SourceKind != MediaSourceKind.LocalFile)
-        {
-            throw new ArgumentException(
-                "The preview service requires a local-file source provider.",
-                nameof(sourceProvider));
-        }
+        _sourceRegistry = sourceRegistry ??
+            throw new ArgumentNullException(nameof(sourceRegistry));
     }
 
-    public static SafeMediaPreviewService Shared { get; } = new();
+    public IWallpaperSourceProviderRegistry SourceRegistry => _sourceRegistry;
 
     public ISafeMediaPreviewLease Acquire(string mediaPath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(mediaPath);
-        var reference = new MediaReference
-        {
-            MediaId = Guid.CreateVersion7(),
-            SourceKind = MediaSourceKind.LocalFile,
-            SourceIdentifier = mediaPath,
-            LastKnownKind = MediaKind.None,
-        };
-        var lease = _sourceProvider
-            .AcquireLeaseAsync(reference)
-            .AsTask()
+        return Acquire(
+            new MediaReference
+            {
+                MediaId = Guid.CreateVersion7(),
+                SourceKind = MediaSourceKind.LocalFile,
+                SourceIdentifier = mediaPath,
+                LastKnownKind = MediaKind.None,
+            });
+    }
+
+    public ISafeMediaPreviewLease Acquire(MediaReference reference)
+    {
+        ArgumentNullException.ThrowIfNull(reference);
+        return AcquireAsync(reference)
             .GetAwaiter()
             .GetResult();
-        return new SafeMediaPreviewLease(lease);
     }
 
     public bool IsAvailable(string mediaPath)
@@ -74,6 +76,60 @@ public sealed class SafeMediaPreviewService : ISafeMediaPreviewService
         catch (Exception exception) when (IsExpectedValidationFailure(exception))
         {
             return false;
+        }
+    }
+
+    public bool IsAvailable(MediaReference reference)
+    {
+        try
+        {
+            using var lease = Acquire(reference);
+            return lease.Metadata.Kind is MediaKind.Image or MediaKind.Video;
+        }
+        catch (Exception exception) when (IsExpectedValidationFailure(exception))
+        {
+            return false;
+        }
+    }
+
+    private async Task<ISafeMediaPreviewLease> AcquireAsync(MediaReference reference)
+    {
+        var resolution = await _sourceRegistry
+            .ResolveRequiredAsync(reference)
+            .ConfigureAwait(false);
+        var provider = resolution.Descriptor.DeliveryKind switch
+        {
+            WallpaperDeliveryKind.DirectMedia =>
+                _sourceRegistry.GetRequiredDirectMediaProvider(resolution),
+            WallpaperDeliveryKind.WallpaperEngineWindow =>
+                throw new WallpaperRendererUnavailableException(resolution.Descriptor),
+            WallpaperDeliveryKind.Unsupported =>
+                throw new WallpaperContentNotSupportedException(resolution.Descriptor),
+            _ => throw new WallpaperSourceCapabilityException(
+                "The wallpaper source declared an unknown preview delivery path."),
+        };
+        var lease = await provider
+            .AcquireDirectMediaLeaseAsync(resolution.CanonicalReference)
+            .ConfigureAwait(false);
+        try
+        {
+            var acquiredResolution = new WallpaperSourceResolution(
+                lease.Reference,
+                resolution.Descriptor,
+                lease.Metadata);
+            if (acquiredResolution.CanonicalReference.MediaId !=
+                resolution.CanonicalReference.MediaId)
+            {
+                throw new WallpaperSourceCapabilityException(
+                    "The preview provider acquired a different source identity.");
+            }
+
+            return new SafeMediaPreviewLease(lease);
+        }
+        catch
+        {
+            await lease.DisposeAsync().ConfigureAwait(false);
+            throw;
         }
     }
 
@@ -110,15 +166,17 @@ public sealed class SafeMediaPreviewService : ISafeMediaPreviewService
         MediaValidationException or
         MediaReferenceValidationException or
         MediaSourceNotSupportedException or
+        WallpaperSourceCapabilityException or
+        WallpaperRendererUnavailableException or
         IOException or
         UnauthorizedAccessException or
         NotSupportedException or
         PlatformNotSupportedException or
         ArgumentException;
 
-    private sealed class SafeMediaPreviewLease(IMediaLease lease) : ISafeMediaPreviewLease
+    private sealed class SafeMediaPreviewLease(IDirectMediaLease lease) : ISafeMediaPreviewLease
     {
-        private IMediaLease? _lease = lease ?? throw new ArgumentNullException(nameof(lease));
+        private IDirectMediaLease? _lease = lease ?? throw new ArgumentNullException(nameof(lease));
 
         public MediaFileMetadata Metadata => GetLease().Metadata;
 
@@ -174,7 +232,7 @@ public sealed class SafeMediaPreviewService : ISafeMediaPreviewService
             GC.SuppressFinalize(this);
         }
 
-        private IMediaLease GetLease() =>
+        private IDirectMediaLease GetLease() =>
             Volatile.Read(ref _lease) ??
             throw new ObjectDisposedException(nameof(SafeMediaPreviewLease));
 

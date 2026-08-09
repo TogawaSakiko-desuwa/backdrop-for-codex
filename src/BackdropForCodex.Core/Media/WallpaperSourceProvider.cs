@@ -8,7 +8,13 @@ namespace BackdropForCodex.Core.Media;
 
 public sealed record LocalFileIdentity(uint VolumeSerialNumber, ulong FileIndex);
 
-public interface IMediaLease : IAsyncDisposable
+/// <summary>
+/// A caller-owned lifetime token for one validated media object. For path-backed media, the final
+/// path, file identity, and metadata describe the same object retained by the lease's open handle.
+/// The caller must dispose the lease when use ends; its snapshots are not authorization after the
+/// retained resource has been released.
+/// </summary>
+public interface IDirectMediaLease : IAsyncDisposable
 {
     MediaReference Reference { get; }
 
@@ -19,10 +25,11 @@ public interface IMediaLease : IAsyncDisposable
     MediaFileMetadata Metadata { get; }
 }
 
-public sealed record MediaSourceValidation(
-    MediaReference Reference,
-    MediaFileMetadata Metadata);
-
+/// <summary>
+/// Separates durable or advisory source metadata from the caller-owned lease required for runtime
+/// use. Resolving or validating a reference does not transfer ownership and cannot replace a live
+/// <see cref="IDirectMediaLease"/>.
+/// </summary>
 public interface IWallpaperSourceProvider
 {
     MediaSourceKind SourceKind { get; }
@@ -31,55 +38,38 @@ public interface IWallpaperSourceProvider
     /// Discovers already-known sources without scanning arbitrary user directories. Local-file
     /// selection is user-directed, so its provider returns an empty collection.
     /// </summary>
-    ValueTask<IReadOnlyList<MediaReference>> DiscoverAsync(
-        CancellationToken cancellationToken = default)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        return ValueTask.FromResult<IReadOnlyList<MediaReference>>(
-            Array.Empty<MediaReference>());
-    }
+    ValueTask<IReadOnlyList<WallpaperSourceDescriptor>> DiscoverAsync(
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Resolves and normalizes a durable source reference. This is metadata preparation only and is
     /// never an authorization substitute for acquiring a lease.
     /// </summary>
-    ValueTask<MediaReference> ResolveAsync(
+    ValueTask<WallpaperSourceResolution> ResolveAsync(
         MediaReference reference,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(reference);
-        cancellationToken.ThrowIfCancellationRequested();
-        if (reference.SourceKind != SourceKind)
-        {
-            throw new MediaSourceNotSupportedException(reference.SourceKind);
-        }
+        CancellationToken cancellationToken = default);
+}
 
-        return ValueTask.FromResult(reference.Snapshot());
-    }
-
+public interface IDirectMediaSourceProvider : IWallpaperSourceProvider
+{
     /// <summary>
-    /// Performs an advisory validation and releases its handle. Runtime use must still acquire a
-    /// fresh lease, which repeats validation through the pinned handle.
+    /// Acquires and transfers a caller-owned direct-media lease. A path-backed provider must open the
+    /// source first, resolve its final target, and validate identity and metadata through that same
+    /// retained handle so validation does not depend on reopening a mutable path. Ownership
+    /// transfers only on successful completion; the provider releases provisional resources on
+    /// failure or cancellation, and the caller must dispose a successfully returned lease.
     /// </summary>
-    async ValueTask<MediaSourceValidation> ValidateAsync(
-        MediaReference reference,
-        CancellationToken cancellationToken = default)
-    {
-        await using var lease = await AcquireLeaseAsync(reference, cancellationToken)
-            .ConfigureAwait(false);
-        return new MediaSourceValidation(lease.Reference, lease.Metadata);
-    }
-
-    ValueTask<IMediaLease> AcquireLeaseAsync(
+    ValueTask<IDirectMediaLease> AcquireDirectMediaLeaseAsync(
         MediaReference reference,
         CancellationToken cancellationToken = default);
 }
 
 /// <summary>
 /// Opens one read-only local file handle, resolves its final target, validates that target through
-/// the same handle, and keeps it pinned until the returned lease is disposed.
+/// the same handle, and transfers that handle into the returned lease. Failure or cancellation
+/// closes any provisional handle; disposing the lease releases the successful pin.
 /// </summary>
-public sealed class LocalFileWallpaperSourceProvider : IWallpaperSourceProvider
+public sealed class LocalFileWallpaperSourceProvider : IDirectMediaSourceProvider
 {
     private readonly IMediaStreamInspector _inspector;
 
@@ -90,38 +80,46 @@ public sealed class LocalFileWallpaperSourceProvider : IWallpaperSourceProvider
 
     public MediaSourceKind SourceKind => MediaSourceKind.LocalFile;
 
-    public ValueTask<IReadOnlyList<MediaReference>> DiscoverAsync(
+    public ValueTask<IReadOnlyList<WallpaperSourceDescriptor>> DiscoverAsync(
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        return ValueTask.FromResult<IReadOnlyList<MediaReference>>(
-            Array.Empty<MediaReference>());
+        return ValueTask.FromResult<IReadOnlyList<WallpaperSourceDescriptor>>(
+            Array.Empty<WallpaperSourceDescriptor>());
     }
 
-    public ValueTask<MediaReference> ResolveAsync(
+    public async ValueTask<WallpaperSourceResolution> ResolveAsync(
         MediaReference reference,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(reference);
         cancellationToken.ThrowIfCancellationRequested();
-        if (reference.SourceKind != SourceKind)
+        await using var lease = await AcquireDirectMediaLeaseAsync(reference, cancellationToken)
+            .ConfigureAwait(false);
+        var contentKind = lease.Metadata.Kind switch
         {
-            throw new MediaSourceNotSupportedException(reference.SourceKind);
+            MediaKind.Image => WallpaperContentKind.Image,
+            MediaKind.Video => WallpaperContentKind.Video,
+            _ => throw new WallpaperSourceCapabilityException(
+                "The validated local media has no direct delivery contract."),
+        };
+        var displayName = Path.GetFileName(lease.ResolvedPath);
+        if (string.IsNullOrWhiteSpace(displayName))
+        {
+            displayName = "Local media";
         }
 
-        return ValueTask.FromResult(reference.Snapshot());
+        var descriptor = new WallpaperSourceDescriptor(
+            SourceKind,
+            lease.Reference.SourceIdentifier,
+            displayName,
+            contentKind,
+            WallpaperDeliveryKind.DirectMedia,
+            WallpaperDeliveryCapabilities.None);
+        return new WallpaperSourceResolution(lease.Reference, descriptor, lease.Metadata);
     }
 
-    public async ValueTask<MediaSourceValidation> ValidateAsync(
-        MediaReference reference,
-        CancellationToken cancellationToken = default)
-    {
-        await using var lease = await AcquireLeaseAsync(reference, cancellationToken)
-            .ConfigureAwait(false);
-        return new MediaSourceValidation(lease.Reference, lease.Metadata);
-    }
-
-    public async ValueTask<IMediaLease> AcquireLeaseAsync(
+    public async ValueTask<IDirectMediaLease> AcquireDirectMediaLeaseAsync(
         MediaReference reference,
         CancellationToken cancellationToken = default)
     {
@@ -144,7 +142,11 @@ public sealed class LocalFileWallpaperSourceProvider : IWallpaperSourceProvider
                 .ConfigureAwait(false);
 
             var lease = new LocalFileMediaLease(
-                snapshot with { LastKnownKind = metadata.Kind },
+                snapshot with
+                {
+                    SourceIdentifier = resolvedPath,
+                    LastKnownKind = metadata.Kind,
+                },
                 resolvedPath,
                 identity,
                 metadata,
@@ -230,7 +232,7 @@ public sealed class LocalFileWallpaperSourceProvider : IWallpaperSourceProvider
         string resolvedPath,
         LocalFileIdentity fileIdentity,
         MediaFileMetadata metadata,
-        FileStream stream) : IMediaLease
+        FileStream stream) : IDirectMediaLease
     {
         private FileStream? _stream = stream;
 

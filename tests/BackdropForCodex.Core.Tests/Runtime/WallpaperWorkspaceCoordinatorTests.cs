@@ -198,7 +198,6 @@ public sealed class WallpaperWorkspaceCoordinatorTests
                 .ResolveProfile(SemanticRegion.Global)
                 .MediaId);
         Assert.Equal(0, provider.ResolveCount);
-        Assert.Equal(0, provider.ValidateCount);
         var request = Assert.Single(runtime.Requests);
         Assert.True(request.IsOfficial);
     }
@@ -508,7 +507,7 @@ public sealed class WallpaperWorkspaceCoordinatorTests
         var coordinator = new WallpaperWorkspaceCoordinator(
             repository,
             runtime,
-            provider,
+            new WallpaperSourceProviderRegistry([provider]),
             ownsSettingsRepository: false,
             ownsRuntime: false);
         await coordinator.InitializeAsync().WaitAsync(TestTimeout);
@@ -641,23 +640,24 @@ public sealed class WallpaperWorkspaceCoordinatorTests
         }
     }
 
-    private sealed class ControllableSourceProvider : IWallpaperSourceProvider
+    private sealed class ControllableSourceProvider : IDirectMediaSourceProvider
     {
         internal Func<int, MediaReference, CancellationToken, Task>?
             BeforeResolveAsync
         { get; set; }
 
-        internal Func<int, MediaReference, CancellationToken, Task>?
-            BeforeValidateAsync
-        { get; set; }
-
         internal int ResolveCount { get; private set; }
-
-        internal int ValidateCount { get; private set; }
 
         public MediaSourceKind SourceKind => MediaSourceKind.LocalFile;
 
-        public async ValueTask<MediaReference> ResolveAsync(
+        public ValueTask<IReadOnlyList<WallpaperSourceDescriptor>> DiscoverAsync(
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return ValueTask.FromResult<IReadOnlyList<WallpaperSourceDescriptor>>([]);
+        }
+
+        public async ValueTask<WallpaperSourceResolution> ResolveAsync(
             MediaReference reference,
             CancellationToken cancellationToken = default)
         {
@@ -665,21 +665,6 @@ public sealed class WallpaperWorkspaceCoordinatorTests
             if (BeforeResolveAsync is { } beforeResolve)
             {
                 await beforeResolve(call, reference, cancellationToken)
-                    .ConfigureAwait(false);
-            }
-
-            cancellationToken.ThrowIfCancellationRequested();
-            return reference.Snapshot();
-        }
-
-        public async ValueTask<MediaSourceValidation> ValidateAsync(
-            MediaReference reference,
-            CancellationToken cancellationToken = default)
-        {
-            var call = ++ValidateCount;
-            if (BeforeValidateAsync is { } beforeValidate)
-            {
-                await beforeValidate(call, reference, cancellationToken)
                     .ConfigureAwait(false);
             }
 
@@ -698,10 +683,22 @@ public sealed class WallpaperWorkspaceCoordinatorTests
                     1024,
                     1920,
                     1080);
-            return new MediaSourceValidation(snapshot, metadata);
+            var contentKind = metadata.Kind == MediaKind.Video
+                ? WallpaperContentKind.Video
+                : WallpaperContentKind.Image;
+            return new WallpaperSourceResolution(
+                snapshot,
+                new WallpaperSourceDescriptor(
+                    SourceKind,
+                    snapshot.SourceIdentifier,
+                    "Workspace media",
+                    contentKind,
+                    WallpaperDeliveryKind.DirectMedia,
+                    WallpaperDeliveryCapabilities.None),
+                metadata);
         }
 
-        public ValueTask<IMediaLease> AcquireLeaseAsync(
+        public ValueTask<IDirectMediaLease> AcquireDirectMediaLeaseAsync(
             MediaReference reference,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException(

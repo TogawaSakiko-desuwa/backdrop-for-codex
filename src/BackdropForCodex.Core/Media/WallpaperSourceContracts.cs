@@ -263,6 +263,28 @@ public sealed class WallpaperSourceCapabilityException : InvalidOperationExcepti
     }
 }
 
+public sealed class WallpaperRendererUnavailableException : InvalidOperationException
+{
+    public WallpaperRendererUnavailableException(WallpaperSourceDescriptor descriptor)
+        : base("The required Wallpaper Engine window renderer is not available.")
+    {
+        Descriptor = descriptor ?? throw new ArgumentNullException(nameof(descriptor));
+    }
+
+    public WallpaperSourceDescriptor Descriptor { get; }
+}
+
+public sealed class WallpaperContentNotSupportedException : NotSupportedException
+{
+    public WallpaperContentNotSupportedException(WallpaperSourceDescriptor descriptor)
+        : base($"{descriptor?.ContentKind} wallpaper content is not supported.")
+    {
+        Descriptor = descriptor ?? throw new ArgumentNullException(nameof(descriptor));
+    }
+
+    public WallpaperSourceDescriptor Descriptor { get; }
+}
+
 internal static class WallpaperSourceIdentifier
 {
     public static string Canonicalize(MediaSourceKind sourceKind, string sourceIdentifier) =>

@@ -118,6 +118,69 @@ public sealed class SettingsRepositoryTests
     }
 
     [Fact]
+    public async Task SaveAsyncRoundTripsWorkshopVideoWithoutExtendingSchemaVersionTwo()
+    {
+        var directoryPath = CreateTemporaryDirectory();
+        try
+        {
+            var settingsPath = Path.Combine(directoryPath, "settings.json");
+            using var repository = new SettingsRepository(settingsPath);
+            var media = new MediaReference
+            {
+                MediaId = Guid.CreateVersion7(),
+                SourceKind = MediaSourceKind.WallpaperEngineWorkshopProject,
+                SourceIdentifier = "123456",
+                LastKnownKind = MediaKind.Video,
+            };
+            var defaults = SettingsV2.CreateDefault();
+            var profile = Assert.Single(defaults.Profiles) with
+            {
+                MediaId = media.MediaId,
+            };
+            var settings = defaults with
+            {
+                Profiles = [profile],
+                MediaCatalog = [media],
+                RecentMediaIds = [media.MediaId],
+                AcceptedCdpRisk = true,
+            };
+
+            await repository.SaveAsync(settings);
+            var loaded = Assert.IsType<SettingsLoadResult.Ready>(
+                await repository.LoadAsync()).Settings;
+
+            Assert.Equal(2, loaded.SchemaVersion);
+            var loadedMedia = Assert.Single(loaded.MediaCatalog);
+            Assert.Equal(media.MediaId, loadedMedia.MediaId);
+            Assert.Equal(
+                MediaSourceKind.WallpaperEngineWorkshopProject,
+                loadedMedia.SourceKind);
+            Assert.Equal("123456", loadedMedia.SourceIdentifier);
+            Assert.Equal(MediaKind.Video, loadedMedia.LastKnownKind);
+
+            using var document = JsonDocument.Parse(
+                await File.ReadAllTextAsync(settingsPath));
+            var root = document.RootElement;
+            Assert.Equal(2, root.GetProperty("schemaVersion").GetInt32());
+            var mediaJson = Assert.Single(
+                root.GetProperty("mediaCatalog").EnumerateArray());
+            Assert.Equal(
+                "WallpaperEngineWorkshopProject",
+                mediaJson.GetProperty("sourceKind").GetString());
+            Assert.Equal("123456", mediaJson.GetProperty("sourceIdentifier").GetString());
+            Assert.Equal("Video", mediaJson.GetProperty("lastKnownKind").GetString());
+            Assert.False(mediaJson.TryGetProperty("contentKind", out _));
+            Assert.False(mediaJson.TryGetProperty("deliveryKind", out _));
+            Assert.False(mediaJson.TryGetProperty("deliveryCapabilities", out _));
+            Assert.False(mediaJson.TryGetProperty("launchPath", out _));
+        }
+        finally
+        {
+            DeleteTemporaryDirectory(directoryPath);
+        }
+    }
+
+    [Fact]
     public async Task SaveAsyncRoundTripsANullDeprecatedCompatibilityProfileId()
     {
         var directoryPath = CreateTemporaryDirectory();

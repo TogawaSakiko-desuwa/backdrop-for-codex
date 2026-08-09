@@ -586,7 +586,6 @@ public sealed class PuppeteerWallpaperSessionTests
 
     private static WallpaperInjectionOptions InjectionOptions(long generation = 1) => new(
         generation,
-        source: new Uri("http://127.0.0.1:9/wallpaper.png"),
         localMediaPath: Path.Combine(
             Path.GetPathRoot(Environment.SystemDirectory)!,
             "wallpaper.png"),

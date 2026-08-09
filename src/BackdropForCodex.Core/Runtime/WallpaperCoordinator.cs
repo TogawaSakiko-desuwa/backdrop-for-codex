@@ -185,7 +185,7 @@ public sealed class WallpaperCoordinator :
     private readonly ICodexProcessSnapshotSource _processSource;
     private readonly IApplicationActivationManager _activationManager;
     private readonly ICdpEndpointDiscoveryService _endpointDiscovery;
-    private readonly IWallpaperSourceProvider _mediaSourceProvider;
+    private readonly IWallpaperSourceProviderRegistry _sourceRegistry;
     private readonly IPlaybackPool _playbackPool;
     private readonly IWallpaperInjectionSession _injectionSession;
     private readonly WallpaperInjectionGenerationMonitor _injectionMonitor;
@@ -209,7 +209,7 @@ public sealed class WallpaperCoordinator :
         ICodexProcessSnapshotSource processSource,
         IApplicationActivationManager activationManager,
         ICdpEndpointDiscoveryService endpointDiscovery,
-        IWallpaperSourceProvider mediaSourceProvider,
+        IWallpaperSourceProviderRegistry sourceRegistry,
         IPlaybackPool playbackPool,
         IWallpaperInjectionSession injectionSession,
         WallpaperCoordinatorOptions? options = null)
@@ -218,7 +218,7 @@ public sealed class WallpaperCoordinator :
             processSource,
             activationManager,
             endpointDiscovery,
-            mediaSourceProvider,
+            sourceRegistry,
             playbackPool,
             injectionSession,
             options,
@@ -231,7 +231,7 @@ public sealed class WallpaperCoordinator :
         ICodexProcessSnapshotSource processSource,
         IApplicationActivationManager activationManager,
         ICdpEndpointDiscoveryService endpointDiscovery,
-        IWallpaperSourceProvider mediaSourceProvider,
+        IWallpaperSourceProviderRegistry sourceRegistry,
         IPlaybackPool playbackPool,
         IWallpaperInjectionSession injectionSession,
         WallpaperCoordinatorOptions? options,
@@ -241,8 +241,8 @@ public sealed class WallpaperCoordinator :
         _processSource = processSource ?? throw new ArgumentNullException(nameof(processSource));
         _activationManager = activationManager ?? throw new ArgumentNullException(nameof(activationManager));
         _endpointDiscovery = endpointDiscovery ?? throw new ArgumentNullException(nameof(endpointDiscovery));
-        _mediaSourceProvider = mediaSourceProvider ??
-            throw new ArgumentNullException(nameof(mediaSourceProvider));
+        _sourceRegistry = sourceRegistry ??
+            throw new ArgumentNullException(nameof(sourceRegistry));
         _playbackPool = playbackPool ?? throw new ArgumentNullException(nameof(playbackPool));
         _injectionSession = injectionSession ?? throw new ArgumentNullException(nameof(injectionSession));
         _options = options ?? WallpaperCoordinatorOptions.Default;
@@ -284,8 +284,15 @@ public sealed class WallpaperCoordinator :
     public WallpaperCompatibilitySnapshot Compatibility =>
         _injectionMonitor.Compatibility;
 
-    public static WallpaperCoordinator CreateDefault()
+    public static WallpaperCoordinator CreateDefault() =>
+        CreateDefault(
+            new WallpaperSourceProviderRegistry(
+                [new LocalFileWallpaperSourceProvider()]));
+
+    public static WallpaperCoordinator CreateDefault(
+        IWallpaperSourceProviderRegistry sourceRegistry)
     {
+        ArgumentNullException.ThrowIfNull(sourceRegistry);
         if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000))
         {
             throw new PlatformNotSupportedException("Backdrop for Codex requires Windows 11.");
@@ -305,7 +312,7 @@ public sealed class WallpaperCoordinator :
             processes,
             new WindowsApplicationActivationManager(),
             discovery,
-            new LocalFileWallpaperSourceProvider(),
+            sourceRegistry,
             new SingleSlotPlaybackPool(),
             new PuppeteerWallpaperSession(),
             WallpaperCoordinatorOptions.Default,
@@ -393,14 +400,64 @@ public sealed class WallpaperCoordinator :
             "Validating the Codex package and media file.",
             request.Revision);
 
+        IDirectMediaSourceProvider directMediaProvider;
+        WallpaperSourceResolution resolution;
+        try
+        {
+            resolution = await _sourceRegistry
+                .ResolveRequiredAsync(media, attempt.CallerCancellation)
+                .ConfigureAwait(false);
+            directMediaProvider = resolution.Descriptor.DeliveryKind switch
+            {
+                WallpaperDeliveryKind.DirectMedia =>
+                    _sourceRegistry.GetRequiredDirectMediaProvider(resolution),
+                WallpaperDeliveryKind.WallpaperEngineWindow =>
+                    throw new WallpaperRendererUnavailableException(resolution.Descriptor),
+                WallpaperDeliveryKind.Unsupported =>
+                    throw new WallpaperContentNotSupportedException(resolution.Descriptor),
+                _ => throw new WallpaperSourceCapabilityException(
+                    "The wallpaper source declared an unknown delivery path."),
+            };
+        }
+        catch (OperationCanceledException) when (attempt.CallerCancellation.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            return CompleteMediaPreparationFailure(attempt, exception);
+        }
+
         var (_, security) = LocateVerifiedPackage();
         attempt.SetIdentity(security.Identity!);
         try
         {
-            attempt.AcceptPendingLease(
-                await _mediaSourceProvider
-                    .AcquireLeaseAsync(media, attempt.CallerCancellation)
-                    .ConfigureAwait(false));
+            var lease = await directMediaProvider
+                .AcquireDirectMediaLeaseAsync(
+                    resolution.CanonicalReference,
+                    attempt.CallerCancellation)
+                .ConfigureAwait(false);
+            try
+            {
+                var acquiredResolution = new WallpaperSourceResolution(
+                    lease.Reference,
+                    resolution.Descriptor,
+                    lease.Metadata);
+                if (acquiredResolution.CanonicalReference.MediaId !=
+                    resolution.CanonicalReference.MediaId)
+                {
+                    throw new WallpaperSourceCapabilityException(
+                        "The direct media provider acquired a different source identity.");
+                }
+
+                attempt.AcceptPendingLease(lease);
+            }
+            catch
+            {
+                await lease.DisposeAsync().ConfigureAwait(false);
+                throw;
+            }
+
             return null;
         }
         catch (OperationCanceledException) when (attempt.CallerCancellation.IsCancellationRequested)
@@ -409,26 +466,33 @@ public sealed class WallpaperCoordinator :
         }
         catch (Exception exception)
         {
-            var error = RuntimeError("media-lease-unavailable", exception);
-            var fallbackSurface =
-                attempt.PreviousSurface.Kind == WallpaperRuntimeSurfaceKind.MediaActive
-                    ? attempt.PreviousSurface
-                    : WallpaperRuntimeSurface.Disconnected(error);
-            Volatile.Write(ref _surface, fallbackSurface);
-            Publish(
-                fallbackSurface.Kind == WallpaperRuntimeSurfaceKind.MediaActive
-                    ? (_paused
-                        ? WallpaperRuntimePhase.Paused
-                        : WallpaperRuntimePhase.Active)
-                    : WallpaperRuntimePhase.Idle,
-                "The saved media could not be reacquired; the previous runtime state was preserved.",
-                request.Revision);
-            return RuntimeActivationResult.SavedButNotActivated(
-                request.Revision,
-                fallbackSurface,
-                attempt.PreviousActiveSnapshot,
-                error);
+            return CompleteMediaPreparationFailure(attempt, exception);
         }
+    }
+
+    private RuntimeActivationResult CompleteMediaPreparationFailure(
+        ActivationAttemptContext attempt,
+        Exception exception)
+    {
+        var error = RuntimeError("media-lease-unavailable", exception);
+        var fallbackSurface =
+            attempt.PreviousSurface.Kind == WallpaperRuntimeSurfaceKind.MediaActive
+                ? attempt.PreviousSurface
+                : WallpaperRuntimeSurface.Disconnected(error);
+        Volatile.Write(ref _surface, fallbackSurface);
+        Publish(
+            fallbackSurface.Kind == WallpaperRuntimeSurfaceKind.MediaActive
+                ? (_paused
+                    ? WallpaperRuntimePhase.Paused
+                    : WallpaperRuntimePhase.Active)
+                : WallpaperRuntimePhase.Idle,
+            "The saved media could not be reacquired; the previous runtime state was preserved.",
+            attempt.Request.Revision);
+        return RuntimeActivationResult.SavedButNotActivated(
+            attempt.Request.Revision,
+            fallbackSurface,
+            attempt.PreviousActiveSnapshot,
+            error);
     }
 
     private async Task ValidateOwnedProcessAsync(ActivationAttemptContext attempt)
@@ -573,7 +637,7 @@ public sealed class WallpaperCoordinator :
 
     private async Task<PlaybackOwnershipToken> TransferPlaybackOwnershipAsync(
         ActivationAttemptContext attempt,
-        IMediaLease leaseToActivate)
+        IDirectMediaLease leaseToActivate)
     {
         var ownership = attempt.BeginPlaybackTransfer();
         var transferConfirmed = false;
@@ -1270,13 +1334,9 @@ public sealed class WallpaperCoordinator :
 
     private static WallpaperInjectionOptions CreateInjectionOptions(
         long generation,
-        IMediaLease mediaLease,
+        IDirectMediaLease mediaLease,
         WallpaperProfile profile) => new(
             generation,
-            new UriBuilder(Uri.UriSchemeFile, string.Empty)
-            {
-                Path = mediaLease.ResolvedPath,
-            }.Uri,
             mediaLease.ResolvedPath,
             mediaLease.Metadata.ContentLength,
             mediaLease.Metadata.Kind switch

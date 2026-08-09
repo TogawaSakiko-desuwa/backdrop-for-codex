@@ -6,12 +6,11 @@ namespace BackdropForCodex.Core.Tests.Injection;
 public sealed class WallpaperInjectionOptionsCompatibilityTests
 {
     [Fact]
-    public void LegacyEightParameterConstructor_RemainsAvailableAndUsesDefaultComposition()
+    public void CompositionOptionalConstructorUsesDefaultWithoutRetainingUnusedSource()
     {
-        Type[] legacySignature =
+        Type[] signature =
         [
             typeof(long),
-            typeof(Uri),
             typeof(string),
             typeof(long),
             typeof(WallpaperMediaKind),
@@ -20,7 +19,7 @@ public sealed class WallpaperInjectionOptionsCompatibilityTests
             typeof(GlassEffectOptions),
         ];
 
-        var constructor = typeof(WallpaperInjectionOptions).GetConstructor(legacySignature);
+        var constructor = typeof(WallpaperInjectionOptions).GetConstructor(signature);
 
         Assert.NotNull(constructor);
 
@@ -28,7 +27,6 @@ public sealed class WallpaperInjectionOptionsCompatibilityTests
             constructor.Invoke(
             [
                 7L,
-                new Uri("file:///C:/Wallpapers/legacy.png"),
                 @"C:\Wallpapers\legacy.png",
                 4_096L,
                 WallpaperMediaKind.Image,
@@ -38,5 +36,11 @@ public sealed class WallpaperInjectionOptionsCompatibilityTests
             ]));
 
         Assert.Equal(new WallpaperCompositionOptions(), options.Composition);
+        Assert.DoesNotContain(
+            typeof(WallpaperInjectionOptions).GetConstructors(),
+            candidate => candidate
+                .GetParameters()
+                .Any(parameter => parameter.ParameterType == typeof(Uri)));
+        Assert.Null(typeof(WallpaperInjectionOptions).GetProperty("Source"));
     }
 }

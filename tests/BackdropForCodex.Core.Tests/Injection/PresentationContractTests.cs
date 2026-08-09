@@ -305,7 +305,6 @@ public sealed class PresentationContractTests
                 declared.Advanced));
         var options = new WallpaperInjectionOptions(
             generation: 3,
-            source: new Uri("file:///C:/Wallpapers/wallpaper.png"),
             localMediaPath: @"C:\Wallpapers\wallpaper.png",
             expectedContentLength: 4096,
             WallpaperMediaKind.Image);
@@ -327,7 +326,6 @@ public sealed class PresentationContractTests
             InjectionScriptBuilder.BuildInstall(
                 new WallpaperInjectionOptions(
                     generation: 3,
-                    source: new Uri("file:///C:/Wallpapers/wallpaper.png"),
                     localMediaPath: @"C:\Wallpapers\wallpaper.png",
                     expectedContentLength: 4096,
                     WallpaperMediaKind.Image)));
@@ -351,7 +349,6 @@ public sealed class PresentationContractTests
     {
         var options = new WallpaperInjectionOptions(
             generation: 3,
-            source: new Uri("file:///C:/Wallpapers/wallpaper.png"),
             localMediaPath: @"C:\Wallpapers\wallpaper.png",
             expectedContentLength: 4096,
             WallpaperMediaKind.Image);

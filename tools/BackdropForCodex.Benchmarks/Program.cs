@@ -77,7 +77,9 @@ internal static class Program
         var privateBytesBefore = process.PrivateMemorySize64;
 
         var coldStart = Stopwatch.GetTimestamp();
-        var coldLease = await provider.AcquireLeaseAsync(reference).ConfigureAwait(false);
+        var coldLease = await provider
+            .AcquireDirectMediaLeaseAsync(reference)
+            .ConfigureAwait(false);
         await pool.ActivateAsync(coldLease).ConfigureAwait(false);
         var coldMilliseconds = Stopwatch.GetElapsedTime(coldStart).TotalMilliseconds;
         var metadata = coldLease.Metadata;
@@ -86,7 +88,9 @@ internal static class Program
         for (var index = 0; index < warmDurations.Length; index++)
         {
             var started = Stopwatch.GetTimestamp();
-            var lease = await provider.AcquireLeaseAsync(reference).ConfigureAwait(false);
+            var lease = await provider
+                .AcquireDirectMediaLeaseAsync(reference)
+                .ConfigureAwait(false);
             await pool.ActivateAsync(lease).ConfigureAwait(false);
             warmDurations[index] = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
         }

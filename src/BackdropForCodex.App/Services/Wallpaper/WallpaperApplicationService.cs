@@ -4,6 +4,7 @@ using BackdropForCodex.Core.Media;
 using BackdropForCodex.Core.Runtime;
 using BackdropForCodex.Core.Settings;
 using BackdropForCodex.Core.Shortcuts;
+using BackdropForCodex.App.Services.Media;
 
 namespace BackdropForCodex.App.Services.Wallpaper;
 
@@ -156,14 +157,20 @@ public sealed class WallpaperApplicationService :
         _capabilitySource?.Compatibility ??
         WallpaperCompatibilitySnapshot.NotEvaluated;
 
-    public static WallpaperApplicationService CreateDefault(string settingsPath)
+    public static WallpaperApplicationService CreateDefault(string settingsPath) =>
+        CreateDefault(settingsPath, AppWallpaperSources.Registry);
+
+    public static WallpaperApplicationService CreateDefault(
+        string settingsPath,
+        IWallpaperSourceProviderRegistry sourceRegistry)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(settingsPath);
-        var runtime = WallpaperCoordinator.CreateDefault();
+        ArgumentNullException.ThrowIfNull(sourceRegistry);
+        var runtime = WallpaperCoordinator.CreateDefault(sourceRegistry);
         var workspace = new WallpaperWorkspaceCoordinator(
             new SettingsRepository(settingsPath),
             runtime,
-            new LocalFileWallpaperSourceProvider());
+            sourceRegistry);
         return new WallpaperApplicationService(workspace, runtime);
     }
 

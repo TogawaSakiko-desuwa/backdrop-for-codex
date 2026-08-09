@@ -37,7 +37,6 @@ public sealed class WallpaperCoordinatorTests
         Assert.Equal(1, fixture.SourceProvider.AcquireCount);
         Assert.Equal(1, fixture.Injection.ApplyCount);
         Assert.Equal(fixture.Endpoint, fixture.Injection.LastEndpoint);
-        Assert.True(fixture.Injection.LastOptions?.Source.IsFile);
         Assert.Equal(
             fixture.ValidMedia.SourceIdentifier,
             fixture.Injection.LastOptions?.LocalMediaPath);
@@ -46,6 +45,131 @@ public sealed class WallpaperCoordinatorTests
             fixture.Injection.LastOptions?.ExpectedContentLength);
         Assert.Equal(WallpaperRuntimePhase.Active, coordinator.Status.Phase);
         Assert.Equal(result.Revision, coordinator.Status.Revision);
+    }
+
+    [Fact]
+    public async Task ActivateAsync_DispatchesWorkshopVideoToItsDirectProvider()
+    {
+        var fixture = new CoordinatorFixture();
+        var workshopProvider = new FakeWorkshopDirectSourceProvider();
+        var registry = new WallpaperSourceProviderRegistry(
+            [fixture.SourceProvider, workshopProvider]);
+        var media = new MediaReference
+        {
+            MediaId = Guid.CreateVersion7(),
+            SourceKind = MediaSourceKind.WallpaperEngineWorkshopProject,
+            SourceIdentifier = "123456",
+            LastKnownKind = MediaKind.Video,
+        };
+        var settings = CoordinatorFixture.CreateSettings(media);
+        await using var coordinator = fixture.CreateCoordinator(sourceRegistry: registry);
+
+        var result = await fixture.ActivateAsync(coordinator, settings);
+
+        Assert.Equal(RuntimeActivationOutcome.MediaActive, result.Outcome);
+        Assert.Equal(1, workshopProvider.ResolveCount);
+        Assert.Equal(1, workshopProvider.AcquireCount);
+        Assert.Equal(0, fixture.SourceProvider.AcquireCount);
+        Assert.Equal(
+            workshopProvider.ResolvedPath,
+            fixture.Injection.LastOptions?.LocalMediaPath);
+    }
+
+    [Theory]
+    [InlineData(WallpaperContentKind.Scene)]
+    [InlineData(WallpaperContentKind.Web)]
+    public async Task ActivateAsync_RejectsWindowContentBeforeCdpLeaseOrInjection(
+        WallpaperContentKind contentKind)
+    {
+        var fixture = new CoordinatorFixture();
+        var projectProvider = new FakeProjectSourceProvider(contentKind);
+        var registry = new WallpaperSourceProviderRegistry(
+            [fixture.SourceProvider, projectProvider]);
+        var media = new MediaReference
+        {
+            MediaId = Guid.CreateVersion7(),
+            SourceKind = MediaSourceKind.WallpaperEngineLocalProject,
+            SourceIdentifier = @"C:\WallpaperEngine\projects\wallpaper\project.json",
+            LastKnownKind = MediaKind.None,
+        };
+        var settings = CoordinatorFixture.CreateSettings(media);
+        await using var coordinator = fixture.CreateCoordinator(sourceRegistry: registry);
+
+        var result = await fixture.ActivateAsync(coordinator, settings);
+
+        Assert.Equal(RuntimeActivationOutcome.SavedButNotActivated, result.Outcome);
+        Assert.Equal(
+            typeof(WallpaperRendererUnavailableException).FullName,
+            result.Error?.ExceptionType);
+        Assert.Equal(1, projectProvider.ResolveCount);
+        Assert.Equal(0, projectProvider.AcquireCount);
+        Assert.Equal(0, fixture.SourceProvider.AcquireCount);
+        Assert.Equal(0, fixture.Activation.CallCount);
+        Assert.Equal(0, fixture.ProcessSource.CallCount);
+        Assert.Equal(0, fixture.Discovery.CallCount);
+        Assert.Equal(0, fixture.Injection.ApplyCount);
+    }
+
+    [Theory]
+    [InlineData(WallpaperContentKind.Unknown)]
+    [InlineData(WallpaperContentKind.Application)]
+    public async Task ActivateAsync_RejectsUnsupportedContentBeforeRuntimeMutation(
+        WallpaperContentKind contentKind)
+    {
+        var fixture = new CoordinatorFixture();
+        var projectProvider = new FakeProjectSourceProvider(
+            contentKind,
+            MediaSourceKind.WallpaperEngineWorkshopProject);
+        var registry = new WallpaperSourceProviderRegistry(
+            [fixture.SourceProvider, projectProvider]);
+        var media = new MediaReference
+        {
+            MediaId = Guid.CreateVersion7(),
+            SourceKind = MediaSourceKind.WallpaperEngineWorkshopProject,
+            SourceIdentifier = "987654",
+            LastKnownKind = MediaKind.None,
+        };
+        var settings = CoordinatorFixture.CreateSettings(media);
+        await using var coordinator = fixture.CreateCoordinator(sourceRegistry: registry);
+
+        var result = await fixture.ActivateAsync(coordinator, settings);
+
+        Assert.Equal(RuntimeActivationOutcome.SavedButNotActivated, result.Outcome);
+        Assert.Equal(
+            typeof(WallpaperContentNotSupportedException).FullName,
+            result.Error?.ExceptionType);
+        Assert.Equal(1, projectProvider.ResolveCount);
+        Assert.Equal(0, projectProvider.AcquireCount);
+        Assert.Equal(0, fixture.Activation.CallCount);
+        Assert.Equal(0, fixture.Injection.ApplyCount);
+    }
+
+    [Fact]
+    public async Task ActivateAsync_RejectsDirectDescriptorWithoutDirectProviderCapability()
+    {
+        var fixture = new CoordinatorFixture();
+        var provider = new DescriptorOnlyDirectProvider();
+        var registry = new WallpaperSourceProviderRegistry(
+            [fixture.SourceProvider, provider]);
+        var media = new MediaReference
+        {
+            MediaId = Guid.CreateVersion7(),
+            SourceKind = MediaSourceKind.WallpaperEngineWorkshopProject,
+            SourceIdentifier = "555555",
+            LastKnownKind = MediaKind.Video,
+        };
+        var settings = CoordinatorFixture.CreateSettings(media);
+        await using var coordinator = fixture.CreateCoordinator(sourceRegistry: registry);
+
+        var result = await fixture.ActivateAsync(coordinator, settings);
+
+        Assert.Equal(RuntimeActivationOutcome.SavedButNotActivated, result.Outcome);
+        Assert.Equal(
+            typeof(WallpaperSourceCapabilityException).FullName,
+            result.Error?.ExceptionType);
+        Assert.Equal(1, provider.ResolveCount);
+        Assert.Equal(0, fixture.Activation.CallCount);
+        Assert.Equal(0, fixture.Injection.ApplyCount);
     }
 
     [Fact]
@@ -292,7 +416,7 @@ public sealed class WallpaperCoordinatorTests
         var fixture = new CoordinatorFixture();
         await using var coordinator = fixture.CreateCoordinator();
         var previous = await fixture.ActivateAsync(coordinator);
-        var previousLease = Assert.IsAssignableFrom<IMediaLease>(
+        var previousLease = Assert.IsAssignableFrom<IDirectMediaLease>(
             fixture.PlaybackPool.ActiveLease);
         var acquireCheckpoint = new AsyncCheckpoint();
         fixture.SourceProvider.BeforeAcquireAsync = (call, _) =>
@@ -566,7 +690,7 @@ public sealed class WallpaperCoordinatorTests
 
         var result = await fixture.ActivateAsync(coordinator);
 
-        var activeLease = Assert.IsAssignableFrom<IMediaLease>(
+        var activeLease = Assert.IsAssignableFrom<IDirectMediaLease>(
             fixture.PlaybackPool.ActiveLease);
         var activeOwnership = Assert.IsType<PlaybackOwnershipToken>(
             fixture.PlaybackPool.ActiveOwnership);
@@ -651,7 +775,7 @@ public sealed class WallpaperCoordinatorTests
         var fixture = new CoordinatorFixture();
         await using var coordinator = fixture.CreateCoordinator();
         _ = await fixture.ActivateAsync(coordinator);
-        var activeLease = Assert.IsAssignableFrom<IMediaLease>(
+        var activeLease = Assert.IsAssignableFrom<IDirectMediaLease>(
             fixture.PlaybackPool.ActiveLease);
         var activeOwnership = Assert.IsType<PlaybackOwnershipToken>(
             fixture.PlaybackPool.ActiveOwnership);
@@ -867,7 +991,7 @@ public sealed class WallpaperCoordinatorTests
         var fixture = new CoordinatorFixture();
         await using var coordinator = fixture.CreateCoordinator();
         _ = await fixture.ActivateAsync(coordinator);
-        var activeLease = Assert.IsAssignableFrom<IMediaLease>(
+        var activeLease = Assert.IsAssignableFrom<IDirectMediaLease>(
             fixture.PlaybackPool.ActiveLease);
         var activeOwnership = Assert.IsType<PlaybackOwnershipToken>(
             fixture.PlaybackPool.ActiveOwnership);
@@ -1190,6 +1314,7 @@ public sealed class WallpaperCoordinatorTests
                 "C:\\Wallpapers\\wallpaper.png",
                 MediaKind.Image);
             ValidMedia = Assert.Single(ValidSettings.MediaCatalog);
+            SourceRegistry = new WallpaperSourceProviderRegistry([SourceProvider]);
         }
 
         public InstalledCodexPackage Package { get; set; }
@@ -1205,6 +1330,8 @@ public sealed class WallpaperCoordinatorTests
         public FakeDiscovery Discovery { get; } = new();
 
         public FakeSourceProvider SourceProvider { get; } = new();
+
+        public IWallpaperSourceProviderRegistry SourceRegistry { get; }
 
         public FakePlaybackPool PlaybackPool { get; } = new();
 
@@ -1237,6 +1364,12 @@ public sealed class WallpaperCoordinatorTests
                 SourceIdentifier = mediaPath,
                 LastKnownKind = mediaKind,
             };
+            return CreateSettings(media);
+        }
+
+        public static SettingsV2 CreateSettings(MediaReference media)
+        {
+            ArgumentNullException.ThrowIfNull(media);
             var profile = WallpaperProfile.CreateDefault() with
             {
                 MediaId = media.MediaId,
@@ -1268,12 +1401,14 @@ public sealed class WallpaperCoordinatorTests
             }).CreateSnapshot();
         }
 
-        public WallpaperCoordinator CreateCoordinator(WallpaperCoordinatorOptions? options = null) => new(
+        public WallpaperCoordinator CreateCoordinator(
+            WallpaperCoordinatorOptions? options = null,
+            IWallpaperSourceProviderRegistry? sourceRegistry = null) => new(
             new FakePackageLocator(() => Package),
             ProcessSource,
             Activation,
             Discovery,
-            SourceProvider,
+            sourceRegistry ?? SourceRegistry,
             PlaybackPool,
             Injection,
             options ?? new WallpaperCoordinatorOptions
@@ -1309,6 +1444,8 @@ public sealed class WallpaperCoordinatorTests
         private int _callCount;
 
         public IReadOnlyList<CodexProcessSnapshot> Processes { get; set; } = [];
+
+        public int CallCount => Volatile.Read(ref _callCount);
 
         public Func<int, CancellationToken, Task>? BeforeGetProcessesAsync { get; set; }
 
@@ -1350,14 +1487,19 @@ public sealed class WallpaperCoordinatorTests
     {
         public Queue<CdpDiscoveryResult> Results { get; } = new();
 
+        public int CallCount { get; private set; }
+
         public ValueTask<CdpDiscoveryResult> DiscoverAsync(
             VerifiedCodexIdentity identity,
-            CancellationToken cancellationToken = default) =>
-            ValueTask.FromResult(
+            CancellationToken cancellationToken = default)
+        {
+            CallCount++;
+            return ValueTask.FromResult(
                 Results.Count == 0 ? new CdpDiscoveryResult([], []) : Results.Dequeue());
+        }
     }
 
-    private sealed class FakeSourceProvider : IWallpaperSourceProvider
+    private sealed class FakeSourceProvider : IDirectMediaSourceProvider
     {
         public MediaSourceKind SourceKind => MediaSourceKind.LocalFile;
 
@@ -1373,7 +1515,34 @@ public sealed class WallpaperCoordinatorTests
 
         public Func<int, CancellationToken, Task>? BeforeAcquireAsync { get; set; }
 
-        public async ValueTask<IMediaLease> AcquireLeaseAsync(
+        public ValueTask<IReadOnlyList<WallpaperSourceDescriptor>> DiscoverAsync(
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return ValueTask.FromResult<IReadOnlyList<WallpaperSourceDescriptor>>([]);
+        }
+
+        public ValueTask<WallpaperSourceResolution> ResolveAsync(
+            MediaReference reference,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var snapshot = reference.Snapshot();
+            var metadata = MediaFileInspector.CreateMetadata(Format, ContentLength);
+            var descriptor = new WallpaperSourceDescriptor(
+                SourceKind,
+                snapshot.SourceIdentifier,
+                "Runtime media",
+                metadata.Kind == MediaKind.Video
+                    ? WallpaperContentKind.Video
+                    : WallpaperContentKind.Image,
+                WallpaperDeliveryKind.DirectMedia,
+                WallpaperDeliveryCapabilities.None);
+            return ValueTask.FromResult(
+                new WallpaperSourceResolution(snapshot, descriptor, metadata));
+        }
+
+        public async ValueTask<IDirectMediaLease> AcquireDirectMediaLeaseAsync(
             MediaReference reference,
             CancellationToken cancellationToken = default)
         {
@@ -1398,7 +1567,7 @@ public sealed class WallpaperCoordinatorTests
         private sealed class FakeMediaLease(
             MediaReference reference,
             MediaFileMetadata metadata,
-            Action onDispose) : IMediaLease
+        Action onDispose) : IDirectMediaLease
         {
             private int _disposed;
 
@@ -1423,9 +1592,175 @@ public sealed class WallpaperCoordinatorTests
         }
     }
 
+    private sealed class FakeWorkshopDirectSourceProvider : IDirectMediaSourceProvider
+    {
+        public string ResolvedPath { get; } =
+            @"C:\Steam\steamapps\workshop\content\431960\123456\wallpaper.mp4";
+
+        public int ResolveCount { get; private set; }
+
+        public int AcquireCount { get; private set; }
+
+        public MediaSourceKind SourceKind =>
+            MediaSourceKind.WallpaperEngineWorkshopProject;
+
+        public ValueTask<IReadOnlyList<WallpaperSourceDescriptor>> DiscoverAsync(
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return ValueTask.FromResult<IReadOnlyList<WallpaperSourceDescriptor>>([]);
+        }
+
+        public ValueTask<WallpaperSourceResolution> ResolveAsync(
+            MediaReference reference,
+            CancellationToken cancellationToken = default)
+        {
+            ResolveCount++;
+            cancellationToken.ThrowIfCancellationRequested();
+            var snapshot = reference.Snapshot();
+            var metadata = MediaFileInspector.CreateMetadata(
+                MediaFormat.Mp4,
+                contentLength: 1024);
+            return ValueTask.FromResult(
+                new WallpaperSourceResolution(
+                    snapshot,
+                    new WallpaperSourceDescriptor(
+                        SourceKind,
+                        snapshot.SourceIdentifier,
+                        "Workshop video",
+                        WallpaperContentKind.Video,
+                        WallpaperDeliveryKind.DirectMedia,
+                        WallpaperDeliveryCapabilities.None),
+                    metadata));
+        }
+
+        public ValueTask<IDirectMediaLease> AcquireDirectMediaLeaseAsync(
+            MediaReference reference,
+            CancellationToken cancellationToken = default)
+        {
+            AcquireCount++;
+            cancellationToken.ThrowIfCancellationRequested();
+            return ValueTask.FromResult<IDirectMediaLease>(
+                new DispatchMediaLease(
+                    reference with { LastKnownKind = MediaKind.Video },
+                    ResolvedPath,
+                    MediaFileInspector.CreateMetadata(
+                        MediaFormat.Mp4,
+                        contentLength: 1024)));
+        }
+    }
+
+    private sealed class FakeProjectSourceProvider(
+        WallpaperContentKind contentKind,
+        MediaSourceKind sourceKind = MediaSourceKind.WallpaperEngineLocalProject)
+        : IWallpaperEngineProjectSourceProvider
+    {
+        public int ResolveCount { get; private set; }
+
+        public int AcquireCount { get; private set; }
+
+        public MediaSourceKind SourceKind { get; } = sourceKind;
+
+        public ValueTask<IReadOnlyList<WallpaperSourceDescriptor>> DiscoverAsync(
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return ValueTask.FromResult<IReadOnlyList<WallpaperSourceDescriptor>>([]);
+        }
+
+        public ValueTask<WallpaperSourceResolution> ResolveAsync(
+            MediaReference reference,
+            CancellationToken cancellationToken = default)
+        {
+            ResolveCount++;
+            cancellationToken.ThrowIfCancellationRequested();
+            var snapshot = reference.Snapshot();
+            var deliveryKind = contentKind is
+                WallpaperContentKind.Scene or WallpaperContentKind.Web
+                    ? WallpaperDeliveryKind.WallpaperEngineWindow
+                    : WallpaperDeliveryKind.Unsupported;
+            var capabilities = deliveryKind == WallpaperDeliveryKind.WallpaperEngineWindow
+                ? WallpaperDeliveryCapabilities.DynamicFrames
+                : WallpaperDeliveryCapabilities.None;
+            return ValueTask.FromResult(
+                new WallpaperSourceResolution(
+                    snapshot,
+                    new WallpaperSourceDescriptor(
+                        SourceKind,
+                        snapshot.SourceIdentifier,
+                        "Wallpaper Engine project",
+                        contentKind,
+                        deliveryKind,
+                        capabilities),
+                    directMediaMetadata: null));
+        }
+
+        public ValueTask<IWallpaperEngineProjectLease> AcquireProjectLeaseAsync(
+            MediaReference reference,
+            CancellationToken cancellationToken = default)
+        {
+            AcquireCount++;
+            throw new InvalidOperationException(
+                "Renderer-unavailable sources must not acquire a project lease.");
+        }
+    }
+
+    private sealed class DescriptorOnlyDirectProvider : IWallpaperSourceProvider
+    {
+        public int ResolveCount { get; private set; }
+
+        public MediaSourceKind SourceKind =>
+            MediaSourceKind.WallpaperEngineWorkshopProject;
+
+        public ValueTask<IReadOnlyList<WallpaperSourceDescriptor>> DiscoverAsync(
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return ValueTask.FromResult<IReadOnlyList<WallpaperSourceDescriptor>>([]);
+        }
+
+        public ValueTask<WallpaperSourceResolution> ResolveAsync(
+            MediaReference reference,
+            CancellationToken cancellationToken = default)
+        {
+            ResolveCount++;
+            cancellationToken.ThrowIfCancellationRequested();
+            var snapshot = reference.Snapshot();
+            return ValueTask.FromResult(
+                new WallpaperSourceResolution(
+                    snapshot,
+                    new WallpaperSourceDescriptor(
+                        SourceKind,
+                        snapshot.SourceIdentifier,
+                        "Workshop video without lease capability",
+                        WallpaperContentKind.Video,
+                        WallpaperDeliveryKind.DirectMedia,
+                        WallpaperDeliveryCapabilities.None),
+                    MediaFileInspector.CreateMetadata(
+                        MediaFormat.Mp4,
+                        contentLength: 1024)));
+        }
+    }
+
+    private sealed class DispatchMediaLease(
+        MediaReference reference,
+        string resolvedPath,
+        MediaFileMetadata metadata) : IDirectMediaLease
+    {
+        public MediaReference Reference { get; } = reference;
+
+        public string ResolvedPath { get; } = resolvedPath;
+
+        public LocalFileIdentity FileIdentity { get; } = new(1, 2);
+
+        public MediaFileMetadata Metadata { get; } = metadata;
+
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+
     private sealed class FakePlaybackPool : IPlaybackPool
     {
-        public IMediaLease? ActiveLease { get; private set; }
+        public IDirectMediaLease? ActiveLease { get; private set; }
 
         public PlaybackOwnershipToken? ActiveOwnership { get; private set; }
 
@@ -1448,7 +1783,7 @@ public sealed class WallpaperCoordinatorTests
         public List<string> Events { get; set; } = [];
 
         public async ValueTask ActivateAsync(
-            IMediaLease lease,
+            IDirectMediaLease lease,
             CancellationToken cancellationToken = default) =>
             await ActivateOwnedAsync(
                 lease,
@@ -1456,7 +1791,7 @@ public sealed class WallpaperCoordinatorTests
                 cancellationToken);
 
         public async ValueTask ActivateOwnedAsync(
-            IMediaLease lease,
+            IDirectMediaLease lease,
             PlaybackOwnershipToken ownership,
             CancellationToken cancellationToken = default)
         {

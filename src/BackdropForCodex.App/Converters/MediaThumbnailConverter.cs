@@ -21,7 +21,7 @@ public sealed class MediaThumbnailConverter : IValueConverter
         new(StringComparer.OrdinalIgnoreCase);
 
     public MediaThumbnailConverter()
-        : this(SafeMediaPreviewService.Shared)
+        : this(AppWallpaperSources.Preview)
     {
     }
 
