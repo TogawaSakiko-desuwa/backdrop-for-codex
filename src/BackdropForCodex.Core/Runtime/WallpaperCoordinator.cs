@@ -167,6 +167,17 @@ public sealed class WallpaperCoordinator :
     IWallpaperRuntime,
     IWallpaperRuntimeCapabilitySource
 {
+    private enum ActivationTerminationKind
+    {
+        Canceled,
+        Failed,
+    }
+
+    private readonly record struct ActivationCleanupResult(
+        bool RuntimeCleanupCompleted,
+        Exception? SafetyCleanupFailure,
+        Exception? PendingLeaseDisposalFailure);
+
     public const string RemoteDebuggingArguments =
         "--remote-debugging-address=127.0.0.1 --remote-debugging-port=0";
 
@@ -308,10 +319,11 @@ public sealed class WallpaperCoordinator :
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(request);
         await _operationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        IMediaLease? pendingLease = null;
-        var runtimeMutationStarted = false;
-        var previousSurface = Surface;
-        var previousActiveSnapshot = ActiveSnapshot;
+        var attempt = new ActivationAttemptContext(
+            request,
+            Surface,
+            ActiveSnapshot,
+            cancellationToken);
         try
         {
             ThrowIfDisposed();
@@ -330,298 +342,389 @@ public sealed class WallpaperCoordinator :
                     new CdpRiskNotAcceptedException());
                 return RuntimeActivationResult.SavedButNotActivated(
                     request.Revision,
-                    previousSurface,
-                    previousActiveSnapshot,
+                    attempt.PreviousSurface,
+                    attempt.PreviousActiveSnapshot,
                     riskError);
             }
 
-            _injectionMonitor.BeginAttempt();
-            Publish(
-                WallpaperRuntimePhase.Validating,
-                "Validating the Codex package and media file.",
-                request.Revision);
-
-            var (_, security) = LocateVerifiedPackage();
-            var identity = security.Identity!;
-            try
-            {
-                pendingLease = await _mediaSourceProvider
-                    .AcquireLeaseAsync(request.Media, cancellationToken)
-                    .ConfigureAwait(false);
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch (Exception exception)
-            {
-                var error = RuntimeError("media-lease-unavailable", exception);
-                var fallbackSurface =
-                    previousSurface.Kind == WallpaperRuntimeSurfaceKind.MediaActive
-                        ? previousSurface
-                        : WallpaperRuntimeSurface.Disconnected(error);
-                Volatile.Write(ref _surface, fallbackSurface);
-                Publish(
-                    fallbackSurface.Kind == WallpaperRuntimeSurfaceKind.MediaActive
-                        ? (_paused
-                            ? WallpaperRuntimePhase.Paused
-                            : WallpaperRuntimePhase.Active)
-                        : WallpaperRuntimePhase.Idle,
-                    "The saved media could not be reacquired; the previous runtime state was preserved.",
-                    request.Revision);
-                return RuntimeActivationResult.SavedButNotActivated(
-                    request.Revision,
-                    fallbackSurface,
-                    previousActiveSnapshot,
-                    error);
-            }
-
-            _injectionMonitor.CaptureSecurity(CodexSecurityResult.InProgress(
-                CodexSecurityStage.ProcessIdentity,
-                "Validating the activated Codex process.",
-                identity));
-            var processes = await _processSource
-                .GetProcessesAsync(cancellationToken)
+            var preparationFailure = await PrepareMediaAttemptAsync(attempt)
                 .ConfigureAwait(false);
-            var reviewedProcesses = processes
-                .Where(process => IsReviewedCodexProcess(process, identity))
-                .ToArray();
-            var activationProcessIsRunning = _launchedByThisCoordinator &&
-                _activationProcessId != 0 &&
-                reviewedProcesses.Any(process =>
-                    process.ProcessId == _activationProcessId &&
-                    (_activationProcessStartTimeUtc is null ||
-                     process.StartTimeUtc == _activationProcessStartTimeUtc));
-            if (_launchedByThisCoordinator && !activationProcessIsRunning)
+            if (preparationFailure is not null)
             {
-                try
-                {
-                    await StopInjectedContentAndMediaAsync(CancellationToken.None)
-                        .ConfigureAwait(false);
-                }
-                finally
-                {
-                    _launchedByThisCoordinator = false;
-                    _activationProcessId = 0;
-                    _activationProcessStartTimeUtc = null;
-                    _endpoint = null;
-                }
+                return preparationFailure;
             }
 
-            if (!_launchedByThisCoordinator && reviewedProcesses.Length != 0)
-            {
-                _injectionMonitor.CaptureSecurity(CodexSecurityResult.Rejected(
-                    CodexSecurityStage.ProcessIdentity,
-                    CodexSecurityFailureCode.ProcessIdentityMismatch,
-                    "A verified Codex process exists but was not launched by this runtime.",
-                    identity));
-                throw new CodexAlreadyRunningException();
-            }
-
-            try
-            {
-                if (!_launchedByThisCoordinator && !_injectionSession.IsActive)
-                {
-                    Publish(
-                        WallpaperRuntimePhase.LaunchingCodex,
-                        "Launching the reviewed Codex MSIX app.",
-                        request.Revision);
-                    var activation = _activationManager.Activate(identity, RemoteDebuggingArguments);
-                    _activationProcessId = activation.ProcessId;
-                    _activationProcessStartTimeUtc = null;
-                    _launchedByThisCoordinator = true;
-                }
-
-                if (_endpoint is null || !_injectionSession.IsActive)
-                {
-                    _injectionMonitor.CaptureSecurity(CodexSecurityResult.InProgress(
-                        CodexSecurityStage.LoopbackEndpoint,
-                        "Validating the Codex loopback debugging endpoint.",
-                        identity));
-                    Publish(
-                        WallpaperRuntimePhase.DiscoveringEndpoint,
-                        "Waiting for Codex to publish its loopback debugging endpoint.",
-                        request.Revision);
-                    _endpoint = await DiscoverSingleEndpointAsync(identity, cancellationToken)
-                        .ConfigureAwait(false);
-                    _activationProcessStartTimeUtc = _endpoint.Candidate.StartTimeUtc;
-                }
-
-                _injectionMonitor.CaptureSecurity(CodexSecurityResult.InProgress(
-                    CodexSecurityStage.TargetValidation,
-                    "Validating the unique Codex work-page target.",
-                    identity));
-                Publish(
-                    WallpaperRuntimePhase.Applying,
-                    "Applying the wallpaper to the reviewed Codex page.",
-                    request.Revision);
-                var leaseToActivate = pendingLease ??
-                    throw new InvalidOperationException("No validated media lease is available.");
-                var injectionOptions = CreateInjectionOptions(
-                    checked(++_generation),
-                    leaseToActivate,
-                    request.GlobalProfile);
-                _injectionMonitor.BeginCapabilityObservation(injectionOptions.Generation);
-                runtimeMutationStarted = true;
-                await _injectionSession
-                    .ApplyAsync(_endpoint, injectionOptions, cancellationToken)
-                    .ConfigureAwait(false);
-                _injectionMonitor.CaptureSecurity(CodexSecurityResult.Verified(
-                    identity,
-                    CodexSecurityStage.TargetValidation,
-                    "The package, process, endpoint and unique Codex target passed security validation."));
-
-                var ownership = PlaybackOwnershipToken.Create();
-                var transferConfirmed = false;
-                try
-                {
-                    await _playbackPool
-                        .ActivateOwnedAsync(leaseToActivate, ownership, cancellationToken)
-                        .ConfigureAwait(false);
-                }
-                finally
-                {
-                    var activeLease = _playbackPool.ActiveLease;
-                    var activeOwnership = _playbackPool.ActiveOwnership;
-                    if (ReferenceEquals(activeLease, leaseToActivate))
-                    {
-                        _activePlaybackOwnership = activeOwnership;
-                        pendingLease = null;
-                        transferConfirmed = activeOwnership == ownership;
-                    }
-                }
-
-                if (!transferConfirmed)
-                {
-                    throw new InvalidOperationException(
-                        "The playback pool did not publish the transferred lease under the requested ownership token.");
-                }
-
-                // Pause belongs to one injected media generation. A replacement starts from its
-                // own default playback state and must not inherit a stale pause from the prior video.
-                _injectionMonitor.MarkActive(injectionOptions.Generation);
-                _paused = false;
-                var activeSnapshot = request.SettingsSnapshot.CreateSnapshot();
-                var surface = WallpaperRuntimeSurface.MediaActive(
-                    injectionOptions.Generation,
-                    request.Media.MediaId,
-                    ownership);
-                Volatile.Write(ref _activeSnapshot, activeSnapshot);
-                Volatile.Write(ref _surface, surface);
-                Publish(
-                    WallpaperRuntimePhase.Active,
-                    "Wallpaper is active.",
-                    request.Revision);
-                return RuntimeActivationResult.MediaActive(
-                    request.Revision,
-                    activeSnapshot,
-                    surface);
-            }
-            catch (Exception operationException)
-            {
-                CaptureTerminalSecurityResult(operationException, identity);
-                throw;
-            }
+            await ValidateOwnedProcessAsync(attempt).ConfigureAwait(false);
+            await EnsureEndpointAsync(attempt).ConfigureAwait(false);
+            return await ApplyAndCommitMediaAsync(attempt).ConfigureAwait(false);
         }
         catch (OperationCanceledException exception) when (cancellationToken.IsCancellationRequested)
         {
-            CaptureTerminalSecurityResult(exception);
-            Exception? safetyCleanupFailure = null;
-            var cleanupCompleted = false;
-            if (runtimeMutationStarted ||
-                _injectionMonitor.Compatibility.Security.Status == CodexSecurityStatus.Rejected)
-            {
-                try
-                {
-                    await StopInjectedContentAndMediaAsync(CancellationToken.None)
-                        .ConfigureAwait(false);
-                    cleanupCompleted = true;
-                }
-                catch (Exception cleanupException)
-                {
-                    safetyCleanupFailure = cleanupException;
-                }
-            }
-
-            var disposalFailure = await TryDisposeLeaseAsync(pendingLease).ConfigureAwait(false);
-            pendingLease = null;
-            var failure = safetyCleanupFailure ?? disposalFailure;
-            if (failure is not null)
-            {
-                var error = RuntimeError("activation-cancel-cleanup-failed", failure);
-                var surface = CreateFaultedSurface(error);
-                Volatile.Write(ref _activeSnapshot, null);
-                Volatile.Write(ref _surface, surface);
-                _activePlaybackOwnership = surface.PlaybackOwnership;
-                Publish(
-                    WallpaperRuntimePhase.Faulted,
-                    "The wallpaper operation was cancelled and cleanup could not be confirmed.",
-                    request.Revision);
-                return RuntimeActivationResult.Canceled(
-                    request.Revision,
-                    surface);
-            }
-
-            var canceledSurface = cleanupCompleted
-                ? WallpaperRuntimeSurface.Official()
-                : previousSurface;
-            var canceledActive = cleanupCompleted
-                ? null
-                : previousActiveSnapshot;
-            Volatile.Write(ref _activeSnapshot, canceledActive);
-            Volatile.Write(ref _surface, canceledSurface);
-            Publish(
-                cleanupCompleted ||
-                canceledSurface.Kind != WallpaperRuntimeSurfaceKind.MediaActive
-                    ? WallpaperRuntimePhase.Idle
-                    : (_paused
-                        ? WallpaperRuntimePhase.Paused
-                        : WallpaperRuntimePhase.Active),
-                "The wallpaper operation was cancelled.",
-                request.Revision);
-            return RuntimeActivationResult.Canceled(
-                request.Revision,
-                canceledSurface,
-                canceledActive);
+            return await CompleteTerminatedActivationAsync(
+                    attempt,
+                    exception,
+                    ActivationTerminationKind.Canceled)
+                .ConfigureAwait(false);
         }
         catch (Exception exception)
         {
-            CaptureTerminalSecurityResult(exception);
-            Exception? safetyCleanupFailure = null;
-            try
-            {
-                await StopInjectedContentAndMediaAsync(CancellationToken.None)
-                    .ConfigureAwait(false);
-            }
-            catch (Exception cleanupException)
-            {
-                safetyCleanupFailure = cleanupException;
-            }
-
-            var disposalFailure = await TryDisposeLeaseAsync(pendingLease).ConfigureAwait(false);
-            pendingLease = null;
-            var terminalException = safetyCleanupFailure is null && disposalFailure is null
-                ? exception
-                : new AggregateException(
-                    "The wallpaper operation and one or more safety cleanup steps failed.",
-                    new[] { exception, safetyCleanupFailure, disposalFailure }
-                        .OfType<Exception>());
-            var runtimeError = RuntimeError("activation-failed", terminalException);
-            var faultedSurface = CreateFaultedSurface(runtimeError);
-            Volatile.Write(ref _activeSnapshot, null);
-            Volatile.Write(ref _surface, faultedSurface);
-            _activePlaybackOwnership = faultedSurface.PlaybackOwnership;
-            Publish(WallpaperRuntimePhase.Faulted, exception.Message, request.Revision);
-            return RuntimeActivationResult.Failed(
-                request.Revision,
-                faultedSurface,
-                activeSnapshot: null,
-                error: runtimeError);
+            return await CompleteTerminatedActivationAsync(
+                    attempt,
+                    exception,
+                    ActivationTerminationKind.Failed)
+                .ConfigureAwait(false);
         }
         finally
         {
             _operationGate.Release();
         }
+    }
+
+    private async Task<RuntimeActivationResult?> PrepareMediaAttemptAsync(
+        ActivationAttemptContext attempt)
+    {
+        var request = attempt.Request;
+        var media = request.Media ??
+            throw new InvalidOperationException(
+                "A media activation attempt requires a canonical media reference.");
+        _injectionMonitor.BeginAttempt();
+        Publish(
+            WallpaperRuntimePhase.Validating,
+            "Validating the Codex package and media file.",
+            request.Revision);
+
+        var (_, security) = LocateVerifiedPackage();
+        attempt.SetIdentity(security.Identity!);
+        try
+        {
+            attempt.AcceptPendingLease(
+                await _mediaSourceProvider
+                    .AcquireLeaseAsync(media, attempt.CallerCancellation)
+                    .ConfigureAwait(false));
+            return null;
+        }
+        catch (OperationCanceledException) when (attempt.CallerCancellation.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            var error = RuntimeError("media-lease-unavailable", exception);
+            var fallbackSurface =
+                attempt.PreviousSurface.Kind == WallpaperRuntimeSurfaceKind.MediaActive
+                    ? attempt.PreviousSurface
+                    : WallpaperRuntimeSurface.Disconnected(error);
+            Volatile.Write(ref _surface, fallbackSurface);
+            Publish(
+                fallbackSurface.Kind == WallpaperRuntimeSurfaceKind.MediaActive
+                    ? (_paused
+                        ? WallpaperRuntimePhase.Paused
+                        : WallpaperRuntimePhase.Active)
+                    : WallpaperRuntimePhase.Idle,
+                "The saved media could not be reacquired; the previous runtime state was preserved.",
+                request.Revision);
+            return RuntimeActivationResult.SavedButNotActivated(
+                request.Revision,
+                fallbackSurface,
+                attempt.PreviousActiveSnapshot,
+                error);
+        }
+    }
+
+    private async Task ValidateOwnedProcessAsync(ActivationAttemptContext attempt)
+    {
+        var identity = attempt.RequireIdentity();
+        _injectionMonitor.CaptureSecurity(CodexSecurityResult.InProgress(
+            CodexSecurityStage.ProcessIdentity,
+            "Validating the activated Codex process.",
+            identity));
+        var processes = await _processSource
+            .GetProcessesAsync(attempt.CallerCancellation)
+            .ConfigureAwait(false);
+        var reviewedProcesses = processes
+            .Where(process => IsReviewedCodexProcess(process, identity))
+            .ToArray();
+        var activationProcessIsRunning = _launchedByThisCoordinator &&
+            _activationProcessId != 0 &&
+            reviewedProcesses.Any(process =>
+                process.ProcessId == _activationProcessId &&
+                (_activationProcessStartTimeUtc is null ||
+                 process.StartTimeUtc == _activationProcessStartTimeUtc));
+        if (_launchedByThisCoordinator && !activationProcessIsRunning)
+        {
+            try
+            {
+                await StopInjectedContentAndMediaAsync(CancellationToken.None)
+                    .ConfigureAwait(false);
+            }
+            finally
+            {
+                _launchedByThisCoordinator = false;
+                _activationProcessId = 0;
+                _activationProcessStartTimeUtc = null;
+                _endpoint = null;
+            }
+        }
+
+        if (!_launchedByThisCoordinator && reviewedProcesses.Length != 0)
+        {
+            _injectionMonitor.CaptureSecurity(CodexSecurityResult.Rejected(
+                CodexSecurityStage.ProcessIdentity,
+                CodexSecurityFailureCode.ProcessIdentityMismatch,
+                "A verified Codex process exists but was not launched by this runtime.",
+                identity));
+            throw new CodexAlreadyRunningException();
+        }
+    }
+
+    private async Task EnsureEndpointAsync(ActivationAttemptContext attempt)
+    {
+        var request = attempt.Request;
+        var identity = attempt.RequireIdentity();
+        if (!_launchedByThisCoordinator && !_injectionSession.IsActive)
+        {
+            Publish(
+                WallpaperRuntimePhase.LaunchingCodex,
+                "Launching the reviewed Codex MSIX app.",
+                request.Revision);
+            var activation = _activationManager.Activate(identity, RemoteDebuggingArguments);
+            _activationProcessId = activation.ProcessId;
+            _activationProcessStartTimeUtc = null;
+            _launchedByThisCoordinator = true;
+        }
+
+        if (_endpoint is null || !_injectionSession.IsActive)
+        {
+            _injectionMonitor.CaptureSecurity(CodexSecurityResult.InProgress(
+                CodexSecurityStage.LoopbackEndpoint,
+                "Validating the Codex loopback debugging endpoint.",
+                identity));
+            Publish(
+                WallpaperRuntimePhase.DiscoveringEndpoint,
+                "Waiting for Codex to publish its loopback debugging endpoint.",
+                request.Revision);
+            _endpoint = await DiscoverSingleEndpointAsync(
+                    identity,
+                    attempt.CallerCancellation)
+                .ConfigureAwait(false);
+            _activationProcessStartTimeUtc = _endpoint.Candidate.StartTimeUtc;
+        }
+    }
+
+    private async Task<RuntimeActivationResult> ApplyAndCommitMediaAsync(
+        ActivationAttemptContext attempt)
+    {
+        var request = attempt.Request;
+        var identity = attempt.RequireIdentity();
+        var media = request.Media ??
+            throw new InvalidOperationException(
+                "A media activation attempt requires a canonical media reference.");
+        var endpoint = _endpoint ??
+            throw new InvalidOperationException(
+                "No verified Codex endpoint is available for media activation.");
+        _injectionMonitor.CaptureSecurity(CodexSecurityResult.InProgress(
+            CodexSecurityStage.TargetValidation,
+            "Validating the unique Codex work-page target.",
+            identity));
+        Publish(
+            WallpaperRuntimePhase.Applying,
+            "Applying the wallpaper to the reviewed Codex page.",
+            request.Revision);
+        var leaseToActivate = attempt.RequirePendingLease();
+        var generation = checked(++_generation);
+        attempt.SetGeneration(generation);
+        var injectionOptions = CreateInjectionOptions(
+            generation,
+            leaseToActivate,
+            request.GlobalProfile);
+        _injectionMonitor.BeginCapabilityObservation(injectionOptions.Generation);
+        attempt.MarkRuntimeMutationStarted();
+        await _injectionSession
+            .ApplyAsync(endpoint, injectionOptions, attempt.CallerCancellation)
+            .ConfigureAwait(false);
+        _injectionMonitor.CaptureSecurity(CodexSecurityResult.Verified(
+            identity,
+            CodexSecurityStage.TargetValidation,
+            "The package, process, endpoint and unique Codex target passed security validation."));
+
+        var ownership = await TransferPlaybackOwnershipAsync(attempt, leaseToActivate)
+            .ConfigureAwait(false);
+
+        // Pause belongs to one injected media generation. A replacement starts from its
+        // own default playback state and must not inherit a stale pause from the prior video.
+        _injectionMonitor.MarkActive(injectionOptions.Generation);
+        _paused = false;
+        var activeSnapshot = request.SettingsSnapshot.CreateSnapshot();
+        var surface = WallpaperRuntimeSurface.MediaActive(
+            injectionOptions.Generation,
+            media.MediaId,
+            ownership);
+        Volatile.Write(ref _activeSnapshot, activeSnapshot);
+        Volatile.Write(ref _surface, surface);
+        Publish(
+            WallpaperRuntimePhase.Active,
+            "Wallpaper is active.",
+            request.Revision);
+        return RuntimeActivationResult.MediaActive(
+            request.Revision,
+            activeSnapshot,
+            surface);
+    }
+
+    private async Task<PlaybackOwnershipToken> TransferPlaybackOwnershipAsync(
+        ActivationAttemptContext attempt,
+        IMediaLease leaseToActivate)
+    {
+        var ownership = attempt.BeginPlaybackTransfer();
+        var transferConfirmed = false;
+        try
+        {
+            await _playbackPool
+                .ActivateOwnedAsync(
+                    leaseToActivate,
+                    ownership,
+                    attempt.CallerCancellation)
+                .ConfigureAwait(false);
+        }
+        finally
+        {
+            transferConfirmed = attempt.ObservePlaybackPublication(_playbackPool);
+            if (attempt.PlaybackLeasePublished)
+            {
+                _activePlaybackOwnership = attempt.ObservedPlaybackOwnership;
+            }
+        }
+
+        if (!transferConfirmed)
+        {
+            throw new InvalidOperationException(
+                "The playback pool did not publish the transferred lease under the requested ownership token.");
+        }
+
+        return ownership;
+    }
+
+    private async Task<RuntimeActivationResult> CompleteTerminatedActivationAsync(
+        ActivationAttemptContext attempt,
+        Exception exception,
+        ActivationTerminationKind terminationKind)
+    {
+        CaptureTerminalSecurityResult(exception, attempt.Identity);
+        var shouldStopRuntime =
+            terminationKind == ActivationTerminationKind.Failed ||
+            attempt.RuntimeMutationStarted ||
+            _injectionMonitor.Compatibility.Security.Status == CodexSecurityStatus.Rejected;
+        var cleanup = await CleanupActivationAttemptAsync(attempt, shouldStopRuntime)
+            .ConfigureAwait(false);
+        return terminationKind == ActivationTerminationKind.Canceled
+            ? CompleteCanceledActivation(attempt, cleanup)
+            : CompleteFailedActivation(attempt, exception, cleanup);
+    }
+
+    private async Task<ActivationCleanupResult> CleanupActivationAttemptAsync(
+        ActivationAttemptContext attempt,
+        bool shouldStopRuntime)
+    {
+        Exception? safetyCleanupFailure = null;
+        var runtimeCleanupCompleted = false;
+        if (shouldStopRuntime)
+        {
+            try
+            {
+                await StopInjectedContentAndMediaAsync(CancellationToken.None)
+                    .ConfigureAwait(false);
+                runtimeCleanupCompleted = true;
+            }
+            catch (Exception cleanupException)
+            {
+                safetyCleanupFailure = cleanupException;
+            }
+        }
+
+        var pendingLeaseDisposalFailure = await attempt
+            .TryDisposePendingLeaseAsync()
+            .ConfigureAwait(false);
+        return new ActivationCleanupResult(
+            runtimeCleanupCompleted,
+            safetyCleanupFailure,
+            pendingLeaseDisposalFailure);
+    }
+
+    private RuntimeActivationResult CompleteCanceledActivation(
+        ActivationAttemptContext attempt,
+        ActivationCleanupResult cleanup)
+    {
+        var failure = cleanup.SafetyCleanupFailure ?? cleanup.PendingLeaseDisposalFailure;
+        if (failure is not null)
+        {
+            var error = RuntimeError("activation-cancel-cleanup-failed", failure);
+            var surface = CreateFaultedSurface(error);
+            Volatile.Write(ref _activeSnapshot, null);
+            Volatile.Write(ref _surface, surface);
+            _activePlaybackOwnership = surface.PlaybackOwnership;
+            Publish(
+                WallpaperRuntimePhase.Faulted,
+                "The wallpaper operation was cancelled and cleanup could not be confirmed.",
+                attempt.Request.Revision);
+            return RuntimeActivationResult.Canceled(
+                attempt.Request.Revision,
+                surface);
+        }
+
+        var canceledSurface = cleanup.RuntimeCleanupCompleted
+            ? WallpaperRuntimeSurface.Official()
+            : attempt.PreviousSurface;
+        var canceledActive = cleanup.RuntimeCleanupCompleted
+            ? null
+            : attempt.PreviousActiveSnapshot;
+        Volatile.Write(ref _activeSnapshot, canceledActive);
+        Volatile.Write(ref _surface, canceledSurface);
+        Publish(
+            cleanup.RuntimeCleanupCompleted ||
+            canceledSurface.Kind != WallpaperRuntimeSurfaceKind.MediaActive
+                ? WallpaperRuntimePhase.Idle
+                : (_paused
+                    ? WallpaperRuntimePhase.Paused
+                    : WallpaperRuntimePhase.Active),
+            "The wallpaper operation was cancelled.",
+            attempt.Request.Revision);
+        return RuntimeActivationResult.Canceled(
+            attempt.Request.Revision,
+            canceledSurface,
+            canceledActive);
+    }
+
+    private RuntimeActivationResult CompleteFailedActivation(
+        ActivationAttemptContext attempt,
+        Exception exception,
+        ActivationCleanupResult cleanup)
+    {
+        var terminalException =
+            cleanup.SafetyCleanupFailure is null &&
+            cleanup.PendingLeaseDisposalFailure is null
+                ? exception
+                : new AggregateException(
+                    "The wallpaper operation and one or more safety cleanup steps failed.",
+                    new[]
+                    {
+                        exception,
+                        cleanup.SafetyCleanupFailure,
+                        cleanup.PendingLeaseDisposalFailure,
+                    }.OfType<Exception>());
+        var runtimeError = RuntimeError("activation-failed", terminalException);
+        var faultedSurface = CreateFaultedSurface(runtimeError);
+        Volatile.Write(ref _activeSnapshot, null);
+        Volatile.Write(ref _surface, faultedSurface);
+        _activePlaybackOwnership = faultedSurface.PlaybackOwnership;
+        Publish(
+            WallpaperRuntimePhase.Faulted,
+            exception.Message,
+            attempt.Request.Revision);
+        return RuntimeActivationResult.Failed(
+            attempt.Request.Revision,
+            faultedSurface,
+            activeSnapshot: null,
+            error: runtimeError);
     }
 
     public async Task<RuntimeActivationResult?> TryPromoteActiveSnapshotAsync(
@@ -1079,28 +1182,6 @@ public sealed class WallpaperCoordinator :
         ThrowCollectedExceptions("Wallpaper cleanup failed.", failures);
     }
 
-    private async Task<Exception?> TryStopAfterSecurityRejectionAsync(
-        bool cleanupAlreadyAttempted)
-    {
-        if (cleanupAlreadyAttempted ||
-            _injectionMonitor.Compatibility.Security.Status !=
-                CodexSecurityStatus.Rejected)
-        {
-            return null;
-        }
-
-        try
-        {
-            await StopInjectedContentAndMediaAsync(CancellationToken.None)
-                .ConfigureAwait(false);
-            return null;
-        }
-        catch (Exception exception)
-        {
-            return exception;
-        }
-    }
-
     private static bool IsReviewedCodexProcess(
         CodexProcessSnapshot process,
         VerifiedCodexIdentity identity) =>
@@ -1224,24 +1305,6 @@ public sealed class WallpaperCoordinator :
                 Math.Min(
                     profile.LightOverlay,
                     WallpaperCompositionOptions.MaximumOverlayOpacity)));
-
-    private static async ValueTask<Exception?> TryDisposeLeaseAsync(IMediaLease? lease)
-    {
-        if (lease is null)
-        {
-            return null;
-        }
-
-        try
-        {
-            await lease.DisposeAsync().ConfigureAwait(false);
-            return null;
-        }
-        catch (Exception exception)
-        {
-            return exception;
-        }
-    }
 
     private void CaptureTerminalSecurityResult(
         Exception exception,
