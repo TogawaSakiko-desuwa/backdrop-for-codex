@@ -24,6 +24,7 @@
   <data name="Action_ResumeVideo" xml:space="preserve"><value>继续视频</value></data>
   <data name="Action_RestoreOfficial" xml:space="preserve"><value>恢复官方背景</value></data>
   <data name="Action_Retry" xml:space="preserve"><value>重试</value></data>
+  <data name="Action_ViewDetails" xml:space="preserve"><value>查看详细信息</value></data>
   <data name="Action_Settings" xml:space="preserve"><value>设置</value></data>
   <data name="Action_Remove" xml:space="preserve"><value>移除</value></data>
   <data name="Action_ClearRecent" xml:space="preserve"><value>清空最近使用</value></data>
@@ -228,8 +229,9 @@
   <data name="Error_MediaInvalid_Recovery" xml:space="preserve"><value>请选择有效的 PNG、JPEG、WebP、MP4 或 WebM 文件。</value></data>
   <data name="Error_RiskAcknowledgementRequired_Message" xml:space="preserve"><value>启用本机调试前，增强启动需要得到你的确认。</value></data>
   <data name="Error_RiskAcknowledgementRequired_Recovery" xml:space="preserve"><value>请阅读安全说明，并在愿意继续时确认。</value></data>
-  <data name="Error_CodexAlreadyRunning_Message" xml:space="preserve"><value>Codex 已经在运行，因此 Backdrop 没有连接到该进程。</value></data>
-  <data name="Error_CodexAlreadyRunning_Recovery" xml:space="preserve"><value>请完全退出 Codex，然后再次应用壁纸。</value></data>
+  <data name="Error_CodexAlreadyRunning_Title" xml:space="preserve"><value>无法安全启动 Codex</value></data>
+  <data name="Error_CodexAlreadyRunning_Message" xml:space="preserve"><value>检测到一个已在运行、但不是由 Backdrop 启动的 Codex。</value></data>
+  <data name="Error_CodexAlreadyRunning_Recovery" xml:space="preserve"><value>请先关闭所有 Codex 窗口，再重试。</value></data>
   <data name="Error_CodexUnavailable_Message" xml:space="preserve"><value>找不到经过审核的官方 Codex 安装。</value></data>
   <data name="Error_CodexUnavailable_Recovery" xml:space="preserve"><value>请安装或修复官方 Codex 应用后重试。</value></data>
   <data name="Error_CodexSecurityRejected_Message" xml:space="preserve"><value>Codex 包或运行环境未通过安全验证。</value></data>

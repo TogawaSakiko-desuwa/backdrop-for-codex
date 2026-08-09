@@ -24,6 +24,7 @@
   <data name="Action_ResumeVideo" xml:space="preserve"><value>Resume video</value></data>
   <data name="Action_RestoreOfficial" xml:space="preserve"><value>Restore official background</value></data>
   <data name="Action_Retry" xml:space="preserve"><value>Retry</value></data>
+  <data name="Action_ViewDetails" xml:space="preserve"><value>View details</value></data>
   <data name="Action_Settings" xml:space="preserve"><value>Settings</value></data>
   <data name="Action_Remove" xml:space="preserve"><value>Remove</value></data>
   <data name="Action_ClearRecent" xml:space="preserve"><value>Clear recent</value></data>
@@ -228,8 +229,9 @@
   <data name="Error_MediaInvalid_Recovery" xml:space="preserve"><value>Choose a valid PNG, JPEG, WebP, MP4, or WebM file.</value></data>
   <data name="Error_RiskAcknowledgementRequired_Message" xml:space="preserve"><value>Enhanced launch needs your acknowledgement before local debugging can be enabled.</value></data>
   <data name="Error_RiskAcknowledgementRequired_Recovery" xml:space="preserve"><value>Review the safety notice and confirm if you want to continue.</value></data>
-  <data name="Error_CodexAlreadyRunning_Message" xml:space="preserve"><value>Codex was already running, so Backdrop did not attach to it.</value></data>
-  <data name="Error_CodexAlreadyRunning_Recovery" xml:space="preserve"><value>Exit Codex completely, then apply the wallpaper again.</value></data>
+  <data name="Error_CodexAlreadyRunning_Title" xml:space="preserve"><value>Cannot start Codex safely</value></data>
+  <data name="Error_CodexAlreadyRunning_Message" xml:space="preserve"><value>Codex is already running, but it was not launched by Backdrop.</value></data>
+  <data name="Error_CodexAlreadyRunning_Recovery" xml:space="preserve"><value>Close every Codex window completely, then retry.</value></data>
   <data name="Error_CodexUnavailable_Message" xml:space="preserve"><value>The reviewed official Codex installation could not be found.</value></data>
   <data name="Error_CodexUnavailable_Recovery" xml:space="preserve"><value>Install or repair the official Codex app, then retry.</value></data>
   <data name="Error_CodexSecurityRejected_Message" xml:space="preserve"><value>The Codex package or runtime failed security validation.</value></data>
