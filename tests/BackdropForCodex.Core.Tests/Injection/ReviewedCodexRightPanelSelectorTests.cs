@@ -1266,14 +1266,7 @@ public sealed partial class ReviewedCodexRightPanelSelectorTests
                 1234,
                 WallpaperMediaKind.Image),
             PresentationContractCatalog.CreateFullySupportedCapabilities());
-        const string StartMarker = "style.textContent = `";
-        var start = script.IndexOf(StartMarker, StringComparison.Ordinal);
-        Assert.True(start >= 0);
-        start += StartMarker.Length;
-        var end = script.IndexOf("`;", start, StringComparison.Ordinal);
-        Assert.True(end > start);
-
-        return script[start..end];
+        return InjectionScriptPayloadTestHelper.ExtractStyleSheet(script);
     }
 
     private static string ExtractBlock(string source, string blockHeader)

@@ -29,16 +29,16 @@ public sealed class InjectionScriptBuilderTests
             composition: new WallpaperCompositionOptions(0.25, 0.75, 0.5, 0.1));
 
         var script = InjectionScriptBuilder.BuildInstall(options);
+        var styleSheet = InjectionScriptPayloadTestHelper.ExtractStyleSheet(script);
 
         Assert.Contains($"\"rootId\":\"{InjectionScriptBuilder.RootElementId}\"", script, StringComparison.Ordinal);
         Assert.Contains($"\"styleId\":\"{InjectionScriptBuilder.StyleElementId}\"", script, StringComparison.Ordinal);
         Assert.Contains($"\"fileInputId\":\"{InjectionScriptBuilder.FileInputElementId}\"", script, StringComparison.Ordinal);
         Assert.Contains("\"mediaKind\":\"image\"", script, StringComparison.Ordinal);
-        Assert.Contains("\"objectFit\":\"contain\"", script, StringComparison.Ordinal);
-        Assert.Contains("\"focusX\":0.25", script, StringComparison.Ordinal);
-        Assert.Contains("\"focusY\":0.75", script, StringComparison.Ordinal);
-        Assert.Contains("\"darkOverlay\":0.5", script, StringComparison.Ordinal);
-        Assert.Contains("\"lightOverlay\":0.1", script, StringComparison.Ordinal);
+        Assert.Contains("object-fit: contain;", styleSheet, StringComparison.Ordinal);
+        Assert.Contains("50%\n        50%;", styleSheet, StringComparison.Ordinal);
+        Assert.Contains("rgb(0 0 0 / 0.5)", styleSheet, StringComparison.Ordinal);
+        Assert.Contains("rgb(255 255 255 / 0.1)", styleSheet, StringComparison.Ordinal);
         Assert.Contains("\"expectedContentLength\":1234", script, StringComparison.Ordinal);
         Assert.Contains("\"heartbeatIntervalMs\":2000", script, StringComparison.Ordinal);
         Assert.Contains("\"leaseTimeoutMs\":10000", script, StringComparison.Ordinal);
@@ -60,9 +60,9 @@ public sealed class InjectionScriptBuilderTests
         WallpaperObjectFit objectFit,
         string expectedCss)
     {
-        var script = InjectionScriptBuilder.BuildInstall(CreateOptions(objectFit: objectFit));
+        var script = BuildStyleSheet(CreateOptions(objectFit: objectFit));
 
-        Assert.Contains($"\"objectFit\":\"{expectedCss}\"", script, StringComparison.Ordinal);
+        Assert.Contains($"object-fit: {expectedCss};", script, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -156,7 +156,7 @@ public sealed class InjectionScriptBuilderTests
     [Fact]
     public void BuildInstall_LeavesMainTransparentAndUsesOnlyIntentionalGlassLayers()
     {
-        var script = InjectionScriptBuilder.BuildInstall(CreateOptions());
+        var script = BuildStyleSheet(CreateOptions());
 
         Assert.Contains("body main {", script, StringComparison.Ordinal);
         Assert.Contains("background: transparent !important", script, StringComparison.Ordinal);
@@ -182,11 +182,11 @@ public sealed class InjectionScriptBuilderTests
     [Fact]
     public void BuildInstall_LayersOnlyBodyLevelBrowserHostsAboveTheApp()
     {
-        var script = InjectionScriptBuilder.BuildInstall(CreateOptions());
+        var script = BuildStyleSheet(CreateOptions());
         var compactScript = string.Concat(script.Where(character => !char.IsWhiteSpace(character)));
 
         Assert.Contains(
-            "#${cfg.rootId}{position:fixed;inset:0;z-index:0;",
+            $"#{InjectionScriptBuilder.RootElementId}{{position:fixed;inset:0;z-index:0;",
             compactScript,
             StringComparison.Ordinal);
         Assert.Contains(
@@ -212,7 +212,7 @@ public sealed class InjectionScriptBuilderTests
     [Fact]
     public void BuildInstall_ClearsPluginAndScheduledStickyFades()
     {
-        var script = InjectionScriptBuilder.BuildInstall(CreateOptions());
+        var script = BuildStyleSheet(CreateOptions());
         var compactScript = string.Concat(script.Where(character => !char.IsWhiteSpace(character)));
 
         foreach (var searchId in new[] { "plugins-page-search", "scheduled-page-search" })
@@ -251,7 +251,7 @@ public sealed class InjectionScriptBuilderTests
     [Fact]
     public void BuildInstall_ClearsOnlyTheActiveKeyboardShortcutsSearchSticky()
     {
-        var script = InjectionScriptBuilder.BuildInstall(CreateOptions());
+        var script = BuildStyleSheet(CreateOptions());
         var compactScript = string.Concat(script.Where(character => !char.IsWhiteSpace(character)));
         const string RouteEvidence =
             "body:has([class~=\"app-shell-left-panel\"]" +
@@ -282,7 +282,7 @@ public sealed class InjectionScriptBuilderTests
     [Fact]
     public void BuildInstall_RemovesOnlyNestedSitesAndPullRequestStickyPseudoFades()
     {
-        var script = InjectionScriptBuilder.BuildInstall(CreateOptions());
+        var script = BuildStyleSheet(CreateOptions());
         var compactScript = string.Concat(script.Where(character => !char.IsWhiteSpace(character)));
         const string ClearDeclaration = "background-image: none !important;";
         var compactClearDeclaration = string.Concat(
@@ -326,7 +326,7 @@ public sealed class InjectionScriptBuilderTests
     [Fact]
     public void BuildInstall_DoesNotEmitUnanchoredGlobalSurfaceOrGradientSelectors()
     {
-        var script = InjectionScriptBuilder.BuildInstall(CreateOptions());
+        var script = BuildStyleSheet(CreateOptions());
         var compactScript = string.Concat(script.Where(character => !char.IsWhiteSpace(character)));
 
         Assert.DoesNotContain(
@@ -357,7 +357,7 @@ public sealed class InjectionScriptBuilderTests
     [Fact]
     public void BuildInstall_UsesStableShellDataMarkersInsteadOfCssModuleClasses()
     {
-        var script = InjectionScriptBuilder.BuildInstall(CreateOptions());
+        var script = BuildStyleSheet(CreateOptions());
 
         string[] stableSelectors =
         [
@@ -388,57 +388,51 @@ public sealed class InjectionScriptBuilderTests
     [Fact]
     public void BuildInstall_AppliesCropFocusAndAddsAnOwnedThemeAwareOverlay()
     {
-        var script = InjectionScriptBuilder.BuildInstall(CreateOptions(
-            composition: new WallpaperCompositionOptions(0.2, 0.8, 0.55, 0.12)));
+        var options = CreateOptions(
+            composition: new WallpaperCompositionOptions(0.2, 0.8, 0.55, 0.12));
+        var script = InjectionScriptBuilder.BuildInstall(options);
+        var styleSheet = InjectionScriptPayloadTestHelper.ExtractStyleSheet(script);
 
-        Assert.Contains(
-            "cfg.objectFit === \"cover\" ? cfg.focusX * 100 : 50",
-            script,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "cfg.objectFit === \"cover\" ? cfg.focusY * 100 : 50",
-            script,
-            StringComparison.Ordinal);
-        Assert.Contains("object-position:", script, StringComparison.Ordinal);
-        Assert.Contains("light-dark(", script, StringComparison.Ordinal);
+        Assert.Contains("object-position:\n        20%\n        80%;", styleSheet, StringComparison.Ordinal);
+        Assert.Contains("light-dark(", styleSheet, StringComparison.Ordinal);
         Assert.Contains(
             "--codex-wallpaper-glass: light-dark(",
-            script,
+            styleSheet,
             StringComparison.Ordinal);
         Assert.Contains(
             "var(--color-token-main-surface-primary, rgb(255 255 255))",
-            script,
+            styleSheet,
             StringComparison.Ordinal);
         Assert.Contains(
             ":root:is(.dark, .electron-dark, [data-theme=\"dark\"])",
-            script,
+            styleSheet,
             StringComparison.Ordinal);
         Assert.Contains(
             ":root:is(.light, .electron-light, [data-theme=\"light\"])",
-            script,
+            styleSheet,
             StringComparison.Ordinal);
         Assert.Contains(
             "--codex-wallpaper-glass: var(--codex-wallpaper-glass-dark);",
-            script,
+            styleSheet,
             StringComparison.Ordinal);
         Assert.Contains(
             "--codex-wallpaper-glass: var(--codex-wallpaper-glass-light);",
-            script,
+            styleSheet,
             StringComparison.Ordinal);
         Assert.Contains("overlay.dataset.codexWallpaperOverlay = \"\"", script, StringComparison.Ordinal);
         Assert.Contains("root.append(media, overlay, fileInput)", script, StringComparison.Ordinal);
         Assert.Contains(
-            "#${cfg.rootId} > [data-codex-wallpaper-overlay]",
-            script,
+            $"#{InjectionScriptBuilder.RootElementId} > [data-codex-wallpaper-overlay]",
+            styleSheet,
             StringComparison.Ordinal);
-        Assert.DoesNotContain("prefers-color-scheme", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("prefers-color-scheme", styleSheet, StringComparison.Ordinal);
         Assert.DoesNotContain("MutationObserver", script, StringComparison.Ordinal);
     }
 
     [Fact]
     public void BuildInstall_GlassesOnlyTheReviewedRightPanelShellAndAuditedContentShells()
     {
-        var script = InjectionScriptBuilder.BuildInstall(CreateOptions());
+        var script = BuildStyleSheet(CreateOptions());
         var normalizedScript = script.ReplaceLineEndings("\n");
         var compactScript = string.Concat(normalizedScript.Where(character => !char.IsWhiteSpace(character)));
         const string RightPanelTab =
@@ -493,9 +487,9 @@ public sealed class InjectionScriptBuilderTests
     [Fact]
     public void BuildInstall_GlassesOnlyPortalHomeSuggestionCardsWithThemeAwareOpacity()
     {
-        var script = InjectionScriptBuilder.BuildInstall(CreateOptions(
+        var script = BuildStyleSheet(CreateOptions(
             glass: new GlassEffectOptions(opacity: 0.78, blurPixels: 18, saturation: 1.2)));
-        var cappedScript = InjectionScriptBuilder.BuildInstall(CreateOptions(
+        var cappedScript = BuildStyleSheet(CreateOptions(
             glass: new GlassEffectOptions(opacity: 0.97, blurPixels: 18, saturation: 1.2)));
         var normalizedScript = string.Join(
             '\n',
@@ -515,9 +509,18 @@ public sealed class InjectionScriptBuilderTests
         Assert.True(nextRuleStart > forcedColorsBlockStart);
         var forcedColorsBlock = normalizedScript[forcedColorsBlockStart..nextRuleStart];
 
-        Assert.Contains("\"glassOpacity\":0.78", script, StringComparison.Ordinal);
-        Assert.Contains("\"homeSuggestionHoverOpacity\":0.86", script, StringComparison.Ordinal);
-        Assert.Contains("\"homeSuggestionHoverOpacity\":1", cappedScript, StringComparison.Ordinal);
+        Assert.Contains(
+            "--codex-wallpaper-home-suggestion-opacity: 78%;",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "--codex-wallpaper-home-suggestion-hover-opacity: 86%;",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "--codex-wallpaper-home-suggestion-hover-opacity: 100%;",
+            cappedScript,
+            StringComparison.Ordinal);
         Assert.Contains(
             """
             body [role="main"]:has([data-home-ambient-suggestions])
@@ -557,7 +560,7 @@ public sealed class InjectionScriptBuilderTests
     [Fact]
     public void BuildInstall_AddsReadableConversationBubblesWithoutCoveringMain()
     {
-        var script = InjectionScriptBuilder.BuildInstall(CreateOptions());
+        var script = BuildStyleSheet(CreateOptions());
 
         Assert.Contains(
             "[data-response-annotation-conversation][data-response-annotation-target]",
@@ -595,7 +598,7 @@ public sealed class InjectionScriptBuilderTests
     [Fact]
     public void BuildInstall_GlassesUnannotatedChatGptAssistantMessagesByAccessibleStructure()
     {
-        var script = InjectionScriptBuilder.BuildInstall(CreateOptions());
+        var script = BuildStyleSheet(CreateOptions());
         var compactScript = string.Concat(script.Where(character => !char.IsWhiteSpace(character)));
         const string Fallback =
             "bodymain" +
@@ -743,6 +746,10 @@ public sealed class InjectionScriptBuilderTests
             expectedContentLength,
             WallpaperMediaKind.Image));
     }
+
+    private static string BuildStyleSheet(WallpaperInjectionOptions options) =>
+        InjectionScriptPayloadTestHelper.ExtractStyleSheet(
+            InjectionScriptBuilder.BuildInstall(options));
 
     private static WallpaperInjectionOptions CreateOptions(
         long generation = 1,

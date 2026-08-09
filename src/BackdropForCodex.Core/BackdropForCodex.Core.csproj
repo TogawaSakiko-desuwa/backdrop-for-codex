@@ -10,4 +10,10 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
     <PackageReference Include="PuppeteerSharp" />
   </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Injection/Templates/Install.js"
+                      LogicalName="BackdropForCodex.Core.Injection.Templates.Install.js" />
+    <EmbeddedResource Include="Injection/Templates/Wallpaper.css"
+                      LogicalName="BackdropForCodex.Core.Injection.Templates.Wallpaper.css" />
+  </ItemGroup>
 </Project>

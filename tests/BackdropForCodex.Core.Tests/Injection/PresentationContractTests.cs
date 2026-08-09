@@ -323,13 +323,14 @@ public sealed class PresentationContractTests
     [Fact]
     public void BuildInstall_OwnsHomeSurfaceStylesAsGlassCapability()
     {
-        var installScript = InjectionScriptBuilder.BuildInstall(
-            new WallpaperInjectionOptions(
-                generation: 3,
-                source: new Uri("file:///C:/Wallpapers/wallpaper.png"),
-                localMediaPath: @"C:\Wallpapers\wallpaper.png",
-                expectedContentLength: 4096,
-                WallpaperMediaKind.Image));
+        var installScript = InjectionScriptPayloadTestHelper.ExtractStyleSheet(
+            InjectionScriptBuilder.BuildInstall(
+                new WallpaperInjectionOptions(
+                    generation: 3,
+                    source: new Uri("file:///C:/Wallpapers/wallpaper.png"),
+                    localMediaPath: @"C:\Wallpapers\wallpaper.png",
+                    expectedContentLength: 4096,
+                    WallpaperMediaKind.Image)));
         const string homeRule = "[role=\"main\"]:has([data-home-ambient-suggestions])";
         var homeRuleIndex = installScript.IndexOf(homeRule, StringComparison.Ordinal);
         var glassStartIndex = installScript.LastIndexOf(
@@ -371,11 +372,12 @@ public sealed class PresentationContractTests
                 declared.Audio,
                 CompatibilityCapability.Disabled(
                     CompatibilityCapabilityReasonCode.StructuralProbeFailed)));
-        var installScript = InjectionScriptBuilder.BuildInstall(options, declared);
-        var degradedScript = InjectionScriptBuilder.BuildInstall(options, glassDisabled);
-        var advancedDegradedScript = InjectionScriptBuilder.BuildInstall(
-            options,
-            advancedDisabled);
+        var installScript = InjectionScriptPayloadTestHelper.ExtractStyleSheet(
+            InjectionScriptBuilder.BuildInstall(options, declared));
+        var degradedScript = InjectionScriptPayloadTestHelper.ExtractStyleSheet(
+            InjectionScriptBuilder.BuildInstall(options, glassDisabled));
+        var advancedDegradedScript = InjectionScriptPayloadTestHelper.ExtractStyleSheet(
+            InjectionScriptBuilder.BuildInstall(options, advancedDisabled));
         string[] glassRuleAnchors =
         [
             "plugins-page-search",
