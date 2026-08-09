@@ -90,6 +90,8 @@
   <data name="Hint_DropMedia" xml:space="preserve"><value>将一张图片或一个视频拖到这里</value></data>
   <data name="Hint_SupportedFormats" xml:space="preserve"><value>支持 PNG、JPEG、WebP、MP4 或 WebM</value></data>
   <data name="Hint_NoMedia" xml:space="preserve"><value>选择媒体后即可开始设计壁纸。</value></data>
+  <data name="Preview_Unavailable_Title" xml:space="preserve"><value>暂时无法预览</value></data>
+  <data name="Preview_Unavailable_Message" xml:space="preserve"><value>此来源需要尚未接入的来源提供程序或渲染器。</value></data>
   <data name="Hint_NoRecentMedia" xml:space="preserve"><value>最近使用过的媒体会显示在这里。</value></data>
   <data name="Hint_MissingMedia" xml:space="preserve"><value>此文件已不在当前设备上。</value></data>
   <data name="Hint_MissingMediaCompact" xml:space="preserve"><value>文件缺失</value></data>

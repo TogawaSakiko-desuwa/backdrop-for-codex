@@ -1,6 +1,7 @@
 using BackdropForCodex.App.Models;
 using BackdropForCodex.App.Services.Errors;
 using BackdropForCodex.App.Services.Localization;
+using BackdropForCodex.App.Services.Media;
 using BackdropForCodex.App.Services.Preferences;
 using BackdropForCodex.App.Services.Wallpaper;
 using BackdropForCodex.App.ViewModels;
@@ -16,6 +17,65 @@ namespace BackdropForCodex.Core.Tests.AppSupport;
 
 public sealed class MainWindowViewModelTests
 {
+    [Fact]
+    public async Task UnregisteredRecentSourceStaysPersistedButIsHiddenAndCannotBeSelected()
+    {
+        var media = CreateWorkshopMedia("123456");
+        var settings = AddRecent(SettingsV2.CreateDefault(), media);
+        var wallpaper = new FakeWallpaperApplicationService(settings);
+        using var preferencesStore = new FakeAppPreferencesStore();
+        using var viewModel = CreateViewModel(wallpaper, preferencesStore);
+
+        await viewModel.InitializeAsync();
+
+        Assert.Empty(viewModel.Recents);
+        Assert.NotNull(viewModel.SavedDesired.FindMedia(media.MediaId));
+        Assert.Throws<MediaSourceNotSupportedException>(
+            () => viewModel.SelectSource(media));
+        Assert.False(viewModel.Editor.HasSelectedMedia);
+    }
+
+    [Fact]
+    public async Task RegisteredWorkshopVideoAppearsAndCanReuseEditorSelection()
+    {
+        var media = CreateWorkshopMedia("123456");
+        var settings = AddRecent(SettingsV2.CreateDefault(), media);
+        var wallpaper = new FakeWallpaperApplicationService(settings);
+        using var preferencesStore = new FakeAppPreferencesStore();
+        var provider = new RegisteredWorkshopProvider();
+        var registry = new WallpaperSourceProviderRegistry([provider]);
+        var preview = new ReferenceOnlyPreviewService();
+        using var viewModel = new MainWindowViewModel(
+            wallpaper,
+            preferencesStore,
+            new StubErrorMapper(),
+            new FallbackTextProvider(),
+            preview,
+            registry);
+
+        await viewModel.InitializeAsync();
+        var recent = Assert.Single(viewModel.Recents);
+        viewModel.SelectSource(recent.Reference);
+
+        Assert.Null(recent.Path);
+        Assert.Equal("123456", recent.Reference.SourceIdentifier);
+        Assert.Equal(
+            MediaSourceKind.WallpaperEngineWorkshopProject,
+            viewModel.Editor.SelectedMediaReference?.SourceKind);
+        Assert.Equal("123456", viewModel.Editor.SelectedMediaIdentifier);
+        Assert.NotEmpty(preview.ProbedReferences);
+        Assert.Equal(0, preview.PathProbeCount);
+
+        var unknownContent = media with
+        {
+            MediaId = Guid.CreateVersion7(),
+            LastKnownKind = MediaKind.None,
+        };
+        Assert.Throws<ArgumentException>(
+            () => viewModel.SelectSource(unknownContent));
+        Assert.Equal("123456", viewModel.Editor.SelectedMediaIdentifier);
+    }
+
     [Fact]
     public void WallpaperCompatibility_ExposesCapabilitySourceSnapshot()
     {
@@ -110,17 +170,17 @@ public sealed class MainWindowViewModelTests
                 WallpaperConfigurationState.AreEquivalent(
                     settings,
                     viewModel.SavedDesired));
-            Assert.Equal(mediaPath, viewModel.SelectedMediaPath);
-            Assert.Equal(MediaKind.Image, viewModel.SelectedMediaKind);
-            Assert.Equal(WallpaperFit.Contain, viewModel.Fit);
-            Assert.Equal(0.25, viewModel.FocusX);
-            Assert.Equal(0.75, viewModel.FocusY);
-            Assert.Equal(0.84, viewModel.PanelOpacity);
-            Assert.Equal(7, viewModel.BlurPx);
-            Assert.Equal(0.42, viewModel.DarkOverlay);
-            Assert.Equal(0.21, viewModel.LightOverlay);
-            Assert.True(viewModel.AcceptedCdpRisk);
-            Assert.False(viewModel.IsMediaMissing);
+            Assert.Equal(mediaPath, viewModel.Editor.SelectedMediaPath);
+            Assert.Equal(MediaKind.Image, viewModel.Editor.SelectedMediaKind);
+            Assert.Equal(WallpaperFit.Contain, viewModel.Editor.Fit);
+            Assert.Equal(0.25, viewModel.Editor.FocusX);
+            Assert.Equal(0.75, viewModel.Editor.FocusY);
+            Assert.Equal(0.84, viewModel.Editor.PanelOpacity);
+            Assert.Equal(7, viewModel.Editor.BlurPx);
+            Assert.Equal(0.42, viewModel.Editor.DarkOverlay);
+            Assert.Equal(0.21, viewModel.Editor.LightOverlay);
+            Assert.True(viewModel.Editor.AcceptedCdpRisk);
+            Assert.False(viewModel.Editor.IsMediaMissing);
             Assert.False(viewModel.IsDraftDirty);
             Assert.Equal(ThemeMode.Dark, viewModel.ThemeMode);
             Assert.True(viewModel.HasShownTrayTip);
@@ -161,9 +221,9 @@ public sealed class MainWindowViewModelTests
 
             viewModel.SelectMedia(mediaPath);
 
-            Assert.Equal(mediaPath, viewModel.SelectedMediaPath);
-            Assert.Equal(MediaKind.Image, viewModel.SelectedMediaKind);
-            Assert.False(viewModel.IsMediaMissing);
+            Assert.Equal(mediaPath, viewModel.Editor.SelectedMediaPath);
+            Assert.Equal(MediaKind.Image, viewModel.Editor.SelectedMediaKind);
+            Assert.False(viewModel.Editor.IsMediaMissing);
             Assert.True(viewModel.IsDraftDirty);
             Assert.True(
                 WallpaperConfigurationState.AreEquivalent(
@@ -171,6 +231,38 @@ public sealed class MainWindowViewModelTests
                     viewModel.SavedDesired));
             Assert.Equal(0, wallpaper.SaveCallCount);
             Assert.Equal(0, wallpaper.ApplyCallCount);
+        }
+        finally
+        {
+            File.Delete(mediaPath);
+        }
+    }
+
+    [Fact]
+    public async Task EditorDraftChangesRefreshRootCrossDomainClearState()
+    {
+        var mediaPath = CreateTemporaryMediaFile(".png");
+        try
+        {
+            var wallpaper = new FakeWallpaperApplicationService(
+                SettingsV2.CreateDefault());
+            using var preferencesStore = new FakeAppPreferencesStore();
+            using var viewModel = CreateViewModel(wallpaper, preferencesStore);
+            await viewModel.InitializeAsync();
+            var changes = new List<string?>();
+            viewModel.PropertyChanged += (_, eventArgs) =>
+                changes.Add(eventArgs.PropertyName);
+
+            viewModel.SelectMedia(mediaPath);
+
+            Assert.True(viewModel.CanClearSelectedMedia);
+            Assert.Contains(nameof(MainWindowViewModel.CanClearSelectedMedia), changes);
+
+            changes.Clear();
+            viewModel.ClearSelectedMedia();
+
+            Assert.False(viewModel.CanClearSelectedMedia);
+            Assert.Contains(nameof(MainWindowViewModel.CanClearSelectedMedia), changes);
         }
         finally
         {
@@ -195,12 +287,12 @@ public sealed class MainWindowViewModelTests
             using var viewModel = CreateViewModel(wallpaper, preferencesStore);
             await viewModel.InitializeAsync();
             viewModel.SelectMedia(mediaPath);
-            viewModel.Fit = WallpaperFit.Contain;
+            viewModel.Editor.Fit = WallpaperFit.Contain;
             viewModel.SetFocus(0.2, 0.8);
-            viewModel.PanelOpacity = 0.86;
-            viewModel.BlurPx = 6;
-            viewModel.DarkOverlay = 0.44;
-            viewModel.LightOverlay = 0.16;
+            viewModel.Editor.PanelOpacity = 0.86;
+            viewModel.Editor.BlurPx = 6;
+            viewModel.Editor.DarkOverlay = 0.44;
+            viewModel.Editor.LightOverlay = 0.16;
 
             var applied = await viewModel.ApplyAsync();
 
@@ -224,6 +316,8 @@ public sealed class MainWindowViewModelTests
             Assert.Equal(UiStatusTone.Error, viewModel.StatusTone);
             Assert.Equal("Wallpaper could not be applied", viewModel.StatusTitle);
             Assert.Contains("simulated wallpaper runtime", viewModel.StatusMessage);
+            Assert.True(viewModel.CanRetryStatusApply);
+            Assert.True(viewModel.HasStatusDetails);
         }
         finally
         {
@@ -266,7 +360,7 @@ public sealed class MainWindowViewModelTests
         Assert.NotNull(wallpaper.LastSavedSettings);
         Assert.True(wallpaper.LastSavedSettings.AcceptedCdpRisk);
         Assert.True(viewModel.SavedDesired.AcceptedCdpRisk);
-        Assert.True(viewModel.AcceptedCdpRisk);
+        Assert.True(viewModel.Editor.AcceptedCdpRisk);
         Assert.False(viewModel.IsDraftDirty);
         Assert.Equal(UiStatusTone.Success, viewModel.StatusTone);
     }
@@ -294,7 +388,7 @@ public sealed class MainWindowViewModelTests
             viewModel.SelectMedia(mediaPath);
             await viewModel.AcceptRiskAsync();
 
-            Assert.True(viewModel.AcceptedCdpRisk);
+            Assert.True(viewModel.Editor.AcceptedCdpRisk);
             Assert.True(await viewModel.ApplyAsync());
             wallpaper.ReleaseFirstApply.TrySetResult();
             Assert.False(await firstApply);
@@ -320,8 +414,12 @@ public sealed class MainWindowViewModelTests
 
         await viewModel.InitializeAsync();
 
-        Assert.Equal(MainWindowViewModel.MaximumOverlay, viewModel.DarkOverlay);
-        Assert.Equal(MainWindowViewModel.MaximumOverlay, viewModel.LightOverlay);
+        Assert.Equal(
+            WallpaperEditorViewModel.MaximumOverlay,
+            viewModel.Editor.DarkOverlay);
+        Assert.Equal(
+            WallpaperEditorViewModel.MaximumOverlay,
+            viewModel.Editor.LightOverlay);
         Assert.Equal(0.90, Global(viewModel.SavedDesired).DarkOverlay);
         Assert.Equal(0.75, Global(viewModel.SavedDesired).LightOverlay);
         Assert.True(viewModel.IsDraftDirty);
@@ -335,10 +433,10 @@ public sealed class MainWindowViewModelTests
         Assert.True(await viewModel.ApplyAsync());
 
         Assert.Equal(
-            MainWindowViewModel.MaximumOverlay,
+            WallpaperEditorViewModel.MaximumOverlay,
             Global(wallpaper.LastSavedSettings!).DarkOverlay);
         Assert.Equal(
-            MainWindowViewModel.MaximumOverlay,
+            WallpaperEditorViewModel.MaximumOverlay,
             Global(wallpaper.LastSavedSettings!).LightOverlay);
         Assert.False(viewModel.IsDraftDirty);
     }
@@ -356,22 +454,22 @@ public sealed class MainWindowViewModelTests
             await viewModel.InitializeAsync();
             viewModel.SelectMedia(mediaPath);
 
-            Assert.True(viewModel.CanAdjustFocus);
+            Assert.True(viewModel.Editor.CanAdjustFocus);
 
             viewModel.SetFocus(0.98, 0.02);
             viewModel.NudgeFocus(0.10, -0.10);
 
-            Assert.Equal(1, viewModel.FocusX);
-            Assert.Equal(0, viewModel.FocusY);
+            Assert.Equal(1, viewModel.Editor.FocusX);
+            Assert.Equal(0, viewModel.Editor.FocusY);
 
             viewModel.ResetFocus();
 
-            Assert.Equal(0.5, viewModel.FocusX);
-            Assert.Equal(0.5, viewModel.FocusY);
+            Assert.Equal(0.5, viewModel.Editor.FocusX);
+            Assert.Equal(0.5, viewModel.Editor.FocusY);
 
-            viewModel.Fit = WallpaperFit.Contain;
+            viewModel.Editor.Fit = WallpaperFit.Contain;
 
-            Assert.False(viewModel.CanAdjustFocus);
+            Assert.False(viewModel.Editor.CanAdjustFocus);
         }
         finally
         {
@@ -533,7 +631,7 @@ public sealed class MainWindowViewModelTests
             Assert.True(viewModel.CanRestoreVersion1Backup);
             viewModel.SelectMedia(mediaPath);
             await viewModel.AcceptRiskAsync();
-            Assert.Null(viewModel.SelectedMediaPath);
+            Assert.Null(viewModel.Editor.SelectedMediaPath);
             Assert.Equal(0, wallpaper.SaveCallCount);
 
             await viewModel.RestoreVersion1BackupAsync();
@@ -541,8 +639,8 @@ public sealed class MainWindowViewModelTests
             Assert.Equal(1, wallpaper.RestoreBackupCallCount);
             Assert.False(viewModel.HasProtectedSettings);
             Assert.True(viewModel.CanEdit);
-            Assert.Equal(mediaPath, viewModel.SelectedMediaPath);
-            Assert.True(viewModel.AcceptedCdpRisk);
+            Assert.Equal(mediaPath, viewModel.Editor.SelectedMediaPath);
+            Assert.True(viewModel.Editor.AcceptedCdpRisk);
         }
         finally
         {
@@ -573,7 +671,7 @@ public sealed class MainWindowViewModelTests
             viewModel.SelectMedia(mediaPath);
             await viewModel.AcceptRiskAsync();
             Assert.False(await viewModel.ApplyAsync());
-            Assert.Null(viewModel.SelectedMediaPath);
+            Assert.Null(viewModel.Editor.SelectedMediaPath);
             Assert.Equal(0, wallpaper.SaveCallCount);
             Assert.Equal(0, wallpaper.ApplyCallCount);
         }
@@ -619,7 +717,7 @@ public sealed class MainWindowViewModelTests
         var applied = await viewModel.ApplyAsync();
 
         Assert.True(applied);
-        Assert.False(viewModel.AcceptedCdpRisk);
+        Assert.False(viewModel.Editor.AcceptedCdpRisk);
         Assert.Equal(1, wallpaper.ApplyCallCount);
         Assert.Equal(
             WallpaperRuntimeSurfaceKind.Official,
@@ -654,7 +752,7 @@ public sealed class MainWindowViewModelTests
             Assert.True(viewModel.CanSubmitApply);
 
             viewModel.SelectMedia(secondPath);
-            viewModel.BlurPx = 5;
+            viewModel.Editor.BlurPx = 5;
             var secondApply = viewModel.ApplyAsync();
 
             Assert.True(await secondApply);
@@ -700,6 +798,14 @@ public sealed class MainWindowViewModelTests
             Assert.False(await viewModel.ApplyAsync());
             Assert.Equal("Saved, not activated", viewModel.WorkspaceStatusText);
             Assert.Equal("Saved, not activated", viewModel.FooterStatusText);
+            Assert.Equal("Wallpaper could not be applied", viewModel.StatusTitle);
+            Assert.DoesNotContain(
+                "saved media could not be acquired",
+                viewModel.StatusMessage,
+                StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(UiStatusTone.Warning, viewModel.StatusTone);
+            Assert.True(viewModel.CanRetryStatusApply);
+            Assert.True(viewModel.HasStatusDetails);
         }
         finally
         {
@@ -973,6 +1079,24 @@ public sealed class MainWindowViewModelTests
             AcceptedCdpRisk = acceptedCdpRisk,
         }).CreateSnapshot();
     }
+
+    private static MediaReference CreateWorkshopMedia(string publishedFileId) =>
+        new()
+        {
+            MediaId = Guid.CreateVersion7(),
+            SourceKind = MediaSourceKind.WallpaperEngineWorkshopProject,
+            SourceIdentifier = publishedFileId,
+            LastKnownKind = MediaKind.Video,
+        };
+
+    private static SettingsV2 AddRecent(
+        SettingsV2 baseline,
+        MediaReference media) =>
+        (baseline with
+        {
+            MediaCatalog = [.. baseline.MediaCatalog, media],
+            RecentMediaIds = [media.MediaId],
+        }).CreateSnapshot();
 
     private static WallpaperProfile Global(SettingsV2 settings) =>
         settings.ResolveProfile(SemanticRegion.Global);
@@ -1597,6 +1721,69 @@ public sealed class MainWindowViewModelTests
         }
     }
 
+    private sealed class RegisteredWorkshopProvider : IWallpaperSourceProvider
+    {
+        public MediaSourceKind SourceKind =>
+            MediaSourceKind.WallpaperEngineWorkshopProject;
+
+        public ValueTask<IReadOnlyList<WallpaperSourceDescriptor>> DiscoverAsync(
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return ValueTask.FromResult<IReadOnlyList<WallpaperSourceDescriptor>>([]);
+        }
+
+        public ValueTask<WallpaperSourceResolution> ResolveAsync(
+            MediaReference reference,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var snapshot = reference.Snapshot();
+            var descriptor = new WallpaperSourceDescriptor(
+                SourceKind,
+                snapshot.SourceIdentifier,
+                "Workshop video",
+                WallpaperContentKind.Video,
+                WallpaperDeliveryKind.DirectMedia,
+                WallpaperDeliveryCapabilities.None);
+            return ValueTask.FromResult(
+                new WallpaperSourceResolution(
+                    snapshot,
+                    descriptor,
+                    new MediaFileMetadata(
+                        MediaFormat.Mp4,
+                        MediaKind.Video,
+                        "video/mp4",
+                        128)));
+        }
+    }
+
+    private sealed class ReferenceOnlyPreviewService : ISafeMediaPreviewService
+    {
+        public List<MediaReference> ProbedReferences { get; } = [];
+
+        public int PathProbeCount { get; private set; }
+
+        public ISafeMediaPreviewLease Acquire(MediaReference reference) =>
+            throw new NotSupportedException(reference.SourceIdentifier);
+
+        public ISafeMediaPreviewLease Acquire(string mediaPath) =>
+            throw new NotSupportedException(mediaPath);
+
+        public bool IsAvailable(MediaReference reference)
+        {
+            ProbedReferences.Add(reference.Snapshot());
+            return true;
+        }
+
+        public bool IsAvailable(string mediaPath)
+        {
+            _ = mediaPath;
+            PathProbeCount++;
+            return false;
+        }
+    }
+
     private sealed class QueuedSynchronizationContext : SynchronizationContext
     {
         private readonly Queue<(SendOrPostCallback Callback, object? State)> _pending =
@@ -1661,6 +1848,19 @@ public sealed class MainWindowViewModelTests
             UserFacingOperation operation = UserFacingOperation.General)
         {
             ArgumentNullException.ThrowIfNull(exception);
+            return new UserFacingError(
+                UserFacingErrorCode.WallpaperApplyFailed,
+                "Wallpaper could not be applied",
+                "The simulated wallpaper runtime failed.",
+                "Retry after resolving the runtime issue.",
+                CanRetry: true);
+        }
+
+        public UserFacingError Map(
+            WallpaperRuntimeError runtimeError,
+            UserFacingOperation operation = UserFacingOperation.General)
+        {
+            ArgumentNullException.ThrowIfNull(runtimeError);
             return new UserFacingError(
                 UserFacingErrorCode.WallpaperApplyFailed,
                 "Wallpaper could not be applied",

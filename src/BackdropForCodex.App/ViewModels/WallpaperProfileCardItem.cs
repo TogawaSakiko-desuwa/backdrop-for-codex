@@ -9,9 +9,9 @@ using BackdropForCodex.Core.Settings;
 namespace BackdropForCodex.App.ViewModels;
 
 /// <summary>
-/// A path-minimizing projection of a durable wallpaper profile for the profile strip.
-/// The full local path is retained only for the safe thumbnail converter and is never
-/// included in accessible names or other user-facing text.
+/// A source-aware projection of a durable wallpaper profile for the profile strip. Provider
+/// identifiers are retained as immutable references and are never included in accessible names.
+/// A local path is exposed separately only for the current thumbnail converter.
 /// </summary>
 public sealed record WallpaperProfileCardItem
 {
@@ -19,6 +19,7 @@ public sealed record WallpaperProfileCardItem
         Guid profileId,
         string name,
         Guid? mediaId,
+        MediaReference? mediaReference,
         string? previewPath,
         MediaKind mediaKind,
         bool isMissing,
@@ -30,6 +31,7 @@ public sealed record WallpaperProfileCardItem
         ProfileId = profileId;
         Name = name;
         MediaId = mediaId;
+        _mediaReference = mediaReference?.Snapshot();
         PreviewPath = previewPath;
         MediaKind = mediaKind;
         IsMissing = isMissing;
@@ -44,6 +46,10 @@ public sealed record WallpaperProfileCardItem
     public string Name { get; }
 
     public Guid? MediaId { get; }
+
+    private readonly MediaReference? _mediaReference;
+
+    public MediaReference? MediaReference => _mediaReference?.Snapshot();
 
     /// <summary>
     /// Local path consumed only by <see cref="Converters.MediaThumbnailConverter"/>.
@@ -86,7 +92,7 @@ public sealed class WallpaperProfileCardProjection
         ISafeMediaPreviewService? previewMedia = null)
     {
         _text = text ?? throw new ArgumentNullException(nameof(text));
-        _previewMedia = previewMedia ?? SafeMediaPreviewService.Shared;
+        _previewMedia = previewMedia ?? AppWallpaperSources.Preview;
     }
 
     public IReadOnlyList<WallpaperProfileCardItem> CreateItems(SettingsV2 settings)
@@ -117,6 +123,7 @@ public sealed class WallpaperProfileCardProjection
             return CreateCard(
                 profile,
                 mediaId: null,
+                mediaReference: null,
                 previewPath: null,
                 mediaKind: MediaKind.None,
                 isMissing: false,
@@ -129,8 +136,8 @@ public sealed class WallpaperProfileCardProjection
             ? media.SourceIdentifier
             : null;
         var isMissing =
-            previewPath is not null &&
-            !IsAvailable(mediaId, previewPath, availabilityByMediaId);
+            media.LastKnownKind is MediaKind.Image or MediaKind.Video &&
+            !IsAvailable(media, availabilityByMediaId);
         var subtitle = isMissing
             ? _text.GetStringOrFallback("Profile_MediaMissing", "Media missing")
             : media.LastKnownKind switch
@@ -146,6 +153,7 @@ public sealed class WallpaperProfileCardProjection
         return CreateCard(
             profile,
             mediaId,
+            media,
             previewPath,
             media.LastKnownKind,
             isMissing,
@@ -154,16 +162,16 @@ public sealed class WallpaperProfileCardProjection
     }
 
     private bool IsAvailable(
-        Guid mediaId,
-        string previewPath,
+        MediaReference reference,
         Dictionary<Guid, bool> availabilityByMediaId)
     {
+        var mediaId = reference.MediaId;
         if (availabilityByMediaId.TryGetValue(mediaId, out var isAvailable))
         {
             return isAvailable;
         }
 
-        isAvailable = _previewMedia.IsAvailable(previewPath);
+        isAvailable = _previewMedia.IsAvailable(reference);
         availabilityByMediaId.Add(mediaId, isAvailable);
         return isAvailable;
     }
@@ -171,6 +179,7 @@ public sealed class WallpaperProfileCardProjection
     private WallpaperProfileCardItem CreateCard(
         WallpaperProfile profile,
         Guid? mediaId,
+        MediaReference? mediaReference,
         string? previewPath,
         MediaKind mediaKind,
         bool isMissing,
@@ -191,6 +200,7 @@ public sealed class WallpaperProfileCardProjection
             profile.ProfileId,
             profile.Name,
             mediaId,
+            mediaReference,
             previewPath,
             mediaKind,
             isMissing,

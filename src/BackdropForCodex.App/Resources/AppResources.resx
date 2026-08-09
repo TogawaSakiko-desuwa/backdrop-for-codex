@@ -90,6 +90,8 @@
   <data name="Hint_DropMedia" xml:space="preserve"><value>Drop one image or video here</value></data>
   <data name="Hint_SupportedFormats" xml:space="preserve"><value>PNG, JPEG, WebP, MP4, or WebM</value></data>
   <data name="Hint_NoMedia" xml:space="preserve"><value>Choose media to start designing your wallpaper.</value></data>
+  <data name="Preview_Unavailable_Title" xml:space="preserve"><value>Preview unavailable</value></data>
+  <data name="Preview_Unavailable_Message" xml:space="preserve"><value>This source needs a provider or renderer that is not connected yet.</value></data>
   <data name="Hint_NoRecentMedia" xml:space="preserve"><value>Your recently used media will appear here.</value></data>
   <data name="Hint_MissingMedia" xml:space="preserve"><value>This file is no longer available on this device.</value></data>
   <data name="Hint_MissingMediaCompact" xml:space="preserve"><value>Missing</value></data>

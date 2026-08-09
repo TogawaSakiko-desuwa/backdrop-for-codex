@@ -24,13 +24,12 @@ namespace BackdropForCodex.App.ViewModels;
 /// </summary>
 public sealed class MainWindowViewModel : ObservableObject, IDisposable
 {
-    public const double MaximumOverlay = WallpaperEditorViewModel.MaximumOverlay;
-
     private readonly IWallpaperApplicationService _wallpaper;
     private readonly IWallpaperApplicationCapabilitySource? _capabilitySource;
     private readonly IUserFacingErrorMapper _errorMapper;
     private readonly IAppTextProvider _text;
     private readonly WallpaperProfileCardProjection _profileProjection;
+    private readonly IWallpaperSourceProviderRegistry _sourceRegistry;
     private readonly SynchronizationContext? _uiContext;
     private readonly object _initializationLock = new();
     private Task? _initializationTask;
@@ -44,6 +43,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private string _statusMessage = string.Empty;
     private UiStatusTone _statusTone;
     private bool _isStatusOpen;
+    private bool _canRetryStatusApply;
+    private bool _hasStatusDetails;
     private bool _isDisposed;
     private WallpaperRuntimePhase _runtimePhase = WallpaperRuntimePhase.Idle;
     private WallpaperProfileCardItem? _selectedProfileCard;
@@ -55,21 +56,25 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         IAppPreferencesStore preferencesStore,
         IUserFacingErrorMapper errorMapper,
         IAppTextProvider text,
-        ISafeMediaPreviewService? previewMedia = null)
+        ISafeMediaPreviewService? previewMedia = null,
+        IWallpaperSourceProviderRegistry? sourceRegistry = null)
     {
         _wallpaper = wallpaper ?? throw new ArgumentNullException(nameof(wallpaper));
         _capabilitySource = wallpaper as IWallpaperApplicationCapabilitySource;
         _errorMapper = errorMapper ?? throw new ArgumentNullException(nameof(errorMapper));
         _text = text ?? throw new ArgumentNullException(nameof(text));
-        var mediaPreview = previewMedia ?? SafeMediaPreviewService.Shared;
+        var mediaPreview = previewMedia ?? AppWallpaperSources.Preview;
+        _sourceRegistry = sourceRegistry ??
+            (mediaPreview as SafeMediaPreviewService)?.SourceRegistry ??
+            AppWallpaperSources.Registry;
         _profileProjection = new WallpaperProfileCardProjection(_text, mediaPreview);
         Editor = new WallpaperEditorViewModel(_text, mediaPreview);
-        Editor.PropertyChanged += Editor_PropertyChanged;
         Settings = new SettingsManagementViewModel(
             wallpaper,
             preferencesStore,
             Editor,
-            mediaPreview);
+            mediaPreview,
+            _sourceRegistry);
         Settings.PropertyChanged += Settings_PropertyChanged;
         Settings.Recents.CollectionChanged += Recents_CollectionChanged;
         _uiContext = SynchronizationContext.Current;
@@ -169,7 +174,6 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                 OnPropertyChanged(nameof(CanSubmitApply));
                 OnPropertyChanged(nameof(CanClearSelectedMedia));
                 OnPropertyChanged(nameof(CanOpenSettings));
-                OnPropertyChanged(nameof(CanAdjustFocus));
                 OnPropertyChanged(nameof(CanRestoreVersion1Backup));
                 Editor.SetEditingEnabled(CanEdit);
                 NotifyCommandStateChanged();
@@ -183,78 +187,6 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     public bool HasShownTrayTip => Settings.HasShownTrayTip;
 
-    public string? SelectedMediaPath => Editor.SelectedMediaPath;
-
-    public string SelectedMediaName => Editor.SelectedMediaName;
-
-    public bool HasSelectedMedia => Editor.HasSelectedMedia;
-
-    public MediaKind SelectedMediaKind => Editor.SelectedMediaKind;
-
-    public bool IsVideoSelected => Editor.IsVideoSelected;
-
-    public bool IsMediaMissing => Editor.IsMediaMissing;
-
-    public WallpaperFit Fit
-    {
-        get => Editor.Fit;
-        set => Editor.Fit = value;
-    }
-
-    public bool IsCoverFit => Editor.IsCoverFit;
-
-    public bool CanAdjustFocus => Editor.CanAdjustFocus;
-
-    public double FocusX
-    {
-        get => Editor.FocusX;
-        set => Editor.FocusX = value;
-    }
-
-    public double FocusY
-    {
-        get => Editor.FocusY;
-        set => Editor.FocusY = value;
-    }
-
-    public string FocusLabel => Editor.FocusLabel;
-
-    public double PanelOpacity
-    {
-        get => Editor.PanelOpacity;
-        set => Editor.PanelOpacity = value;
-    }
-
-    public string PanelOpacityPercent => Editor.PanelOpacityPercent;
-
-    public double BlurPx
-    {
-        get => Editor.BlurPx;
-        set => Editor.BlurPx = value;
-    }
-
-    public string BlurLabel => Editor.BlurLabel;
-
-    public double DarkOverlay
-    {
-        get => Editor.DarkOverlay;
-        set => Editor.DarkOverlay = value;
-    }
-
-    public string DarkOverlayPercent => Editor.DarkOverlayPercent;
-
-    public double LightOverlay
-    {
-        get => Editor.LightOverlay;
-        set => Editor.LightOverlay = value;
-    }
-
-    public string LightOverlayPercent => Editor.LightOverlayPercent;
-
-    public bool AcceptedCdpRisk => Editor.AcceptedCdpRisk;
-
-    public bool RequiresCdpRisk => HasSelectedMedia && !AcceptedCdpRisk;
-
     public bool IsBusy => OperationProgress.IsBusy;
 
     public bool CanEditDraft =>
@@ -267,7 +199,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             WallpaperOperationStage.Resetting and not
             WallpaperOperationStage.Restoring;
 
-    public bool CanClearSelectedMedia => CanEditDraft && HasSelectedMedia;
+    public bool CanClearSelectedMedia => CanEditDraft && Editor.HasSelectedMedia;
 
     public bool CanEdit => CanEditDraft;
 
@@ -359,6 +291,18 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     {
         get => _isStatusOpen;
         set => SetProperty(ref _isStatusOpen, value);
+    }
+
+    public bool CanRetryStatusApply
+    {
+        get => _canRetryStatusApply;
+        private set => SetProperty(ref _canRetryStatusApply, value);
+    }
+
+    public bool HasStatusDetails
+    {
+        get => _hasStatusDetails;
+        private set => SetProperty(ref _hasStatusDetails, value);
     }
 
     public bool IsDraftDirty => Settings.IsDraftDirty;
@@ -551,7 +495,12 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         }
 
         Editor.SelectMedia(mediaPath);
-        if (IsMediaMissing)
+        ShowMissingMediaStatusIfNeeded();
+    }
+
+    private void ShowMissingMediaStatusIfNeeded()
+    {
+        if (Editor.IsMediaMissing)
         {
             ShowStatus(
                 _text.GetStringOrFallback("Status_MissingTitle", "Media unavailable"),
@@ -562,10 +511,44 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         }
     }
 
+    public void SelectSource(WallpaperSourceDescriptor descriptor)
+    {
+        ArgumentNullException.ThrowIfNull(descriptor);
+        _ = _sourceRegistry.GetRequired(descriptor.SourceKind);
+        if (!CanEdit)
+        {
+            return;
+        }
+
+        Editor.SelectSource(descriptor);
+        ShowMissingMediaStatusIfNeeded();
+    }
+
+    public void SelectSource(MediaReference reference)
+    {
+        ArgumentNullException.ThrowIfNull(reference);
+        var snapshot = reference.Snapshot();
+        _ = _sourceRegistry.GetRequired(snapshot.SourceKind);
+        if (snapshot.LastKnownKind == MediaKind.None)
+        {
+            throw new ArgumentException(
+                "A discovery descriptor is required for non-direct wallpaper content.",
+                nameof(reference));
+        }
+
+        if (!CanEdit)
+        {
+            return;
+        }
+
+        Editor.SelectMediaReference(snapshot);
+        ShowMissingMediaStatusIfNeeded();
+    }
+
     public async Task AcceptRiskAsync(CancellationToken cancellationToken = default)
     {
         await InitializeAsync().ConfigureAwait(true);
-        if (AcceptedCdpRisk || HasProtectedSettings)
+        if (Editor.AcceptedCdpRisk || HasProtectedSettings)
         {
             return;
         }
@@ -650,7 +633,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             return false;
         }
 
-        if (SelectedMediaPath is not null && IsMediaMissing)
+        if (Editor.HasSelectedMedia && Editor.IsMediaMissing)
         {
             ShowStatus(
                 _text.GetStringOrFallback("Status_MissingTitle", "Media unavailable"),
@@ -661,7 +644,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             return false;
         }
 
-        if (SelectedMediaPath is not null && !AcceptedCdpRisk)
+        if (Editor.HasSelectedMedia && !Editor.AcceptedCdpRisk)
         {
             ShowStatus(
                 _text.GetStringOrFallback("Status_RiskRequiredTitle", "Review enhanced launch"),
@@ -687,7 +670,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             return AutoLaunchOutcome.Failed;
         }
 
-        if (SelectedMediaPath is not null && IsMediaMissing)
+        if (Editor.HasSelectedMedia && Editor.IsMediaMissing)
         {
             ShowStatus(
                 _text.GetStringOrFallback("Status_AutoLaunchNeedsMediaTitle", "Wallpaper needs attention"),
@@ -698,7 +681,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             return AutoLaunchOutcome.NeedsMedia;
         }
 
-        if (SelectedMediaPath is not null && !AcceptedCdpRisk)
+        if (Editor.HasSelectedMedia && !Editor.AcceptedCdpRisk)
         {
             ShowStatus(
                 _text.GetStringOrFallback("Status_RiskRequiredTitle", "Review enhanced launch"),
@@ -737,6 +720,36 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                 .RemoveRecentAsync(
                     SavedDesired,
                     mediaPath,
+                    _operationCancellation!.Token)
+                .ConfigureAwait(true);
+            Settings.SetPersistedSettings(saved, synchronizeEditor: false);
+        }
+        finally
+        {
+            EndOperation();
+        }
+    }
+
+    public async Task RemoveRecentAsync(
+        Guid mediaId,
+        CancellationToken cancellationToken = default)
+    {
+        await InitializeAsync().ConfigureAwait(true);
+        if (IsBusy || HasProtectedSettings)
+        {
+            return;
+        }
+
+        BeginOperation(
+            _text.GetStringOrFallback("Stage_Saving", "Saving settings…"),
+            cancellationToken,
+            WallpaperOperationStage.Saving);
+        try
+        {
+            var saved = await Settings
+                .RemoveRecentAsync(
+                    SavedDesired,
+                    mediaId,
                     _operationCancellation!.Token)
                 .ConfigureAwait(true);
             Settings.SetPersistedSettings(saved, synchronizeEditor: false);
@@ -1028,19 +1041,39 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             if (result.Outcome is RuntimeActivationOutcome.Failed or
                 RuntimeActivationOutcome.SavedButNotActivated)
             {
-                ShowStatus(
-                    result.Outcome == RuntimeActivationOutcome.SavedButNotActivated
-                        ? _text.GetStringOrFallback(
-                            "Status_SavedNotActivatedTitle",
-                            "Saved, but not activated")
-                        : _text.GetStringOrFallback("Status_ActivationFailedTitle", "Activation failed"),
-                    result.Activation.Error?.Message ??
-                    _text.GetStringOrFallback(
-                        "Status_ActivationFailedMessage",
-                        "The runtime could not activate this saved profile."),
-                    result.Outcome == RuntimeActivationOutcome.SavedButNotActivated
-                        ? UiStatusTone.Warning
-                        : UiStatusTone.Error);
+                if (result.Activation.Error is { } runtimeError)
+                {
+                    ShowError(
+                        _errorMapper.Map(
+                            runtimeError,
+                            UserFacingOperation.ApplyWallpaper),
+                        canRetryApply: true,
+                        toneOverride:
+                            result.Outcome ==
+                                RuntimeActivationOutcome.SavedButNotActivated
+                                ? UiStatusTone.Warning
+                                : null);
+                }
+                else
+                {
+                    ShowStatus(
+                        result.Outcome ==
+                            RuntimeActivationOutcome.SavedButNotActivated
+                            ? _text.GetStringOrFallback(
+                                "Status_SavedNotActivatedTitle",
+                                "Saved, but not activated")
+                            : _text.GetStringOrFallback(
+                                "Status_ActivationFailedTitle",
+                                "Activation failed"),
+                        _text.GetStringOrFallback(
+                            "Status_ActivationFailedMessage",
+                            "The runtime could not activate this saved profile."),
+                        result.Outcome ==
+                            RuntimeActivationOutcome.SavedButNotActivated
+                            ? UiStatusTone.Warning
+                            : UiStatusTone.Error);
+                }
+
                 return false;
             }
 
@@ -1115,7 +1148,11 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             {
                 Settings.SetRuntimeActivity(_wallpaper.IsActive);
                 IsPaused = _wallpaper.IsPaused;
-                ShowError(_errorMapper.Map(exception, UserFacingOperation.ApplyWallpaper));
+                ShowError(
+                    _errorMapper.Map(
+                        exception,
+                        UserFacingOperation.ApplyWallpaper),
+                    canRetryApply: true);
             }
 
             return false;
@@ -1351,6 +1388,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             OnPropertyChanged(nameof(ApplyButtonText));
             OnPropertyChanged(nameof(WorkspaceStatusText));
             OnPropertyChanged(nameof(FooterStatusText));
+            OnPropertyChanged(nameof(CanClearSelectedMedia));
             NotifyCommandStateChanged();
         }
 
@@ -1360,7 +1398,6 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             OnPropertyChanged(nameof(CanEditDraft));
             OnPropertyChanged(nameof(CanSubmitApply));
             OnPropertyChanged(nameof(CanClearSelectedMedia));
-            OnPropertyChanged(nameof(CanAdjustFocus));
             Editor.SetEditingEnabled(CanEdit);
             NotifyCommandStateChanged();
         }
@@ -1377,18 +1414,6 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         object? sender,
         NotifyCollectionChangedEventArgs eventArgs) =>
         ClearRecentsCommand.NotifyCanExecuteChanged();
-
-    private void Editor_PropertyChanged(object? sender, PropertyChangedEventArgs eventArgs)
-    {
-        OnPropertyChanged(eventArgs.PropertyName);
-        if (eventArgs.PropertyName is
-            nameof(WallpaperEditorViewModel.SelectedMediaPath) or
-            nameof(WallpaperEditorViewModel.AcceptedCdpRisk))
-        {
-            OnPropertyChanged(nameof(RequiresCdpRisk));
-            OnPropertyChanged(nameof(CanClearSelectedMedia));
-        }
-    }
 
     private void RefreshProfileCards(Guid? selectedProfileId = null)
     {
@@ -1504,18 +1529,27 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         DeleteProfileCommand.NotifyCanExecuteChanged();
     }
 
-    private void ShowError(UserFacingError error) =>
+    private void ShowError(
+        UserFacingError error,
+        bool canRetryApply = false,
+        UiStatusTone? toneOverride = null)
+    {
         ShowStatus(
             error.Title,
             string.IsNullOrWhiteSpace(error.Recovery)
                 ? error.Message
                 : $"{error.Message} {error.Recovery}",
-            error.Code == UserFacingErrorCode.OperationCanceled
+            toneOverride ?? (error.Code == UserFacingErrorCode.OperationCanceled
                 ? UiStatusTone.Warning
-                : UiStatusTone.Error);
+                : UiStatusTone.Error));
+        CanRetryStatusApply = canRetryApply && error.CanRetry;
+        HasStatusDetails = true;
+    }
 
     private void ShowStatus(string title, string message, UiStatusTone tone)
     {
+        CanRetryStatusApply = false;
+        HasStatusDetails = false;
         StatusTitle = title;
         StatusMessage = message;
         StatusTone = tone;
@@ -1619,7 +1653,6 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         {
             _capabilitySource.CapabilitiesChanged -= Wallpaper_CapabilitiesChanged;
         }
-        Editor.PropertyChanged -= Editor_PropertyChanged;
         Settings.PropertyChanged -= Settings_PropertyChanged;
         Settings.Recents.CollectionChanged -= Recents_CollectionChanged;
         Settings.Dispose();

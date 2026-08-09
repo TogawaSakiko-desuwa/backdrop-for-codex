@@ -21,6 +21,19 @@
                  DragLeave="Window_DragLeave"
                  Drop="Window_Drop"
                  SizeChanged="Window_SizeChanged">
+  <!--
+    THESIS: A precision optical proofing bench turns source, proof, calibration, and safe commit
+    into one legible flow; it refuses the horizontal-carousel plus settings-card dashboard.
+    OWN-WORLD: Cool Windows Mica neutrals, system accent, precise seams, restrained crop marks,
+    compact source rows, whitespace-grouped controls, and almost no decorative elevation.
+    STORY: Choose a profile and source, judge the dominant live proof, tune readability, resolve
+    any safety preflight, then apply once with a clear recovery path.
+    FIRST VIEWPORT: Collapsible 224 rail, dominant center proof stage, 360 inspector titled for the
+    profile, and a fixed bottom status/commit bar; the preview is the only saturated field.
+    FORM: Stage-led optical proofing bench, pinned user direction; seed f91f3aae; approved comp
+    .impeccable/mocks/workbench-b-stage-led.png.
+    FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
+  -->
   <ui:FluentWindow.Resources>
     <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
     <converters:MediaThumbnailConverter x:Key="MediaThumbnailConverter" />
@@ -54,6 +67,8 @@
       </ui:TitleBar.TrailingContent>
     </ui:TitleBar>
 
+    <!-- Profile selection stays outside the responsive editor grid so it remains available in
+         both split and stacked layouts. -->
     <views:WallpaperProfileStripView x:Name="ProfileStrip"
                                        Grid.Row="1"
                                        Margin="24,10,24,0"
@@ -65,6 +80,8 @@
                                        DeleteProfileCommand="{Binding DeleteProfileCommand}"
                                        CanEditProfiles="{Binding CanEditDraft}" />
 
+    <!-- Code-behind reconfigures these named rows and columns when the window crosses the compact
+         layout threshold; the panes themselves retain the same bindings and event ownership. -->
     <Grid x:Name="MainContentGrid" Grid.Row="2" Margin="24,12,24,14">
       <Grid.RowDefinitions>
         <RowDefinition x:Name="MainTopRow" Height="*" />
@@ -88,13 +105,13 @@
                                     Grid.Row="0"
                                     HorizontalAlignment="Stretch"
                                     VerticalAlignment="Stretch"
-                                    MediaPath="{Binding SelectedMediaPath}"
-                                    MediaKind="{Binding SelectedMediaKind}"
+                                    DataContext="{Binding Editor}"
+                                    MediaReference="{Binding SelectedMediaReference}"
                                     Fit="{Binding Fit}"
                                     FocusX="{Binding FocusX}"
                                     FocusY="{Binding FocusY}"
                                     CanAdjustFocus="{Binding CanAdjustFocus}"
-                                    IsPlaybackPaused="{Binding IsPaused}"
+                                    IsPlaybackPaused="{Binding DataContext.IsPaused, RelativeSource={RelativeSource AncestorType={x:Type ui:FluentWindow}}}"
                                     DarkOverlay="{Binding DarkOverlay}"
                                     LightOverlay="{Binding LightOverlay}"
                                     FocusChangeRequested="PreviewView_FocusChangeRequested" />
@@ -227,6 +244,7 @@
       <views:WallpaperInspectorView x:Name="InspectorPane"
                                     Grid.Row="0"
                                     Grid.Column="2"
+                                    DataContext="{Binding Editor}"
                                     ChooseMediaRequested="ChooseMedia_Click"
                                     ClearMediaRequested="ClearMedia_Click"
                                     CenterFocusRequested="CenterFocus_Click"

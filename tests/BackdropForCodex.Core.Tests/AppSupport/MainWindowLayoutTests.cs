@@ -14,6 +14,53 @@ namespace BackdropForCodex.Core.Tests.AppSupport;
 public sealed class MainWindowLayoutTests
 {
     [Fact]
+    public void EditorPanes_UseTheEditorAsTheirDirectDataContext()
+    {
+        StaTest.Run(
+            () =>
+            {
+                var fixture = MainWindowViewModelTests.CreateLayoutFixture();
+                MainWindow? window = null;
+                try
+                {
+                    window = new MainWindow(
+                        fixture.ViewModel,
+                        fixture.Text,
+                        new DiagnosticReportService())
+                    {
+                        WindowStartupLocation = WindowStartupLocation.Manual,
+                        Left = -10000,
+                        Top = -10000,
+                        ShowActivated = false,
+                    };
+                    window.Show();
+                    window.Dispatcher.Invoke(
+                        static () => { },
+                        DispatcherPriority.ApplicationIdle);
+
+                    Assert.Same(fixture.ViewModel, window.DataContext);
+                    Assert.Same(
+                        fixture.ViewModel.Editor,
+                        FindElement(window, "PreviewView").DataContext);
+                    Assert.Same(
+                        fixture.ViewModel.Editor,
+                        FindElement(window, "InspectorPane").DataContext);
+                }
+                finally
+                {
+                    if (window is null)
+                    {
+                        fixture.ViewModel.Dispose();
+                    }
+                    else
+                    {
+                        window.CloseForShutdown();
+                    }
+                }
+            });
+    }
+
+    [Fact]
     public void PreviewSurface_MaximizesTheRealFullscreenPreviewPane()
     {
         StaTest.Run(

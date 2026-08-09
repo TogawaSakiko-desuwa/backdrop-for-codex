@@ -131,6 +131,38 @@
             </StackPanel>
           </Border>
 
+          <Border x:Name="UnavailablePreview"
+                  Margin="32"
+                  Background="Transparent"
+                  Visibility="Collapsed">
+            <StackPanel HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        MaxWidth="380">
+              <Border Width="64"
+                      Height="64"
+                      Margin="0,0,0,16"
+                      CornerRadius="18"
+                      Background="{DynamicResource ControlFillColorDefaultBrush}">
+                <ui:SymbolIcon Symbol="Image24"
+                               FontSize="28"
+                               Foreground="{DynamicResource AccentFillColorDefaultBrush}"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center" />
+              </Border>
+              <TextBlock Text="{localization:Loc Preview_Unavailable_Title, Fallback='Preview unavailable'}"
+                         Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                         FontSize="18"
+                         FontWeight="SemiBold"
+                         TextAlignment="Center"
+                         TextWrapping="Wrap" />
+              <TextBlock Margin="0,8,0,0"
+                         Text="{localization:Loc Preview_Unavailable_Message, Fallback='This source needs a provider or renderer that is not connected yet.'}"
+                         Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                         TextAlignment="Center"
+                         TextWrapping="Wrap" />
+            </StackPanel>
+          </Border>
+
           <!-- Keep the preview compact, but preserve Codex's left navigation,
                central task surface, and right context panel. -->
           <Grid x:Name="PreviewChromeLayer"

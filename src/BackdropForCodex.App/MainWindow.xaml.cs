@@ -64,7 +64,7 @@ public partial class MainWindow : FluentWindow
                 return;
             }
 
-            if (_viewModel.RequiresCdpRisk &&
+            if (_viewModel.Editor.RequiresCdpRisk &&
                 !await ShowRiskDialogAsync(allowRevoke: false))
             {
                 return;
@@ -293,7 +293,7 @@ public partial class MainWindow : FluentWindow
     {
         try
         {
-            if (_viewModel.RequiresCdpRisk &&
+            if (_viewModel.Editor.RequiresCdpRisk &&
                 !await ShowRiskDialogAsync(allowRevoke: false))
             {
                 return;
@@ -311,7 +311,8 @@ public partial class MainWindow : FluentWindow
     {
         try
         {
-            _ = await ShowRiskDialogAsync(allowRevoke: _viewModel.AcceptedCdpRisk);
+            _ = await ShowRiskDialogAsync(
+                allowRevoke: _viewModel.Editor.AcceptedCdpRisk);
         }
         catch (Exception exception)
         {
@@ -352,10 +353,10 @@ public partial class MainWindow : FluentWindow
         {
             Title = _text.GetStringOrFallback("Risk_Title", "Allow local Codex debugging?"),
             Content = content,
-            PrimaryButtonText = _viewModel.AcceptedCdpRisk
+            PrimaryButtonText = _viewModel.Editor.AcceptedCdpRisk
                 ? _text.GetStringOrFallback("Action_Close", "Close")
                 : _text.GetStringOrFallback("Risk_Acknowledgement", "I understand and want to continue"),
-            CloseButtonText = _viewModel.AcceptedCdpRisk
+            CloseButtonText = _viewModel.Editor.AcceptedCdpRisk
                 ? string.Empty
                 : _text.GetStringOrFallback("Action_Cancel", "Cancel"),
             SecondaryButtonText = allowRevoke
@@ -377,12 +378,12 @@ public partial class MainWindow : FluentWindow
             return false;
         }
 
-        if (!_viewModel.AcceptedCdpRisk)
+        if (!_viewModel.Editor.AcceptedCdpRisk)
         {
             await _viewModel.AcceptRiskAsync();
         }
 
-        return _viewModel.AcceptedCdpRisk;
+        return _viewModel.Editor.AcceptedCdpRisk;
     }
 
     private async void Settings_Click(object sender, RoutedEventArgs e)
@@ -601,14 +602,17 @@ public partial class MainWindow : FluentWindow
 
     private async void RemoveRecent_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is not FrameworkElement { Tag: string path })
+        if (sender is not FrameworkElement
+            {
+                DataContext: RecentMediaItem item,
+            })
         {
             return;
         }
 
         try
         {
-            await _viewModel.RemoveRecentAsync(path);
+            await _viewModel.RemoveRecentAsync(item.MediaId);
         }
         catch (Exception exception)
         {
@@ -628,7 +632,7 @@ public partial class MainWindow : FluentWindow
         RecentMediaList.SelectedItem = null;
         try
         {
-            _viewModel.SelectMedia(item.Path);
+            _viewModel.SelectSource(item.Reference);
         }
         catch (Exception exception)
         {
@@ -717,7 +721,7 @@ public partial class MainWindow : FluentWindow
     {
         _ = sender;
         _ = e;
-        if (!_viewModel.CanAdjustFocus)
+        if (!_viewModel.Editor.CanAdjustFocus)
         {
             return;
         }

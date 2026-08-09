@@ -15,10 +15,21 @@ using Wpf.Ui.Appearance;
 
 namespace BackdropForCodex.App.Views;
 
+/// <summary>
+/// Renders media through the safe preview boundary and translates direct manipulation into
+/// normalized wallpaper focus requests.
+/// </summary>
 public sealed partial class WallpaperPreviewView : UserControl
 {
     internal const double PreviewDesignWidth = 960;
     internal const double PreviewDesignHeight = 540;
+
+    public static readonly DependencyProperty MediaReferenceProperty =
+        DependencyProperty.Register(
+            nameof(MediaReference),
+            typeof(MediaReference),
+            typeof(WallpaperPreviewView),
+            new PropertyMetadata(null, PreviewMediaPropertyChanged));
 
     public static readonly DependencyProperty MediaPathProperty =
         DependencyProperty.Register(
@@ -95,11 +106,11 @@ public sealed partial class WallpaperPreviewView : UserControl
     private bool _reducedMotion;
     private double _previewMediaWidth;
     private double _previewMediaHeight;
-    private string? _previewPath;
+    private MediaReference? _previewReference;
     private MediaKind _previewKind;
 
     public WallpaperPreviewView()
-        : this(SafeMediaPreviewService.Shared)
+        : this(AppWallpaperSources.Preview)
     {
     }
 
@@ -121,6 +132,16 @@ public sealed partial class WallpaperPreviewView : UserControl
 
     public event EventHandler<WallpaperFocusChangeRequestedEventArgs>? FocusChangeRequested;
 
+    public MediaReference? MediaReference
+    {
+        get => ((MediaReference?)GetValue(MediaReferenceProperty))?.Snapshot();
+        set => SetValue(MediaReferenceProperty, value?.Snapshot());
+    }
+
+    /// <summary>
+    /// Compatibility surface for local-file callers. Production bindings use
+    /// <see cref="MediaReference"/> so provider identifiers are never interpreted as paths.
+    /// </summary>
     public string? MediaPath
     {
         get => (string?)GetValue(MediaPathProperty);
@@ -200,7 +221,7 @@ public sealed partial class WallpaperPreviewView : UserControl
         DisconnectThemeNotifications();
         _focusFadeTimer.Stop();
         StopAndClearPreview();
-        _previewPath = null;
+        _previewReference = null;
         _previewKind = MediaKind.None;
     }
 
@@ -301,27 +322,44 @@ public sealed partial class WallpaperPreviewView : UserControl
 
     private void RefreshMedia()
     {
-        var path = MediaPath;
-        var kind = MediaKind;
-        if (string.Equals(_previewPath, path, StringComparison.OrdinalIgnoreCase) &&
+        MediaReference? reference;
+        try
+        {
+            reference = CreateRequestedReference();
+        }
+        catch (Exception exception) when (IsControlledPreviewException(exception))
+        {
+            _previewReference = null;
+            _previewKind = MediaKind.None;
+            ShowPreviewUnavailable();
+            return;
+        }
+
+        var kind = reference?.LastKnownKind ?? MediaKind.None;
+        if (Equals(_previewReference, reference) &&
             _previewKind == kind)
         {
             return;
         }
 
-        _previewPath = path;
+        _previewReference = reference;
         _previewKind = kind;
         StopAndClearPreview();
-        if (path is null ||
-            kind is not (MediaKind.Image or MediaKind.Video))
+        if (reference is null)
         {
+            return;
+        }
+
+        if (kind is not (MediaKind.Image or MediaKind.Video))
+        {
+            ShowPreviewUnavailable();
             return;
         }
 
         ISafeMediaPreviewLease? pendingLease = null;
         try
         {
-            pendingLease = _previewMedia.Acquire(path);
+            pendingLease = _previewMedia.Acquire(reference);
             if (pendingLease.Metadata.Kind != kind)
             {
                 throw new MediaValidationException(
@@ -354,6 +392,10 @@ public sealed partial class WallpaperPreviewView : UserControl
             _previewMediaReady = true;
             ApplyPreviewLayout();
             UpdatePreviewThemeOverlay();
+        }
+        catch (Exception exception) when (IsUnavailablePreviewException(exception))
+        {
+            ShowPreviewUnavailable();
         }
         catch (Exception exception) when (IsControlledPreviewException(exception))
         {
@@ -607,6 +649,7 @@ public sealed partial class WallpaperPreviewView : UserControl
         VideoPreview.Visibility = Visibility.Collapsed;
         PreviewThemeOverlay.Visibility = Visibility.Collapsed;
         EmptyPreview.Visibility = Visibility.Visible;
+        UnavailablePreview.Visibility = Visibility.Collapsed;
         _previewMediaWidth = 0;
         _previewMediaHeight = 0;
         _previewMediaReady = false;
@@ -618,8 +661,36 @@ public sealed partial class WallpaperPreviewView : UserControl
     private void ShowPreviewFailure()
     {
         StopAndClearPreview();
-        _previewPath = null;
+        _previewReference = null;
         _previewKind = MediaKind.None;
+    }
+
+    private void ShowPreviewUnavailable()
+    {
+        StopAndClearPreview();
+        EmptyPreview.Visibility = Visibility.Collapsed;
+        UnavailablePreview.Visibility = Visibility.Visible;
+    }
+
+    private MediaReference? CreateRequestedReference()
+    {
+        if (GetValue(MediaReferenceProperty) is MediaReference reference)
+        {
+            return reference.Snapshot();
+        }
+
+        if (MediaPath is not { } path)
+        {
+            return null;
+        }
+
+        return new MediaReference
+        {
+            MediaId = Guid.CreateVersion7(),
+            SourceKind = MediaSourceKind.LocalFile,
+            SourceIdentifier = path,
+            LastKnownKind = MediaKind,
+        }.Snapshot();
     }
 
     private static void DisposePreviewLease(ISafeMediaPreviewLease? lease)
@@ -842,6 +913,10 @@ public sealed partial class WallpaperPreviewView : UserControl
         MediaReferenceValidationException or
         COMException or
         SecurityException;
+
+    private static bool IsUnavailablePreviewException(Exception exception) => exception is
+        WallpaperRendererUnavailableException or
+        WallpaperSourceCapabilityException;
 }
 
 public sealed class WallpaperFocusChangeRequestedEventArgs(double focusX, double focusY)

@@ -33,10 +33,10 @@
               <ui:Button Margin="0,0,8,0"
                          Appearance="Secondary"
                          Content="{localization:Loc Action_ClearMedia, Fallback='Clear media'}"
-                         IsEnabled="{Binding CanClearSelectedMedia}"
+                         IsEnabled="{Binding DataContext.CanClearSelectedMedia, RelativeSource={RelativeSource AncestorType={x:Type ui:FluentWindow}}}"
                          Click="ClearMedia_Click" />
               <ui:Button Content="{localization:Loc Action_SelectMedia, Fallback='Choose media'}"
-                         IsEnabled="{Binding CanEditDraft}"
+                         IsEnabled="{Binding IsEditingEnabled}"
                          Click="ChooseMedia_Click" />
             </StackPanel>
           </Grid>
@@ -76,7 +76,7 @@
                     SelectedValue="{Binding Fit, Mode=TwoWay}"
                     SelectedValuePath="Tag"
                     AutomationProperties.Name="{localization:Loc Label_Fit, Fallback='Media fit'}"
-                    IsEnabled="{Binding CanEdit}">
+                    IsEnabled="{Binding IsEditingEnabled}">
             <ComboBoxItem Content="{localization:Loc Fit_Cover, Fallback='Crop to fill'}"
                           Tag="{x:Static settings:WallpaperFit.Cover}" />
             <ComboBoxItem Content="{localization:Loc Fit_Contain, Fallback='Show entire media'}"
@@ -119,7 +119,7 @@
                   Maximum="0.95"
                   TickFrequency="0.01"
                   Value="{Binding PanelOpacity, Mode=TwoWay}"
-                  IsEnabled="{Binding CanEdit}"
+                  IsEnabled="{Binding IsEditingEnabled}"
                   AutomationProperties.Name="{localization:Loc Label_PanelOpacity, Fallback='Panel opacity'}"
                   Margin="0,0,0,16" />
 
@@ -135,7 +135,7 @@
                   TickFrequency="1"
                   IsSnapToTickEnabled="True"
                   Value="{Binding BlurPx, Mode=TwoWay}"
-                  IsEnabled="{Binding CanEdit}"
+                  IsEnabled="{Binding IsEditingEnabled}"
                   AutomationProperties.Name="{localization:Loc Label_Blur, Fallback='Background blur'}" />
 
           <Grid Margin="0,16,0,0">
@@ -149,7 +149,7 @@
                   Maximum="0.60"
                   TickFrequency="0.01"
                   Value="{Binding DarkOverlay, Mode=TwoWay}"
-                  IsEnabled="{Binding CanEdit}"
+                  IsEnabled="{Binding IsEditingEnabled}"
                   AutomationProperties.Name="{localization:Loc Label_DarkOverlay, Fallback='Dark theme overlay'}"
                   Margin="0,0,0,16" />
 
@@ -164,7 +164,7 @@
                   Maximum="0.60"
                   TickFrequency="0.01"
                   Value="{Binding LightOverlay, Mode=TwoWay}"
-                  IsEnabled="{Binding CanEdit}"
+                  IsEnabled="{Binding IsEditingEnabled}"
                   AutomationProperties.Name="{localization:Loc Label_LightOverlay, Fallback='Light theme overlay'}" />
         </StackPanel>
       </ui:Card>
@@ -194,7 +194,7 @@
           <ui:Button Grid.Column="2"
                      VerticalAlignment="Center"
                      Content="{localization:Loc Action_LearnMore, Fallback='Review'}"
-                     IsEnabled="{Binding CanEdit}"
+                     IsEnabled="{Binding IsEditingEnabled}"
                      Click="ReviewRisk_Click" />
         </Grid>
       </ui:Card>

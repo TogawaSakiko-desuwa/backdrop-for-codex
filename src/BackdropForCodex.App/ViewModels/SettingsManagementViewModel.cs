@@ -11,13 +11,38 @@ using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace BackdropForCodex.App.ViewModels;
 
-public sealed record RecentMediaItem(
-    string Path,
-    string DisplayName,
-    MediaKind Kind,
-    bool Exists)
+public sealed record RecentMediaItem
 {
-    public Guid MediaId { get; init; }
+    private readonly MediaReference _reference;
+
+    public RecentMediaItem(
+        MediaReference reference,
+        string displayName,
+        bool exists)
+    {
+        ArgumentNullException.ThrowIfNull(reference);
+        _reference = reference.Snapshot();
+        DisplayName = displayName;
+        Exists = exists;
+    }
+
+    public MediaReference Reference => _reference.Snapshot();
+
+    public Guid MediaId => _reference.MediaId;
+
+    /// <summary>
+    /// Local thumbnail compatibility path. External provider identifiers intentionally do not
+    /// flow through path-based thumbnail conversion.
+    /// </summary>
+    public string? Path => _reference.SourceKind == MediaSourceKind.LocalFile
+        ? _reference.SourceIdentifier
+        : null;
+
+    public string DisplayName { get; }
+
+    public MediaKind Kind => _reference.LastKnownKind;
+
+    public bool Exists { get; }
 }
 
 public sealed record WallpaperSettingsInitializationResult(
@@ -34,6 +59,7 @@ public sealed class SettingsManagementViewModel : ObservableObject, IDisposable
     private readonly IAppPreferencesStore _preferencesStore;
     private readonly WallpaperEditorViewModel _editor;
     private readonly ISafeMediaPreviewService _previewMedia;
+    private readonly IWallpaperSourceProviderRegistry _sourceRegistry;
     private readonly SynchronizationContext? _uiContext;
     private readonly SemaphoreSlim _preferencesMutationGate = new(1, 1);
     private WallpaperConfigurationState _configurationState =
@@ -47,13 +73,17 @@ public sealed class SettingsManagementViewModel : ObservableObject, IDisposable
         IWallpaperApplicationService wallpaper,
         IAppPreferencesStore preferencesStore,
         WallpaperEditorViewModel editor,
-        ISafeMediaPreviewService? previewMedia = null)
+        ISafeMediaPreviewService? previewMedia = null,
+        IWallpaperSourceProviderRegistry? sourceRegistry = null)
     {
         _wallpaper = wallpaper ?? throw new ArgumentNullException(nameof(wallpaper));
         _preferencesStore =
             preferencesStore ?? throw new ArgumentNullException(nameof(preferencesStore));
         _editor = editor ?? throw new ArgumentNullException(nameof(editor));
-        _previewMedia = previewMedia ?? SafeMediaPreviewService.Shared;
+        _previewMedia = previewMedia ?? AppWallpaperSources.Preview;
+        _sourceRegistry = sourceRegistry ??
+            (_previewMedia as SafeMediaPreviewService)?.SourceRegistry ??
+            AppWallpaperSources.Registry;
         _uiContext = SynchronizationContext.Current;
         _editor.DraftChanged += Editor_DraftChanged;
         _wallpaper.WorkspaceChanged += Wallpaper_WorkspaceChanged;
@@ -282,6 +312,24 @@ public sealed class SettingsManagementViewModel : ObservableObject, IDisposable
         return saved;
     }
 
+    public async Task<SettingsV2> RemoveRecentAsync(
+        SettingsV2 baseline,
+        Guid mediaId,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(baseline);
+        if (baseline.FindMedia(mediaId) is null)
+        {
+            return baseline.CreateSnapshot();
+        }
+
+        var saved = await _wallpaper
+            .RemoveRecentMediaAsync(mediaId, cancellationToken)
+            .ConfigureAwait(true);
+        RefreshRecents(saved);
+        return saved;
+    }
+
     public async Task<SettingsV2> ClearRecentsAsync(
         SettingsV2 baseline,
         CancellationToken cancellationToken)
@@ -329,16 +377,25 @@ public sealed class SettingsManagementViewModel : ObservableObject, IDisposable
                 continue;
             }
 
-            var path = media.SourceIdentifier;
+            // Schema 2 cannot distinguish Scene/Web from Unknown/Application when LastKnownKind
+            // is None. Those sources remain persisted, but discovery descriptors must reintroduce
+            // them to UI instead of a recent-item reference guessing their content contract.
+            if (media.LastKnownKind == MediaKind.None)
+            {
+                continue;
+            }
+
+            if (!_sourceRegistry.TryGet(media.SourceKind, out _))
+            {
+                continue;
+            }
+
             Recents.Add(
                 new RecentMediaItem(
-                    path,
-                    Path.GetFileName(path),
-                    media.LastKnownKind,
-                    _previewMedia.IsAvailable(path))
-                {
-                    MediaId = media.MediaId,
-                });
+                    media,
+                    GetRecentDisplayName(media),
+                    media.LastKnownKind is not (MediaKind.Image or MediaKind.Video) ||
+                    _previewMedia.IsAvailable(media)));
         }
     }
 
@@ -460,4 +517,21 @@ public sealed class SettingsManagementViewModel : ObservableObject, IDisposable
     private sealed record WorkspaceUpdate(
         SettingsManagementViewModel Owner,
         WallpaperWorkspaceState State);
+
+    private static string GetRecentDisplayName(MediaReference media)
+    {
+        if (media.SourceKind is MediaSourceKind.LocalFile or
+            MediaSourceKind.WallpaperEngineLocalProject)
+        {
+            var fileName = Path.GetFileName(media.SourceIdentifier);
+            if (!string.IsNullOrWhiteSpace(fileName))
+            {
+                return fileName;
+            }
+        }
+
+        return media.SourceKind == MediaSourceKind.WallpaperEngineWorkshopProject
+            ? $"Workshop {media.SourceIdentifier}"
+            : media.SourceIdentifier;
+    }
 }

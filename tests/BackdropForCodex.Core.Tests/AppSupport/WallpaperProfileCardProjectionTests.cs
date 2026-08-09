@@ -104,6 +104,41 @@ public sealed class WallpaperProfileCardProjectionTests
     }
 
     [Fact]
+    public void CreateItemsRoutesWorkshopVideoAvailabilityByReference()
+    {
+        var media = new MediaReference
+        {
+            MediaId = Guid.CreateVersion7(),
+            SourceKind = MediaSourceKind.WallpaperEngineWorkshopProject,
+            SourceIdentifier = "123456",
+            LastKnownKind = MediaKind.Video,
+        };
+        var profile = WallpaperProfile.CreateDefault("Workshop") with
+        {
+            MediaId = media.MediaId,
+        };
+        var preview = new RecordingPreviewService(isAvailable: true);
+        var projection = new WallpaperProfileCardProjection(
+            new DictionaryTextProvider(),
+            preview);
+
+        var item = Assert.Single(
+            projection.CreateItems(
+                CreateSettings([profile], [media], profile.ProfileId)));
+
+        Assert.Null(item.PreviewPath);
+        Assert.True(item.IsVideo);
+        Assert.False(item.IsMissing);
+        var itemReference = Assert.IsType<MediaReference>(item.MediaReference);
+        Assert.Equal("123456", itemReference.SourceIdentifier);
+        var probed = Assert.Single(preview.ProbedReferences);
+        Assert.Equal(
+            MediaSourceKind.WallpaperEngineWorkshopProject,
+            probed.SourceKind);
+        Assert.Empty(preview.PathProbeCalls);
+    }
+
+    [Fact]
     public void CreateItemsUsesLocalizedAccessibleLabels()
     {
         var profile = WallpaperProfile.CreateDefault("工作");
@@ -220,12 +255,28 @@ public sealed class WallpaperProfileCardProjectionTests
     {
         public List<string> ProbedPaths { get; } = [];
 
+        public List<string> PathProbeCalls { get; } = [];
+
+        public List<MediaReference> ProbedReferences { get; } = [];
+
+        public ISafeMediaPreviewLease Acquire(MediaReference reference) =>
+            Acquire(reference.SourceIdentifier);
+
         public ISafeMediaPreviewLease Acquire(string mediaPath) =>
             throw new NotSupportedException();
 
         public bool IsAvailable(string mediaPath)
         {
+            PathProbeCalls.Add(mediaPath);
             ProbedPaths.Add(mediaPath);
+            return isAvailable;
+        }
+
+        public bool IsAvailable(MediaReference reference)
+        {
+            var snapshot = reference.Snapshot();
+            ProbedReferences.Add(snapshot);
+            ProbedPaths.Add(snapshot.SourceIdentifier);
             return isAvailable;
         }
     }
