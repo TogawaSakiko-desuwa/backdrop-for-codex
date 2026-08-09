@@ -127,7 +127,18 @@ jobs:
           --configuration Release
           --no-build
           --no-restore
-          --filter "Category!=Integration"
+          --filter "Category!=Integration&Category!=BrowserContract"
+
+      - name: Run reviewed selector contracts in Microsoft Edge
+        if: matrix.sdk == '10.0.301'
+        env:
+          BACKDROP_FOR_CODEX_RUN_BROWSER_CONTRACTS: "1"
+        run: >-
+          dotnet test .\tests\BackdropForCodex.Core.Tests\BackdropForCodex.Core.Tests.csproj
+          --configuration Release
+          --no-build
+          --no-restore
+          --filter "Category=BrowserContract"
 
       - name: Verify self-contained single-file publish
         run: |

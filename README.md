@@ -166,7 +166,7 @@ dotnet restore .\BackdropForCodex.slnx --locked-mode
 dotnet build .\BackdropForCodex.slnx --configuration Release --no-restore
 dotnet test .\BackdropForCodex.slnx `
   --configuration Release `
-  --filter "Category!=Integration"
+  --filter "Category!=Integration&Category!=BrowserContract"
 dotnet run --project .\src\BackdropForCodex.App\BackdropForCodex.App.csproj
 ```
 

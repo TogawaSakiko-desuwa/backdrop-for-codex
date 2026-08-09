@@ -95,7 +95,7 @@ jobs:
           --configuration Release
           --no-build
           --no-restore
-          --filter "Category!=Integration"
+          --filter "Category!=Integration&Category!=BrowserContract"
 
       - name: Publish self-contained single-file app
         run: |

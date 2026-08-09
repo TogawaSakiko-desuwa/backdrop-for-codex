@@ -16,7 +16,7 @@ dotnet test .\BackdropForCodex.slnx `
   --configuration Release `
   --no-build `
   --no-restore `
-  --filter "Category!=Integration"
+  --filter "Category!=Integration&Category!=BrowserContract"
 ```
 
 CI runs the same sequence with .NET SDK `10.0.301` and `10.0.302`. Do not infer that one SDK passed because the other did; record both matrix legs.
@@ -56,6 +56,7 @@ The non-integration suite covers these release contracts:
 - typed outcomes (`MediaActive`, `Official`, `SavedButNotActivated`, `Superseded`, `Canceled`, `Failed`) and typed surfaces (`Official`, `MediaActive`, `Faulted`, `Disconnected`);
 - strict package/process/session/listener/IPv4 loopback/browser/socket/target/unique-page identity order, zero DOM probes after safety failure, zero/multiple-page rejection, baseline failure, and version-independent structure contracts;
 - stable `data-app-shell-*` presentation evidence for the Codex 26.727 CSS Modules shell, with conservative global-baseline fallback when reviewed markers are absent;
+- static injection resource, owner, generation, capability-block, and key reviewed-selector anchors; native selector matching and computed-style behavior belong to the browser-contract gate below;
 - editing and resubmitting during activation, stale-revision UI filtering, profile cards changing only `Draft`, empty profiles skipping CDP risk confirmation, Saved ≠ Active rendering, temporary Official, dirty-draft confirmation, the 959/960 px breakpoint, and critical accessibility behavior.
 - the 16:9 preview canvas across normal, maximized, and minimum layouts; uniform scaling and pointer-coordinate inversion; one shared image/video backdrop sample; and blur containment within the five rounded simulated glass surfaces.
 
@@ -64,6 +65,18 @@ The concurrency stress scenario submits 100 rapid Apply requests. Its final `Sav
 ## Environment-dependent checks
 
 Integration tests use `Category=Integration`. They are skipped unless their explicit environment opt-in is enabled. A skipped test or missing prerequisite is **not verified**, not passed.
+
+### Reviewed selector browser contracts
+
+Run the reviewed selector contracts against a real headless Microsoft Edge instance:
+
+```powershell
+$env:BACKDROP_FOR_CODEX_RUN_BROWSER_CONTRACTS = "1"
+dotnet test .\tests\BackdropForCodex.Core.Tests\BackdropForCodex.Core.Tests.csproj `
+  --filter "Category=BrowserContract"
+```
+
+These contracts use the browser's CSSOM, `querySelectorAll`, and computed styles for reviewed positive, near-miss, protected-surface, Glass-downgrade, and Advanced-downgrade behavior. Set `BACKDROP_FOR_CODEX_EDGE_PATH` only when `msedge.exe` is outside the standard installation paths. CI runs this category explicitly on the .NET 10.0.301 Windows leg; a missing Edge executable fails that leg.
 
 ### Current-machine Codex identity
 
