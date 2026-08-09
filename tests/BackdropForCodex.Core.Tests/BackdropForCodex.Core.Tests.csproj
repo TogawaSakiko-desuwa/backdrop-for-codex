@@ -25,5 +25,13 @@
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Settings/Fixtures/settings-v1.3.5-schema2.json" />
+    <EmbeddedResource Include="../../src/BackdropForCodex.App/**/*.cs"
+                      Exclude="../../src/BackdropForCodex.App/bin/**;../../src/BackdropForCodex.App/obj/**">
+      <LogicalName>LocalizationSources/%(RecursiveDir)%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="../../src/BackdropForCodex.App/**/*.xaml"
+                      Exclude="../../src/BackdropForCodex.App/bin/**;../../src/BackdropForCodex.App/obj/**">
+      <LogicalName>LocalizationSources/%(RecursiveDir)%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
 </Project>

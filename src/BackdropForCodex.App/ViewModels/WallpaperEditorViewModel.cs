@@ -64,7 +64,7 @@ public sealed class WallpaperEditorViewModel : ObservableObject
     }
 
     public string SelectedMediaName => SelectedMediaPath is null
-        ? Text("Media_None", "No media selected")
+        ? _text.GetStringOrFallback("Media_None", "No media selected")
         : Path.GetFileName(SelectedMediaPath);
 
     public bool HasSelectedMedia => SelectedMediaPath is not null;
@@ -383,11 +383,4 @@ public sealed class WallpaperEditorViewModel : ObservableObject
         }
     }
 
-    private string Text(string key, string fallback)
-    {
-        var localized = _text.GetString(key);
-        return string.Equals(localized, key, StringComparison.Ordinal)
-            ? fallback
-            : localized;
-    }
 }

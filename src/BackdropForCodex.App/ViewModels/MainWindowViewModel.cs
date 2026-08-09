@@ -370,7 +370,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             var workspace = _wallpaper.Workspace;
             if (workspace.RuntimeSurface.Kind == WallpaperRuntimeSurfaceKind.Faulted)
             {
-                return Text("Workspace_ActivationFailed", "Activation failed");
+                return _text.GetStringOrFallback("Workspace_ActivationFailed", "Activation failed");
             }
 
             if (workspace.Error is not null)
@@ -378,20 +378,20 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                 return workspace.Error.Stage ==
                         WallpaperWorkspaceErrorStage.Runtime &&
                     IsSavedButInactive
-                    ? Text(
+                    ? _text.GetStringOrFallback(
                         "Workspace_SavedNotActive",
                         "Saved, not activated")
-                    : Text("Workspace_ActivationFailed", "Activation failed");
+                    : _text.GetStringOrFallback("Workspace_ActivationFailed", "Activation failed");
             }
 
             if (IsDraftDirty)
             {
-                return Text("Workspace_DraftUnsaved", "Draft has unsaved changes");
+                return _text.GetStringOrFallback("Workspace_DraftUnsaved", "Draft has unsaved changes");
             }
 
             if (IsSavedButInactive)
             {
-                return Text(
+                return _text.GetStringOrFallback(
                     "Workspace_SavedNotActive",
                     "Saved, not activated");
             }
@@ -399,19 +399,19 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             if (workspace.RuntimeSurface.Kind ==
                 WallpaperRuntimeSurfaceKind.MediaActive)
             {
-                return Text("Workspace_MediaActive", "Media running");
+                return _text.GetStringOrFallback("Workspace_MediaActive", "Media running");
             }
 
             if (workspace.RuntimeSurface.Kind == WallpaperRuntimeSurfaceKind.Official &&
                 workspace.ActiveSnapshot is not null)
             {
-                return Text("Workspace_Official", "Official background");
+                return _text.GetStringOrFallback("Workspace_Official", "Official background");
             }
 
             return workspace.RuntimeSurface.Kind ==
                 WallpaperRuntimeSurfaceKind.Disconnected
-                ? Text("Workspace_Disconnected", "Codex disconnected")
-                : Text("Workspace_Official", "Official background");
+                ? _text.GetStringOrFallback("Workspace_Disconnected", "Codex disconnected")
+                : _text.GetStringOrFallback("Workspace_Official", "Official background");
         }
     }
 
@@ -421,12 +421,12 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             : WorkspaceStatusText;
 
     public string ApplyButtonText => IsActive
-        ? Text("Action_ApplyChanges", "Apply changes")
-        : Text("Action_ApplyAndLaunch", "Apply & launch Codex");
+        ? _text.GetStringOrFallback("Action_ApplyChanges", "Apply changes")
+        : _text.GetStringOrFallback("Action_ApplyAndLaunch", "Apply & launch Codex");
 
     public string PauseButtonText => IsPaused
-        ? Text("Action_ResumeVideo", "Resume video")
-        : Text("Action_PauseVideo", "Pause video");
+        ? _text.GetStringOrFallback("Action_ResumeVideo", "Resume video")
+        : _text.GetStringOrFallback("Action_PauseVideo", "Pause video");
 
     internal Func<ProfileRenameRequestedEventArgs, Task<string?>>?
         RenameProfilePromptAsync
@@ -465,7 +465,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         }
 
         var profile = _wallpaper.CreateProfile(
-            Text("Action_NewProfile", "New profile"));
+            _text.GetStringOrFallback("Action_NewProfile", "New profile"));
         Editor.ApplySettings(_wallpaper.Workspace.Draft);
         RefreshProfileCards(profile.ProfileId);
         RestoreProfileFocus?.Invoke();
@@ -480,7 +480,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
         var profile = _wallpaper.DuplicateProfile(
             item.ProfileId,
-            Text("Profile_CopySuffix", "Copy"));
+            _text.GetStringOrFallback("Profile_CopySuffix", "Copy"));
         Editor.ApplySettings(_wallpaper.Workspace.Draft);
         RefreshProfileCards(profile.ProfileId);
         RestoreProfileFocus?.Invoke();
@@ -554,8 +554,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         if (IsMediaMissing)
         {
             ShowStatus(
-                Text("Status_MissingTitle", "Media unavailable"),
-                Text(
+                _text.GetStringOrFallback("Status_MissingTitle", "Media unavailable"),
+                _text.GetStringOrFallback(
                     "Status_MissingMessage",
                     "The saved file no longer exists. Choose another file or remove it from recent media."),
                 UiStatusTone.Warning);
@@ -574,7 +574,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         if (!preserveCurrentOperation)
         {
             BeginOperation(
-            Text("Stage_Saving", "Saving settings…"),
+            _text.GetStringOrFallback("Stage_Saving", "Saving settings…"),
             cancellationToken,
             WallpaperOperationStage.Saving);
         }
@@ -592,8 +592,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             Settings.SetPersistedSettings(saved, synchronizeEditor: false);
             Editor.SetRiskAccepted(accepted: true);
             ShowStatus(
-                Text("Status_RiskAcceptedTitle", "Enhanced launch enabled"),
-                Text(
+                _text.GetStringOrFallback("Status_RiskAcceptedTitle", "Enhanced launch enabled"),
+                _text.GetStringOrFallback(
                     "Status_RiskAcceptedMessage",
                     "The local debugging-port acknowledgement was saved."),
                 UiStatusTone.Success);
@@ -616,7 +616,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         }
 
         BeginOperation(
-            Text("Stage_Saving", "Saving settings…"),
+            _text.GetStringOrFallback("Stage_Saving", "Saving settings…"),
             cancellationToken,
             WallpaperOperationStage.Saving);
         try
@@ -630,8 +630,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             Settings.SetPersistedSettings(saved, synchronizeEditor: false);
             Editor.SetRiskAccepted(accepted: false);
             ShowStatus(
-                Text("Status_RiskRevokedTitle", "Enhanced launch disabled"),
-                Text(
+                _text.GetStringOrFallback("Status_RiskRevokedTitle", "Enhanced launch disabled"),
+                _text.GetStringOrFallback(
                     "Status_RiskRevokedMessage",
                     "Future launches will require acknowledgement again."),
                 UiStatusTone.Informational);
@@ -653,9 +653,9 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         if (SelectedMediaPath is not null && IsMediaMissing)
         {
             ShowStatus(
-                Text("Status_MissingTitle", "Media unavailable"),
-                Text(
-                    "Status_MissingMessage",
+                _text.GetStringOrFallback("Status_MissingTitle", "Media unavailable"),
+                _text.GetStringOrFallback(
+                    "Status_ProfileMediaMissingMessage",
                     "The saved file no longer exists. Choose another file or clear this profile's media."),
                 UiStatusTone.Warning);
             return false;
@@ -664,8 +664,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         if (SelectedMediaPath is not null && !AcceptedCdpRisk)
         {
             ShowStatus(
-                Text("Status_RiskRequiredTitle", "Review enhanced launch"),
-                Text(
+                _text.GetStringOrFallback("Status_RiskRequiredTitle", "Review enhanced launch"),
+                _text.GetStringOrFallback(
                     "Status_RiskRequiredMessage",
                     "Review the local Chromium debugging-port notice before applying."),
                 UiStatusTone.Warning);
@@ -690,8 +690,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         if (SelectedMediaPath is not null && IsMediaMissing)
         {
             ShowStatus(
-                Text("Status_AutoLaunchNeedsMediaTitle", "Wallpaper needs attention"),
-                Text(
+                _text.GetStringOrFallback("Status_AutoLaunchNeedsMediaTitle", "Wallpaper needs attention"),
+                _text.GetStringOrFallback(
                     "Status_AutoLaunchNeedsMediaMessage",
                     "Choose an available wallpaper before using the enhanced shortcut."),
                 UiStatusTone.Warning);
@@ -701,8 +701,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         if (SelectedMediaPath is not null && !AcceptedCdpRisk)
         {
             ShowStatus(
-                Text("Status_RiskRequiredTitle", "Review enhanced launch"),
-                Text(
+                _text.GetStringOrFallback("Status_RiskRequiredTitle", "Review enhanced launch"),
+                _text.GetStringOrFallback(
                     "Status_RiskRequiredMessage",
                     "Review the local Chromium debugging-port notice before applying."),
                 UiStatusTone.Warning);
@@ -728,7 +728,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         }
 
         BeginOperation(
-            Text("Stage_Saving", "Saving settings…"),
+            _text.GetStringOrFallback("Stage_Saving", "Saving settings…"),
             cancellationToken,
             WallpaperOperationStage.Saving);
         try
@@ -764,7 +764,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             }
 
             BeginOperation(
-                Text("Stage_Saving", "Saving settings…"),
+                _text.GetStringOrFallback("Stage_Saving", "Saving settings…"),
                 CancellationToken.None,
                 WallpaperOperationStage.Saving);
             operationStarted = true;
@@ -775,8 +775,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                 .ConfigureAwait(true);
             Settings.SetPersistedSettings(saved, synchronizeEditor: false);
             ShowStatus(
-                Text("Status_RecentsClearedTitle", "Recent media cleared"),
-                Text(
+                _text.GetStringOrFallback("Status_RecentsClearedTitle", "Recent media cleared"),
+                _text.GetStringOrFallback(
                     "Status_RecentsClearedMessage",
                     "No wallpaper files were deleted from disk."),
                 UiStatusTone.Success);
@@ -820,7 +820,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         }
 
         BeginOperation(
-            Text("Stage_Resetting", "Resetting Backdrop for Codex…"),
+            _text.GetStringOrFallback("Stage_Resetting", "Resetting Backdrop for Codex…"),
             cancellationToken,
             WallpaperOperationStage.Resetting);
         var failures = new List<Exception>();
@@ -876,8 +876,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             else if (failures.Count == 0)
             {
                 ShowStatus(
-                    Text("Status_ResetCompleteTitle", "Reset complete"),
-                    Text(
+                    _text.GetStringOrFallback("Status_ResetCompleteTitle", "Reset complete"),
+                    _text.GetStringOrFallback(
                         "Status_ResetCompleteMessage",
                         "Settings, recent media, acknowledgement, UI preferences, and the owned shortcut were reset."),
                     UiStatusTone.Success);
@@ -904,7 +904,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         }
 
         BeginOperation(
-            Text("Stage_Saving", "Saving settings…"),
+            _text.GetStringOrFallback("Stage_Saving", "Saving settings…"),
             cancellationToken,
             WallpaperOperationStage.Saving);
         try
@@ -915,8 +915,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             Settings.SetPersistedSettings(restored, synchronizeEditor: false);
             Settings.ApplySavedSettingsToEditor(restored);
             ShowStatus(
-                Text("Status_BackupRestoredTitle", "V1 backup restored"),
-                Text(
+                _text.GetStringOrFallback("Status_BackupRestoredTitle", "V1 backup restored"),
+                _text.GetStringOrFallback(
                     "Status_BackupRestoredMessage",
                     "The preserved V1 backup was migrated into Settings V2. The read-only backup remains available for manual downgrade."),
                 UiStatusTone.Success);
@@ -974,8 +974,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         if (!preferenceWarning && !IsStatusOpen)
         {
             ShowStatus(
-                Text("Status_ReadyTitle", "Ready"),
-                Text(
+                _text.GetStringOrFallback("Status_ReadyTitle", "Ready"),
+                _text.GetStringOrFallback(
                     "Status_ReadyMessage",
                     "Choose local media, tune the glass panel, then apply when ready."),
                 UiStatusTone.Informational);
@@ -987,7 +987,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         CancellationToken cancellationToken)
     {
         var applySequence = Interlocked.Increment(ref _latestApplySequence);
-        BeginOperation(Text("Stage_Validating", "Validating media and Codex…"), cancellationToken);
+        BeginOperation(_text.GetStringOrFallback("Stage_Validating", "Validating media and Codex…"), cancellationToken);
         var operationToken = _operationCancellation!.Token;
         ShortcutNeedsRetry = false;
         try
@@ -1006,8 +1006,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             if (result.Outcome == RuntimeActivationOutcome.Superseded)
             {
                 ShowStatus(
-                    Text("Status_ApplySupersededTitle", "Apply replaced"),
-                    Text(
+                    _text.GetStringOrFallback("Status_ApplySupersededTitle", "Apply replaced"),
+                    _text.GetStringOrFallback(
                         "Status_ApplySupersededMessage",
                         "A newer draft replaced this activation request."),
                     UiStatusTone.Informational);
@@ -1017,8 +1017,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             if (result.Outcome == RuntimeActivationOutcome.Canceled)
             {
                 ShowStatus(
-                    Text("Status_ApplyCanceledTitle", "Apply canceled"),
-                    Text(
+                    _text.GetStringOrFallback("Status_ApplyCanceledTitle", "Apply canceled"),
+                    _text.GetStringOrFallback(
                         "Status_ApplyCanceledMessage",
                         "The saved and active states were left as reported by the runtime."),
                     UiStatusTone.Warning);
@@ -1030,12 +1030,12 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             {
                 ShowStatus(
                     result.Outcome == RuntimeActivationOutcome.SavedButNotActivated
-                        ? Text(
+                        ? _text.GetStringOrFallback(
                             "Status_SavedNotActivatedTitle",
                             "Saved, but not activated")
-                        : Text("Status_ActivationFailedTitle", "Activation failed"),
+                        : _text.GetStringOrFallback("Status_ActivationFailedTitle", "Activation failed"),
                     result.Activation.Error?.Message ??
-                    Text(
+                    _text.GetStringOrFallback(
                         "Status_ActivationFailedMessage",
                         "The runtime could not activate this saved profile."),
                     result.Outcome == RuntimeActivationOutcome.SavedButNotActivated
@@ -1052,8 +1052,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             if (result.Outcome == RuntimeActivationOutcome.Official)
             {
                 ShowStatus(
-                    Text("Status_OfficialActiveTitle", "Official background active"),
-                    Text(
+                    _text.GetStringOrFallback("Status_OfficialActiveTitle", "Official background active"),
+                    _text.GetStringOrFallback(
                         "Status_OfficialActiveMessage",
                         "The empty profile was saved and this app's wallpaper resources were cleared."),
                     UiStatusTone.Success);
@@ -1068,8 +1068,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             if (result.ShortcutReady && presentationDegraded)
             {
                 ShowStatus(
-                    Text("Status_AppliedDegradedTitle", "Wallpaper active with reduced effects"),
-                    Text(
+                    _text.GetStringOrFallback("Status_AppliedDegradedTitle", "Wallpaper active with reduced effects"),
+                    _text.GetStringOrFallback(
                         "Status_AppliedDegradedMessage",
                         "Compatibility checks disabled one or more optional visual effects. The global wallpaper remains active; export a diagnostic report to review capability reason codes."),
                     UiStatusTone.Warning);
@@ -1077,8 +1077,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             else if (result.ShortcutReady)
             {
                 ShowStatus(
-                    Text("Status_AppliedTitle", "Wallpaper is active"),
-                    Text(
+                    _text.GetStringOrFallback("Status_AppliedTitle", "Wallpaper is active"),
+                    _text.GetStringOrFallback(
                         "Status_AppliedMessage",
                         "Codex is using the saved wallpaper and the enhanced desktop shortcut is ready."),
                     UiStatusTone.Success);
@@ -1086,8 +1086,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             else
             {
                 ShowStatus(
-                    Text("Status_AppliedShortcutFailedTitle", "Wallpaper active"),
-                    Text(
+                    _text.GetStringOrFallback("Status_AppliedShortcutFailedTitle", "Wallpaper active"),
+                    _text.GetStringOrFallback(
                         "Status_AppliedShortcutFailedMessage",
                         "The wallpaper is active, but the desktop shortcut could not be updated. You can retry it."),
                     UiStatusTone.Warning);
@@ -1100,9 +1100,9 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             if (applySequence == Volatile.Read(ref _latestApplySequence))
             {
                 ShowStatus(
-                    Text("Status_ApplyCanceledTitle", "Apply canceled"),
-                    Text(
-                        "Status_ApplyCanceledMessage",
+                    _text.GetStringOrFallback("Status_ApplyCanceledTitle", "Apply canceled"),
+                    _text.GetStringOrFallback(
+                        "Status_ApplyCanceledAfterCleanupMessage",
                         "Cancellation requested; required runtime cleanup was completed before returning."),
                     UiStatusTone.Warning);
             }
@@ -1139,7 +1139,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         }
 
         BeginOperation(
-            Text("Stage_Updating", "Updating playback…"),
+            _text.GetStringOrFallback("Stage_Updating", "Updating playback…"),
             CancellationToken.None,
             WallpaperOperationStage.Updating);
         try
@@ -1152,13 +1152,13 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             IsPaused = _wallpaper.IsActive && _wallpaper.IsPaused;
             ShowStatus(
                 IsPaused
-                    ? Text("Status_PausedTitle", "Video paused")
-                    : Text("Status_ResumedTitle", "Video resumed"),
+                    ? _text.GetStringOrFallback("Status_PausedTitle", "Video paused")
+                    : _text.GetStringOrFallback("Status_ResumedTitle", "Video resumed"),
                 IsPaused
-                    ? Text(
+                    ? _text.GetStringOrFallback(
                         "Status_PausedMessage",
                         "Codex and the local preview are paused.")
-                    : Text(
+                    : _text.GetStringOrFallback(
                         "Status_ResumedMessage",
                         "Codex and the local preview are playing."),
                 UiStatusTone.Success);
@@ -1183,7 +1183,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         }
 
         BeginOperation(
-            Text("Stage_Restoring", "Restoring the official Codex background…"),
+            _text.GetStringOrFallback("Stage_Restoring", "Restoring the official Codex background…"),
             CancellationToken.None,
             WallpaperOperationStage.Restoring);
         try
@@ -1196,11 +1196,11 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                 Settings.SetRuntimeActivity(_wallpaper.IsActive);
                 IsPaused = _wallpaper.IsPaused;
                 ShowStatus(
-                    Text(
+                    _text.GetStringOrFallback(
                         "Status_RestoreFailedTitle",
                         "Official background could not be restored"),
                     result.Error?.Message ??
-                    Text(
+                    _text.GetStringOrFallback(
                         "Status_RestoreFailedMessage",
                         "Cleanup could not be confirmed. The runtime state shown below reflects the resources still owned by this app."),
                     UiStatusTone.Error);
@@ -1210,8 +1210,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             Settings.SetRuntimeActivity(isActive: false);
             IsPaused = false;
             ShowStatus(
-                Text("Status_RestoredTitle", "Official background restored"),
-                Text(
+                _text.GetStringOrFallback("Status_RestoredTitle", "Official background restored"),
+                _text.GetStringOrFallback(
                     "Status_RestoredMessage",
                     "Saved wallpaper settings remain available for the next launch."),
                 UiStatusTone.Success);
@@ -1240,8 +1240,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             _ = _wallpaper.CreateOrUpdateShortcut();
             ShortcutNeedsRetry = false;
             ShowStatus(
-                Text("Status_ShortcutReadyTitle", "Shortcut ready"),
-                Text(
+                _text.GetStringOrFallback("Status_ShortcutReadyTitle", "Shortcut ready"),
+                _text.GetStringOrFallback(
                     "Status_ShortcutReadyMessage",
                     "The enhanced desktop shortcut was created or updated."),
                 UiStatusTone.Success);
@@ -1279,15 +1279,15 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             var stage = eventArgs.Phase switch
             {
                 WallpaperRuntimePhase.Validating =>
-                    Text("Stage_Validating", "Validating media and Codex…"),
+                    _text.GetStringOrFallback("Stage_Validating", "Validating media and Codex…"),
                 WallpaperRuntimePhase.LaunchingCodex =>
-                    Text("Stage_Launching", "Launching Codex securely…"),
+                    _text.GetStringOrFallback("Stage_Launching", "Launching Codex securely…"),
                 WallpaperRuntimePhase.DiscoveringEndpoint =>
-                    Text("Stage_Discovering", "Discovering the local Codex endpoint…"),
+                    _text.GetStringOrFallback("Stage_Discovering", "Discovering the local Codex endpoint…"),
                 WallpaperRuntimePhase.Applying =>
-                    Text("Stage_Applying", "Applying wallpaper and glass effects…"),
+                    _text.GetStringOrFallback("Stage_Applying", "Applying wallpaper and glass effects…"),
                 WallpaperRuntimePhase.Stopping =>
-                    Text("Stage_Restoring", "Restoring the official Codex background…"),
+                    _text.GetStringOrFallback("Stage_Restoring", "Restoring the official Codex background…"),
                 _ => string.Empty,
             };
             if (!string.IsNullOrEmpty(stage))
@@ -1318,8 +1318,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                         OperationProgress.Stage == WallpaperOperationStage.Saving)
                     {
                         ShowStatus(
-                            Text("Status_RuntimeStoppedTitle", "Wallpaper connection stopped"),
-                            Text(
+                            _text.GetStringOrFallback("Status_RuntimeStoppedTitle", "Wallpaper connection stopped"),
+                            _text.GetStringOrFallback(
                                 "Status_RuntimeStoppedMessage",
                                 "The runtime connection ended and the app attempted to restore the official background."),
                             UiStatusTone.Error);
@@ -1522,14 +1522,6 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         IsStatusOpen = true;
     }
 
-    private string Text(string key, string fallback)
-    {
-        var localized = _text.GetString(key);
-        return string.Equals(localized, key, StringComparison.Ordinal)
-            ? fallback
-            : localized;
-    }
-
     private void Wallpaper_CapabilitiesChanged(
         object? sender,
         WallpaperInjectionCapabilitiesChangedEventArgs eventArgs)
@@ -1546,8 +1538,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             if (IsActive && visualCapabilityDropped)
             {
                 ShowStatus(
-                    Text("Status_AppliedDegradedTitle", "Wallpaper active with reduced effects"),
-                    Text(
+                    _text.GetStringOrFallback("Status_AppliedDegradedTitle", "Wallpaper active with reduced effects"),
+                    _text.GetStringOrFallback(
                         "Status_AppliedDegradedMessage",
                         "Compatibility checks disabled one or more optional visual effects. The global wallpaper remains active; export a diagnostic report to review capability reason codes."),
                     UiStatusTone.Warning);

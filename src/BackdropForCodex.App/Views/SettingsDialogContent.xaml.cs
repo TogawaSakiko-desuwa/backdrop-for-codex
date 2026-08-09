@@ -54,8 +54,8 @@ public partial class SettingsDialogContent : UserControl
     public void RefreshRiskState()
     {
         RiskStateText.Text = _viewModel.AcceptedCdpRisk
-            ? Text("Risk_Acknowledgement", "Acknowledgement saved")
-            : Text("Risk_Revoked", "Acknowledgement is not currently saved.");
+            ? _text.GetStringOrFallback("Risk_AcknowledgementSaved", "Acknowledgement saved")
+            : _text.GetStringOrFallback("Risk_Revoked", "Acknowledgement is not currently saved.");
         RevokeRiskButton.IsEnabled =
             _viewModel.AcceptedCdpRisk &&
             _viewModel.CanEdit;
@@ -89,11 +89,4 @@ public partial class SettingsDialogContent : UserControl
     private void DiagnosticExportButton_Click(object sender, RoutedEventArgs e) =>
         DiagnosticExportRequested?.Invoke(this, EventArgs.Empty);
 
-    private string Text(string key, string fallback)
-    {
-        var value = _text.GetString(key);
-        return string.Equals(value, key, StringComparison.Ordinal)
-            ? fallback
-            : value;
-    }
 }

@@ -2,10 +2,13 @@ using System.Windows.Markup;
 
 namespace BackdropForCodex.App.Services.Localization;
 
+/// <summary>
+/// Resolves localized application text for XAML and supplies an explicit fallback for missing keys.
+/// </summary>
 [MarkupExtensionReturnType(typeof(string))]
 public sealed class LocExtension : MarkupExtension
 {
-    private static readonly AppTextProvider Text = new();
+    private static readonly IAppTextProvider Text = new AppTextProvider();
 
     public LocExtension()
     {
@@ -24,9 +27,6 @@ public sealed class LocExtension : MarkupExtension
     public override object ProvideValue(IServiceProvider serviceProvider)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(Key);
-        var value = Text.GetString(Key);
-        return string.Equals(value, Key, StringComparison.Ordinal)
-            ? Fallback
-            : value;
+        return Text.GetStringOrFallback(Key, Fallback);
     }
 }

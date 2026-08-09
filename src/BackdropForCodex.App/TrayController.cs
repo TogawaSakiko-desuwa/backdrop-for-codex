@@ -33,17 +33,19 @@ internal sealed class TrayController : IAsyncDisposable
         var menu = new ContextMenu();
         var openItem = new MenuItem
         {
-            Header = Localize(text, "Tray_Open", "Open Backdrop for Codex"),
+            Header = text.GetStringOrFallback("Tray_Open", "Open Backdrop for Codex"),
         };
         openItem.Click += (_, _) => ShowWindow();
         var restoreItem = new MenuItem
         {
-            Header = Localize(text, "Tray_Restore", "Restore official background"),
+            Header = text.GetStringOrFallback(
+                "Tray_Restore",
+                "Restore official background"),
         };
         restoreItem.Click += (_, _) => _ = RunSafelyAsync(_disableWallpaper);
         var exitItem = new MenuItem
         {
-            Header = Localize(text, "Tray_Exit", "Exit"),
+            Header = text.GetStringOrFallback("Tray_Exit", "Exit"),
         };
         exitItem.Click += (_, _) => _ = RunSafelyAsync(_shutdown);
         _ = menu.Items.Add(openItem);
@@ -137,17 +139,6 @@ internal sealed class TrayController : IAsyncDisposable
                 // The window may already be gone; tray event exceptions must never escape.
             }
         }
-    }
-
-    private static string Localize(
-        IAppTextProvider text,
-        string key,
-        string fallback)
-    {
-        var value = text.GetString(key);
-        return string.Equals(value, key, StringComparison.Ordinal)
-            ? fallback
-            : value;
     }
 
     private static BitmapSource CreateBitmapIcon(ImageSource source)

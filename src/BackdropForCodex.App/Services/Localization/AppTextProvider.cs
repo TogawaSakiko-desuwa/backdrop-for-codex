@@ -8,6 +8,22 @@ public interface IAppTextProvider
     string GetString(string key);
 }
 
+public static class AppTextProviderExtensions
+{
+    public static string GetStringOrFallback(
+        this IAppTextProvider text,
+        string key,
+        string fallback)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        ArgumentNullException.ThrowIfNull(fallback);
+        var value = text.GetString(key);
+        return string.Equals(value, key, StringComparison.Ordinal)
+            ? fallback
+            : value;
+    }
+}
+
 /// <summary>
 /// Reads neutral English resources by default and follows the current Windows UI culture.
 /// </summary>

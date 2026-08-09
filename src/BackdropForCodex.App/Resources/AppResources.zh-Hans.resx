@@ -32,6 +32,7 @@
   <data name="Action_DeleteProfile" xml:space="preserve"><value>删除</value></data>
   <data name="Action_Close" xml:space="preserve"><value>关闭</value></data>
   <data name="Action_Confirm" xml:space="preserve"><value>确认</value></data>
+  <data name="Action_GotIt" xml:space="preserve"><value>知道了</value></data>
   <data name="Action_Reset" xml:space="preserve"><value>重置</value></data>
   <data name="Action_RevokeRisk" xml:space="preserve"><value>撤销风险确认</value></data>
   <data name="Action_LearnMore" xml:space="preserve"><value>了解详情</value></data>
@@ -111,6 +112,16 @@
   <data name="Stage_Applying" xml:space="preserve"><value>正在应用壁纸与玻璃效果…</value></data>
   <data name="Stage_Restoring" xml:space="preserve"><value>正在恢复 Codex 官方背景…</value></data>
   <data name="Stage_Resetting" xml:space="preserve"><value>正在重置 Backdrop for Codex…</value></data>
+  <data name="Status_ApplySupersededTitle" xml:space="preserve"><value>应用请求已被替换</value></data>
+  <data name="Status_ApplySupersededMessage" xml:space="preserve"><value>更新的草稿已替换此次激活请求。</value></data>
+  <data name="Status_ApplyCanceledTitle" xml:space="preserve"><value>应用已取消</value></data>
+  <data name="Status_ApplyCanceledMessage" xml:space="preserve"><value>保存状态与生效状态均保持为运行时报告的结果。</value></data>
+  <data name="Status_ApplyCanceledAfterCleanupMessage" xml:space="preserve"><value>已请求取消；返回前已完成必要的运行时清理。</value></data>
+  <data name="Status_SavedNotActivatedTitle" xml:space="preserve"><value>已保存，但未激活</value></data>
+  <data name="Status_ActivationFailedTitle" xml:space="preserve"><value>激活失败</value></data>
+  <data name="Status_ActivationFailedMessage" xml:space="preserve"><value>运行时无法激活这个已保存的方案。</value></data>
+  <data name="Status_OfficialActiveTitle" xml:space="preserve"><value>官方背景已启用</value></data>
+  <data name="Status_OfficialActiveMessage" xml:space="preserve"><value>空方案已保存，并已清理本应用的壁纸资源。</value></data>
   <data name="Status_AppliedTitle" xml:space="preserve"><value>壁纸已启用</value></data>
   <data name="Status_AppliedMessage" xml:space="preserve"><value>Codex 正在使用已保存的壁纸，增强启动桌面快捷方式也已就绪。</value></data>
   <data name="Status_AppliedDegradedTitle" xml:space="preserve"><value>壁纸已启用，部分效果已降级</value></data>
@@ -121,6 +132,7 @@
   <data name="Status_AutoLaunchNeedsMediaMessage" xml:space="preserve"><value>使用增强快捷方式前，请选择可用的壁纸。</value></data>
   <data name="Status_MissingTitle" xml:space="preserve"><value>媒体不可用</value></data>
   <data name="Status_MissingMessage" xml:space="preserve"><value>已保存的文件不再存在。请选择其他文件，或从最近使用中移除它。</value></data>
+  <data name="Status_ProfileMediaMissingMessage" xml:space="preserve"><value>已保存的文件不再存在。请选择其他文件，或清除此方案的媒体。</value></data>
   <data name="Status_PausedTitle" xml:space="preserve"><value>视频已暂停</value></data>
   <data name="Status_PausedMessage" xml:space="preserve"><value>Codex 与本地预览均已暂停。</value></data>
   <data name="Status_ReadyTitle" xml:space="preserve"><value>就绪</value></data>
@@ -153,6 +165,7 @@
   <data name="Risk_Summary" xml:space="preserve"><value>此功能会使用本机 Chromium 调试端点启动 Codex。</value></data>
   <data name="Risk_Detail" xml:space="preserve"><value>端点仅限当前设备访问，并会持续到 Codex 退出。Backdrop 会先核验官方软件包、进程、会话、端点和目标，再由运行时能力探针决定可启用的视觉效果。</value></data>
   <data name="Risk_Acknowledgement" xml:space="preserve"><value>我已了解并希望继续</value></data>
+  <data name="Risk_AcknowledgementSaved" xml:space="preserve"><value>风险确认已保存</value></data>
   <data name="Risk_Revoked" xml:space="preserve"><value>确认已撤销。下次增强启动前会再次询问。</value></data>
   <data name="Settings_ThemeDescription" xml:space="preserve"><value>默认跟随 Windows，也会跟随高对比度模式。</value></data>
   <data name="Settings_RiskDescription" xml:space="preserve"><value>查看或撤销本机调试风险确认。</value></data>
@@ -165,6 +178,13 @@
   <data name="Settings_Licenses" xml:space="preserve"><value>开源许可证</value></data>
   <data name="Settings_ResetTitle" xml:space="preserve"><value>重置 Backdrop for Codex？</value></data>
   <data name="Settings_ResetDescription" xml:space="preserve"><value>这会恢复官方背景，永久删除设置、最近媒体及任何保留的 V1 迁移备份，撤销风险确认，重置界面偏好，并且只移除经核验确由本应用创建的快捷方式。</value></data>
+  <data name="Exit_DirtyTitle" xml:space="preserve"><value>丢弃草稿并退出？</value></data>
+  <data name="Exit_DirtyMessage" xml:space="preserve"><value>当前方案草稿有未保存的更改。退出将丢弃这些更改，且不会应用。</value></data>
+  <data name="Exit_DiscardAction" xml:space="preserve"><value>丢弃并退出</value></data>
+  <data name="Restore_DirtyTitle" xml:space="preserve"><value>丢弃草稿并恢复备份？</value></data>
+  <data name="Restore_DirtyMessage" xml:space="preserve"><value>恢复保留的备份将丢弃当前未保存的草稿，且不会应用该草稿。</value></data>
+  <data name="Restore_DiscardAction" xml:space="preserve"><value>丢弃并恢复</value></data>
+  <data name="Reset_DiscardAction" xml:space="preserve"><value>丢弃并重置</value></data>
   <data name="About_NonAffiliation" xml:space="preserve"><value>独立项目，与 OpenAI 无隶属或背书关系。</value></data>
   <data name="Tray_Open" xml:space="preserve"><value>打开 Backdrop for Codex</value></data>
   <data name="Tray_Apply" xml:space="preserve"><value>应用壁纸</value></data>

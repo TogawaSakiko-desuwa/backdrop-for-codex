@@ -32,6 +32,7 @@
   <data name="Action_DeleteProfile" xml:space="preserve"><value>Delete</value></data>
   <data name="Action_Close" xml:space="preserve"><value>Close</value></data>
   <data name="Action_Confirm" xml:space="preserve"><value>Confirm</value></data>
+  <data name="Action_GotIt" xml:space="preserve"><value>Got it</value></data>
   <data name="Action_Reset" xml:space="preserve"><value>Reset</value></data>
   <data name="Action_RevokeRisk" xml:space="preserve"><value>Revoke acknowledgement</value></data>
   <data name="Action_LearnMore" xml:space="preserve"><value>Learn more</value></data>
@@ -111,6 +112,16 @@
   <data name="Stage_Applying" xml:space="preserve"><value>Applying wallpaper and glass effects…</value></data>
   <data name="Stage_Restoring" xml:space="preserve"><value>Restoring the official Codex background…</value></data>
   <data name="Stage_Resetting" xml:space="preserve"><value>Resetting Backdrop for Codex…</value></data>
+  <data name="Status_ApplySupersededTitle" xml:space="preserve"><value>Apply replaced</value></data>
+  <data name="Status_ApplySupersededMessage" xml:space="preserve"><value>A newer draft replaced this activation request.</value></data>
+  <data name="Status_ApplyCanceledTitle" xml:space="preserve"><value>Apply canceled</value></data>
+  <data name="Status_ApplyCanceledMessage" xml:space="preserve"><value>The saved and active states were left as reported by the runtime.</value></data>
+  <data name="Status_ApplyCanceledAfterCleanupMessage" xml:space="preserve"><value>Cancellation requested; required runtime cleanup was completed before returning.</value></data>
+  <data name="Status_SavedNotActivatedTitle" xml:space="preserve"><value>Saved, but not activated</value></data>
+  <data name="Status_ActivationFailedTitle" xml:space="preserve"><value>Activation failed</value></data>
+  <data name="Status_ActivationFailedMessage" xml:space="preserve"><value>The runtime could not activate this saved profile.</value></data>
+  <data name="Status_OfficialActiveTitle" xml:space="preserve"><value>Official background active</value></data>
+  <data name="Status_OfficialActiveMessage" xml:space="preserve"><value>The empty profile was saved and this app's wallpaper resources were cleared.</value></data>
   <data name="Status_AppliedTitle" xml:space="preserve"><value>Wallpaper is active</value></data>
   <data name="Status_AppliedMessage" xml:space="preserve"><value>Codex is using the saved wallpaper and the enhanced desktop shortcut is ready.</value></data>
   <data name="Status_AppliedDegradedTitle" xml:space="preserve"><value>Wallpaper active with reduced effects</value></data>
@@ -121,6 +132,7 @@
   <data name="Status_AutoLaunchNeedsMediaMessage" xml:space="preserve"><value>Choose an available wallpaper before using the enhanced shortcut.</value></data>
   <data name="Status_MissingTitle" xml:space="preserve"><value>Media unavailable</value></data>
   <data name="Status_MissingMessage" xml:space="preserve"><value>The saved file no longer exists. Choose another file or remove it from recent media.</value></data>
+  <data name="Status_ProfileMediaMissingMessage" xml:space="preserve"><value>The saved file no longer exists. Choose another file or clear this profile's media.</value></data>
   <data name="Status_PausedTitle" xml:space="preserve"><value>Video paused</value></data>
   <data name="Status_PausedMessage" xml:space="preserve"><value>Codex and the local preview are paused.</value></data>
   <data name="Status_ReadyTitle" xml:space="preserve"><value>Ready</value></data>
@@ -153,6 +165,7 @@
   <data name="Risk_Summary" xml:space="preserve"><value>This feature starts Codex with a local Chromium debugging endpoint.</value></data>
   <data name="Risk_Detail" xml:space="preserve"><value>The endpoint is limited to this device and remains available until Codex exits. Backdrop verifies the official package, process, session, endpoint, and target before runtime capability probes decide which visual effects may run.</value></data>
   <data name="Risk_Acknowledgement" xml:space="preserve"><value>I understand and want to continue</value></data>
+  <data name="Risk_AcknowledgementSaved" xml:space="preserve"><value>Acknowledgement saved</value></data>
   <data name="Risk_Revoked" xml:space="preserve"><value>The acknowledgement has been revoked. You will be asked again before the next enhanced launch.</value></data>
   <data name="Settings_ThemeDescription" xml:space="preserve"><value>Follow Windows by default, including high-contrast mode.</value></data>
   <data name="Settings_RiskDescription" xml:space="preserve"><value>Review or revoke the local debugging acknowledgement.</value></data>
@@ -165,6 +178,13 @@
   <data name="Settings_Licenses" xml:space="preserve"><value>Open-source licenses</value></data>
   <data name="Settings_ResetTitle" xml:space="preserve"><value>Reset Backdrop for Codex?</value></data>
   <data name="Settings_ResetDescription" xml:space="preserve"><value>This restores the official background; permanently deletes settings, recent media, and any preserved V1 migration backup; revokes acknowledgement; resets UI preferences; and removes only a shortcut verified as owned by this app.</value></data>
+  <data name="Exit_DirtyTitle" xml:space="preserve"><value>Discard draft and exit?</value></data>
+  <data name="Exit_DirtyMessage" xml:space="preserve"><value>The current profile draft has unsaved changes. Exit will discard them without applying.</value></data>
+  <data name="Exit_DiscardAction" xml:space="preserve"><value>Discard and exit</value></data>
+  <data name="Restore_DirtyTitle" xml:space="preserve"><value>Discard draft and restore backup?</value></data>
+  <data name="Restore_DirtyMessage" xml:space="preserve"><value>Restoring the preserved backup will discard the current unsaved draft without applying it.</value></data>
+  <data name="Restore_DiscardAction" xml:space="preserve"><value>Discard and restore</value></data>
+  <data name="Reset_DiscardAction" xml:space="preserve"><value>Discard and reset</value></data>
   <data name="About_NonAffiliation" xml:space="preserve"><value>An independent project. Not affiliated with or endorsed by OpenAI.</value></data>
   <data name="Tray_Open" xml:space="preserve"><value>Open Backdrop for Codex</value></data>
   <data name="Tray_Apply" xml:space="preserve"><value>Apply wallpaper</value></data>

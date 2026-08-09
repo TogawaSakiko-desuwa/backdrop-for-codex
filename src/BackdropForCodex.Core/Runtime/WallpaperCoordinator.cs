@@ -89,6 +89,11 @@ public sealed class CdpEndpointDiscoveryService : ICdpEndpointDiscoveryService
         _discovery.DiscoverAsync(identity, cancellationToken);
 }
 
+/// <summary>
+/// Serializes runtime-owned wallpaper injection and media resources. Cleanup and disposal may
+/// remove only those resources; an implementation may request a Codex launch but must never
+/// close or terminate the Codex process.
+/// </summary>
 public interface IWallpaperRuntime : IAsyncDisposable
 {
     event EventHandler<WallpaperRuntimeStatusChangedEventArgs>? StatusChanged;
@@ -103,6 +108,12 @@ public interface IWallpaperRuntime : IAsyncDisposable
 
     SettingsV2? ActiveSnapshot { get; }
 
+    /// <summary>
+    /// Attempts to activate one canonical request. A pre-mutation rejection may return
+    /// SavedButNotActivated with the prior surface and snapshot. After mutation begins,
+    /// cancellation or failure performs safety cleanup rather than transactional rollback;
+    /// the returned surface and active snapshot are authoritative.
+    /// </summary>
     Task<RuntimeActivationResult> ActivateAsync(
         RuntimeActivationRequest request,
         CancellationToken cancellationToken = default);
@@ -121,8 +132,19 @@ public interface IWallpaperRuntime : IAsyncDisposable
         return Task.FromResult<RuntimeActivationResult?>(null);
     }
 
+    /// <summary>
+    /// Changes playback only for an active surface. Failure does not clear the reported surface
+    /// or active snapshot; <see cref="IsPaused"/> remains the last confirmed state rather than a
+    /// guarantee about a downstream session that failed mid-command.
+    /// </summary>
     Task SetPausedAsync(bool paused, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Removes runtime-owned injection and media to reveal the official background. Completed
+    /// cleanup returns an official surface with no active snapshot; a cleanup failure after entry
+    /// returns a truthful faulted surface that may still report owned resources and never
+    /// terminates Codex.
+    /// </summary>
     Task<RuntimeActivationResult> RestoreOfficialAsync(
         long revision,
         CancellationToken cancellationToken = default);
@@ -450,6 +472,7 @@ public sealed class WallpaperCoordinator :
                     "The package, process, endpoint and unique Codex target passed security validation."));
 
                 var ownership = PlaybackOwnershipToken.Create();
+                var transferConfirmed = false;
                 try
                 {
                     await _playbackPool
@@ -458,12 +481,20 @@ public sealed class WallpaperCoordinator :
                 }
                 finally
                 {
-                    if (ReferenceEquals(_playbackPool.ActiveLease, leaseToActivate) &&
-                        _playbackPool.ActiveOwnership == ownership)
+                    var activeLease = _playbackPool.ActiveLease;
+                    var activeOwnership = _playbackPool.ActiveOwnership;
+                    if (ReferenceEquals(activeLease, leaseToActivate))
                     {
-                        _activePlaybackOwnership = ownership;
+                        _activePlaybackOwnership = activeOwnership;
                         pendingLease = null;
+                        transferConfirmed = activeOwnership == ownership;
                     }
+                }
+
+                if (!transferConfirmed)
+                {
+                    throw new InvalidOperationException(
+                        "The playback pool did not publish the transferred lease under the requested ownership token.");
                 }
 
                 // Pause belongs to one injected media generation. A replacement starts from its

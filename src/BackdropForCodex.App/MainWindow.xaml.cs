@@ -104,11 +104,11 @@ public partial class MainWindow : FluentWindow
             Show();
             Activate();
             if (!await ConfirmDiscardDraftAsync(
-                    Text("Exit_DirtyTitle", "Discard draft and exit?"),
-                    Text(
+                    _text.GetStringOrFallback("Exit_DirtyTitle", "Discard draft and exit?"),
+                    _text.GetStringOrFallback(
                         "Exit_DirtyMessage",
                         "The current profile draft has unsaved changes. Exit will discard them without applying."),
-                    Text("Exit_DiscardAction", "Discard and exit")))
+                    _text.GetStringOrFallback("Exit_DiscardAction", "Discard and exit")))
             {
                 return;
             }
@@ -161,7 +161,7 @@ public partial class MainWindow : FluentWindow
         {
             var dialog = new OpenFileDialog
             {
-                Title = Text("Action_SelectMedia", "Choose wallpaper media"),
+                Title = _text.GetStringOrFallback("Action_SelectMedia", "Choose wallpaper media"),
                 Filter =
                     "Supported media|*.png;*.jpg;*.jpeg;*.webp;*.mp4;*.webm|" +
                     "Images|*.png;*.jpg;*.jpeg;*.webp|Videos|*.mp4;*.webm",
@@ -212,7 +212,7 @@ public partial class MainWindow : FluentWindow
             _ = content.Children.Add(
                 new TextBlock
                 {
-                    Text = Text(
+                    Text = _text.GetStringOrFallback(
                         "Profile_RenamePrompt",
                         "Enter a profile name (1–128 characters)."),
                     TextWrapping = TextWrapping.Wrap,
@@ -223,7 +223,7 @@ public partial class MainWindow : FluentWindow
                 _ = content.Children.Add(
                     new TextBlock
                     {
-                        Text = Text(
+                        Text = _text.GetStringOrFallback(
                             "Profile_NameRequired",
                             "The profile name cannot be empty."),
                         Margin = new Thickness(0, 8, 0, 0),
@@ -234,10 +234,10 @@ public partial class MainWindow : FluentWindow
 
             var dialog = new ContentDialog(DialogHost)
             {
-                Title = Text("Action_RenameProfile", "Rename profile"),
+                Title = _text.GetStringOrFallback("Action_RenameProfile", "Rename profile"),
                 Content = content,
-                PrimaryButtonText = Text("Action_Confirm", "Confirm"),
-                CloseButtonText = Text("Action_Cancel", "Cancel"),
+                PrimaryButtonText = _text.GetStringOrFallback("Action_Confirm", "Confirm"),
+                CloseButtonText = _text.GetStringOrFallback("Action_Cancel", "Cancel"),
                 PrimaryButtonAppearance = ControlAppearance.Primary,
                 DialogMaxWidth = 520,
             };
@@ -263,12 +263,12 @@ public partial class MainWindow : FluentWindow
         ArgumentNullException.ThrowIfNull(request);
         var dialog = new ContentDialog(DialogHost)
         {
-            Title = Text("Profile_DeleteTitle", "Delete profile?"),
+            Title = _text.GetStringOrFallback("Profile_DeleteTitle", "Delete profile?"),
             Content = new TextBlock
             {
                 Text = string.Format(
                     System.Globalization.CultureInfo.CurrentCulture,
-                    Text(
+                    _text.GetStringOrFallback(
                         "Profile_DeleteMessage",
                         "\"{0}\" will be deleted. Regions using it will be rebound to \"{1}\". Media remains in the catalog."),
                     request.ProfileName,
@@ -276,8 +276,8 @@ public partial class MainWindow : FluentWindow
                 MaxWidth = 500,
                 TextWrapping = TextWrapping.Wrap,
             },
-            PrimaryButtonText = Text("Action_DeleteProfile", "Delete"),
-            CloseButtonText = Text("Action_Cancel", "Cancel"),
+            PrimaryButtonText = _text.GetStringOrFallback("Action_DeleteProfile", "Delete"),
+            CloseButtonText = _text.GetStringOrFallback("Action_Cancel", "Cancel"),
             PrimaryButtonAppearance = ControlAppearance.Danger,
             DialogMaxWidth = 580,
         };
@@ -324,7 +324,7 @@ public partial class MainWindow : FluentWindow
         _ = content.Children.Add(
             new TextBlock
             {
-                Text = Text(
+                Text = _text.GetStringOrFallback(
                     "Risk_Summary",
                     "Enhanced launch starts Codex with a local Chromium debugging endpoint."),
                 FontWeight = FontWeights.SemiBold,
@@ -333,7 +333,7 @@ public partial class MainWindow : FluentWindow
         _ = content.Children.Add(
             new TextBlock
             {
-                Text = Text(
+                Text = _text.GetStringOrFallback(
                     "Risk_Detail",
                     "The endpoint is limited to this device and remains available until Codex exits. Backdrop verifies the official package, process, session, endpoint, and target before runtime capability probes decide which visual effects may run."),
                 Margin = new Thickness(0, 10, 0, 0),
@@ -346,16 +346,16 @@ public partial class MainWindow : FluentWindow
 
         var dialog = new ContentDialog(DialogHost)
         {
-            Title = Text("Risk_Title", "Allow local Codex debugging?"),
+            Title = _text.GetStringOrFallback("Risk_Title", "Allow local Codex debugging?"),
             Content = content,
             PrimaryButtonText = _viewModel.AcceptedCdpRisk
-                ? Text("Action_Close", "Close")
-                : Text("Risk_Acknowledgement", "I understand and want to continue"),
+                ? _text.GetStringOrFallback("Action_Close", "Close")
+                : _text.GetStringOrFallback("Risk_Acknowledgement", "I understand and want to continue"),
             CloseButtonText = _viewModel.AcceptedCdpRisk
                 ? string.Empty
-                : Text("Action_Cancel", "Cancel"),
+                : _text.GetStringOrFallback("Action_Cancel", "Cancel"),
             SecondaryButtonText = allowRevoke
-                ? Text("Action_RevokeRisk", "Revoke acknowledgement")
+                ? _text.GetStringOrFallback("Action_RevokeRisk", "Revoke acknowledgement")
                 : string.Empty,
             PrimaryButtonAppearance = ControlAppearance.Primary,
             DialogMaxWidth = 600,
@@ -442,9 +442,9 @@ public partial class MainWindow : FluentWindow
 
         dialog = new ContentDialog(DialogHost)
         {
-            Title = Text("Action_Settings", "Settings"),
+            Title = _text.GetStringOrFallback("Action_Settings", "Settings"),
             Content = content,
-            CloseButtonText = Text("Action_Close", "Close"),
+            CloseButtonText = _text.GetStringOrFallback("Action_Close", "Close"),
             DialogWidth = 640,
             DialogMaxWidth = 680,
             DialogMaxHeight = Math.Max(420, ActualHeight - 80),
@@ -455,11 +455,11 @@ public partial class MainWindow : FluentWindow
         {
             if (!_viewModel.IsDraftDirty ||
                 await ConfirmDiscardDraftAsync(
-                    Text("Restore_DirtyTitle", "Discard draft and restore backup?"),
-                    Text(
+                    _text.GetStringOrFallback("Restore_DirtyTitle", "Discard draft and restore backup?"),
+                    _text.GetStringOrFallback(
                         "Restore_DirtyMessage",
                         "Restoring the preserved backup will discard the current unsaved draft without applying it."),
-                    Text("Restore_DiscardAction", "Discard and restore")))
+                    _text.GetStringOrFallback("Restore_DiscardAction", "Discard and restore")))
             {
                 await _viewModel.RestoreVersion1BackupAsync();
             }
@@ -478,17 +478,17 @@ public partial class MainWindow : FluentWindow
     {
         var disclosure = new ContentDialog(DialogHost)
         {
-            Title = Text("Diagnostics_Title", "Export diagnostic report?"),
+            Title = _text.GetStringOrFallback("Diagnostics_Title", "Export diagnostic report?"),
             Content = new TextBlock
             {
-                Text = Text(
+                Text = _text.GetStringOrFallback(
                     "Diagnostics_Disclosure",
                     "The report contains app, Windows, runtime stage, and capability summaries. It does not include media paths, file names, page titles, URLs, DOM or chat text, settings JSON, or stable identifiers."),
                 MaxWidth = 520,
                 TextWrapping = TextWrapping.Wrap,
             },
-            PrimaryButtonText = Text("Diagnostics_Export", "Choose save location"),
-            CloseButtonText = Text("Action_Cancel", "Cancel"),
+            PrimaryButtonText = _text.GetStringOrFallback("Diagnostics_Export", "Choose save location"),
+            CloseButtonText = _text.GetStringOrFallback("Action_Cancel", "Cancel"),
             PrimaryButtonAppearance = ControlAppearance.Primary,
             DialogMaxWidth = 600,
         };
@@ -505,7 +505,7 @@ public partial class MainWindow : FluentWindow
             FileName = "BackdropForCodex-diagnostic.json",
             Filter = "JSON diagnostic report (*.json)|*.json",
             OverwritePrompt = true,
-            Title = Text("Diagnostics_SaveTitle", "Save diagnostic report"),
+            Title = _text.GetStringOrFallback("Diagnostics_SaveTitle", "Save diagnostic report"),
         };
         if (picker.ShowDialog(this) != true)
         {
@@ -526,16 +526,16 @@ public partial class MainWindow : FluentWindow
 
         var complete = new ContentDialog(DialogHost)
         {
-            Title = Text("Diagnostics_CompleteTitle", "Diagnostic report saved"),
+            Title = _text.GetStringOrFallback("Diagnostics_CompleteTitle", "Diagnostic report saved"),
             Content = new TextBlock
             {
-                Text = Text(
+                Text = _text.GetStringOrFallback(
                     "Diagnostics_CompleteMessage",
                     "The allow-listed local report was saved to the location you selected."),
                 MaxWidth = 480,
                 TextWrapping = TextWrapping.Wrap,
             },
-            CloseButtonText = Text("Action_Close", "Close"),
+            CloseButtonText = _text.GetStringOrFallback("Action_Close", "Close"),
             DialogMaxWidth = 560,
         };
         _ = await complete.ShowAsync(CancellationToken.None);
@@ -545,19 +545,19 @@ public partial class MainWindow : FluentWindow
     {
         var dialog = new ContentDialog(DialogHost)
         {
-            Title = Text("Settings_ResetTitle", "Reset Backdrop for Codex?"),
+            Title = _text.GetStringOrFallback("Settings_ResetTitle", "Reset Backdrop for Codex?"),
             Content = new TextBlock
             {
-                Text = Text(
+                Text = _text.GetStringOrFallback(
                     "Settings_ResetDescription",
                     "This restores the official background; permanently deletes settings, recent media, and any preserved V1 migration backup; revokes acknowledgement; resets UI preferences; and removes only a shortcut verified as owned by this app."),
                 MaxWidth = 520,
                 TextWrapping = TextWrapping.Wrap,
             },
             PrimaryButtonText = _viewModel.IsDraftDirty
-                ? Text("Reset_DiscardAction", "Discard and reset")
-                : Text("Action_Reset", "Reset"),
-            CloseButtonText = Text("Action_Cancel", "Cancel"),
+                ? _text.GetStringOrFallback("Reset_DiscardAction", "Discard and reset")
+                : _text.GetStringOrFallback("Action_Reset", "Reset"),
+            CloseButtonText = _text.GetStringOrFallback("Action_Cancel", "Cancel"),
             PrimaryButtonAppearance = ControlAppearance.Danger,
             DialogMaxWidth = 600,
         };
@@ -583,7 +583,7 @@ public partial class MainWindow : FluentWindow
                 TextWrapping = TextWrapping.Wrap,
             },
             PrimaryButtonText = continueAction,
-            CloseButtonText = Text("Action_Cancel", "Cancel"),
+            CloseButtonText = _text.GetStringOrFallback("Action_Cancel", "Cancel"),
             PrimaryButtonAppearance = ControlAppearance.Danger,
             DialogMaxWidth = 580,
         };
@@ -741,16 +741,16 @@ public partial class MainWindow : FluentWindow
             {
                 var dialog = new ContentDialog(DialogHost)
                 {
-                    Title = Text("Tray_FirstCloseTitle", "Still running"),
+                    Title = _text.GetStringOrFallback("Tray_FirstCloseTitle", "Still running"),
                     Content = new TextBlock
                     {
-                        Text = Text(
+                        Text = _text.GetStringOrFallback(
                             "Tray_FirstCloseMessage",
                             "Backdrop for Codex moved to the notification area so the wallpaper can stay active."),
                         MaxWidth = 440,
                         TextWrapping = TextWrapping.Wrap,
                     },
-                    PrimaryButtonText = Text("Action_Confirm", "Got it"),
+                    PrimaryButtonText = _text.GetStringOrFallback("Action_GotIt", "Got it"),
                     PrimaryButtonAppearance = ControlAppearance.Primary,
                     DialogMaxWidth = 520,
                 };
@@ -830,11 +830,4 @@ public partial class MainWindow : FluentWindow
         Height = Math.Clamp(700, MinHeight, MaxHeight);
     }
 
-    private string Text(string key, string fallback)
-    {
-        var value = _text.GetString(key);
-        return string.Equals(value, key, StringComparison.Ordinal)
-            ? fallback
-            : value;
-    }
 }

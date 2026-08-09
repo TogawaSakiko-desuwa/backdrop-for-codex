@@ -113,7 +113,7 @@ public sealed class WallpaperProfileCardProjection
     {
         if (profile.MediaId is not { } mediaId)
         {
-            var official = Text("Profile_Official", "Official background");
+            var official = _text.GetStringOrFallback("Profile_Official", "Official background");
             return CreateCard(
                 profile,
                 mediaId: null,
@@ -132,12 +132,12 @@ public sealed class WallpaperProfileCardProjection
             previewPath is not null &&
             !IsAvailable(mediaId, previewPath, availabilityByMediaId);
         var subtitle = isMissing
-            ? Text("Profile_MediaMissing", "Media missing")
+            ? _text.GetStringOrFallback("Profile_MediaMissing", "Media missing")
             : media.LastKnownKind switch
             {
-                MediaKind.Image => Text("Media_Image", "Image"),
-                MediaKind.Video => Text("Media_Video", "Video"),
-                _ => Text("Profile_Media", "Media"),
+                MediaKind.Image => _text.GetStringOrFallback("Media_Image", "Image"),
+                MediaKind.Video => _text.GetStringOrFallback("Media_Video", "Video"),
+                _ => _text.GetStringOrFallback("Profile_Media", "Media"),
             };
         var mediaDisplayName = previewPath is null
             ? subtitle
@@ -200,17 +200,9 @@ public sealed class WallpaperProfileCardProjection
             actionsAutomationName);
     }
 
-    private string Text(string key, string fallback)
-    {
-        var value = _text.GetString(key);
-        return string.Equals(value, key, StringComparison.Ordinal)
-            ? fallback
-            : value;
-    }
-
     private string Format(string key, string fallback, params object[] arguments) =>
         string.Format(
             CultureInfo.CurrentCulture,
-            Text(key, fallback),
+            _text.GetStringOrFallback(key, fallback),
             arguments);
 }

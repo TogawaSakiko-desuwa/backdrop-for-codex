@@ -418,6 +418,28 @@ public sealed class WallpaperCoordinatorTests
     }
 
     [Fact]
+    public async Task ActivateAsync_RejectsPlaybackPoolThatDoesNotConfirmOwnership()
+    {
+        var fixture = new CoordinatorFixture();
+        fixture.PlaybackPool.ReportOwnershipAfterActivation = false;
+        await using var coordinator = fixture.CreateCoordinator();
+
+        var result = await fixture.ActivateAsync(coordinator);
+
+        Assert.Equal(RuntimeActivationOutcome.Failed, result.Outcome);
+        Assert.Equal(
+            typeof(InvalidOperationException).FullName,
+            result.Error?.ExceptionType);
+        Assert.Equal(WallpaperRuntimeSurfaceKind.Faulted, result.Surface.Kind);
+        Assert.Equal(1, fixture.Injection.StopCount);
+        Assert.Equal(1, fixture.PlaybackPool.ReleaseCount);
+        Assert.Equal(1, fixture.SourceProvider.DisposeCount);
+        Assert.Null(fixture.PlaybackPool.ActiveLease);
+        Assert.Null(fixture.PlaybackPool.ActiveOwnership);
+        Assert.False(coordinator.IsActive);
+    }
+
+    [Fact]
     public async Task ActivateAsync_CleanupFailureReportsPlaybackPoolTruth()
     {
         var fixture = new CoordinatorFixture();
@@ -1295,6 +1317,8 @@ public sealed class WallpaperCoordinatorTests
 
         public Exception? ActivateException { get; set; }
 
+        public bool ReportOwnershipAfterActivation { get; set; } = true;
+
         public Func<int, CancellationToken, Task>? BeforeActivateAsync { get; set; }
 
         public Exception? DisposeException { get; set; }
@@ -1323,7 +1347,7 @@ public sealed class WallpaperCoordinatorTests
             cancellationToken.ThrowIfCancellationRequested();
             var previous = ActiveLease;
             ActiveLease = lease;
-            ActiveOwnership = ownership;
+            ActiveOwnership = ReportOwnershipAfterActivation ? ownership : null;
             if (previous is not null && !ReferenceEquals(previous, lease))
             {
                 await previous.DisposeAsync();
