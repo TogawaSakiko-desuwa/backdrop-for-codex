@@ -502,6 +502,6 @@
     <ui:ContentDialogHost x:Name="DialogHost"
                           Grid.Row="0"
                           Grid.RowSpan="3"
-                          IsDisableSiblingsEnabled="True" />
+                          IsDisableSiblingsEnabled="False" />
   </Grid>
 </ui:FluentWindow>

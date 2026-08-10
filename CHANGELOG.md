@@ -9,6 +9,7 @@
 - 修复官方 Codex `26.803` 在应用根下新增一个更早的通用 `<main>` 后，表现探针固定读取首个 `<main>`，因而错过真实 shell viewport、把 `codex-shell-v1` 误判为不匹配并同时降级 Glass/Advanced 的问题。
 - `codex-shell-v1` 现在只在没有 `main` 祖先的顶层候选中汇总三族信号：候选自身的 typed shell-main，以及 `closest(main)` 恰好为该候选的受审 header 与受审 viewport；以 2-of-3 quorum 选择唯一顶层合格候选。该策略允许一族标记漂移或前置 decoy `main`，同时阻止外层 shell 从嵌套路由 `main` 借用锚点；同族重复只计一次，多候选、单一信号和跨 `main` 散落继续失败关闭到独立的 Global baseline。
 - Glass 因结构或平台能力不可用时启用本项目拥有、随主题变化的高可读性对比回退，避免透明主表面直接压在壁纸上造成深色或浅色界面低对比；被判定不可用的可选效果仍保持禁用。
+- 修复精密工作台的显式按钮与列表项样式截断 WPF-UI 动态前景色链、导致深色主题出现黑字的问题；设置对话框现在由全窗口模态层拦截输入，不再把后台工作台强制切入浅灰 Disabled 模板。
 
 ### Security
 
@@ -17,7 +18,7 @@
 ### Verification
 
 - 官方 Codex `26.803.5235.0` 当前机器身份、进程与只读页面合同 3 项全部通过，确认 `codex-shell-v1`、Glass 与 Advanced 恢复；8 项真实 Edge browser contract 覆盖 decoy/嵌套/歧义 shell、深浅极端背景和受损 ownership graph，5 项完整启动与 SPA 路由用例全部通过。
-- Release 构建为 0 警告、0 错误；663 项非集成、非 browser-contract 测试全部通过，格式与差异检查无错误。
+- Release 构建为 0 警告、0 错误；665 项非集成、非 browser-contract 测试全部通过，格式与差异检查无错误。
 
 ## [1.4.4] - 2026-08-04
 

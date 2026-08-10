@@ -17,6 +17,7 @@
         <Setter Property="MinHeight" Value="48" />
         <Setter Property="Margin" Value="4,2" />
         <Setter Property="Padding" Value="8" />
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
         <Setter Property="Background" Value="Transparent" />
