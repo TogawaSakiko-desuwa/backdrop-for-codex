@@ -14,7 +14,7 @@
 - CDP 只经严格 IPv4 回环地址通信，不为媒体创建 HTTP 或其他网络监听器；
 - 只把用户明确选择、经已打开句柄解析为最终本地普通文件、核验文件身份/扩展名/文件头或容器签名/大小以及图片尺寸预算，并由同一只读 lease 固定的单个媒体暴露给 Codex 渲染进程；
 - 把官方包安全身份验证与可降级的 DOM/表现能力探针分开；安全失败或持续多目标歧义始终完全拒绝且不运行结构探针，版本号和结构证据都不能绕过安全层；
-- 只按实际页面证据匹配程序内置的 `global-baseline-v1` 与 `codex-shell-v1`，相同证据不因 Codex 版本号变化而改变能力；零匹配或多重匹配只允许 Global baseline，baseline 失败不注入；
+- 只按实际页面证据匹配程序内置的 `global-baseline-v1` 与 `codex-shell-v1`，相同证据不因 Codex 版本号变化而改变能力；Global baseline 独立，shell 只审查没有 `main` 祖先的顶层候选，并以候选自身的 typed shell-main、`closest(main)` 为该候选的受审 header、`closest(main)` 为该候选的受审 viewport 三族 direct-owned 信号执行 2-of-3 quorum，且必须恰好只有一个顶层合格候选；嵌套 `main` 不得参与候选或向外借出信号，同族重复只计一次，多候选、单一信号或跨 `main` 散落只允许 Global baseline，baseline 失败不注入；
 - 只在一个唯一合格 Codex 工作页上注入；持续多目标歧义、无目标或加载失败均清理并拒绝；
 - 不修改、放宽或绕过 Codex CSP，媒体只使用页面 CSP 原生允许的 `blob:` URL；
 - 不读取或持久化聊天，不上传本地媒体、设置或使用数据；
@@ -45,7 +45,7 @@
 4. **actor ↔ 所有权感知单槽播放池**：每次准备和活动 lease 绑定进程内所有权 token。pending lease 直接释放；旧 revision 只能条件释放自己的 token。activation revision 与 injection generation 独立，过期状态/健康事件按 revision 或 generation 过滤。
 5. **伴侣 → Codex 发现**：伴侣验证官方 MSIX 包和应用身份、架构、进程、当前会话、PID、启动时间及监听器所有权。错误识别可能把控制发往非预期目标。
 6. **伴侣 ↔ CDP 回环端点**：伴侣只作为客户端连接由 Codex 持有、经验证的严格 IPv4 回环 CDP WebSocket。CDP 可注入和清理表现层，也具备观察、执行和控制页面的更广泛能力。
-7. **伴侣 → 结构证据探针与表现契约**：安全目标复验成功后，探针只返回 baseline、受审 shell 锚点和 CSS 平台支持的布尔证据，不持久化原始 DOM、URL 或选择器。`global-baseline-v1` 独立声明 Global，`codex-shell-v1` 按证据声明 Glass/Advanced；版本不进入候选、排序或决胜。高级契约零匹配或多重匹配只使用 Global baseline，baseline 失败不注入；选定契约在 generation 内锁定，能力只可降级。
+7. **伴侣 → 结构证据探针与表现契约**：安全目标复验成功后，探针只返回 baseline、受审 shell 锚点和 CSS 平台支持的布尔证据，不持久化原始 DOM、URL 或选择器。`global-baseline-v1` 独立声明 Global；`codex-shell-v1` 只把没有 `main` 祖先的顶层 `main` 作为候选，对候选自身的 typed shell-main，以及 `closest(main)` 恰好为该候选的受审 header、受审 viewport 分别记为三个布尔信号族，以至少两族成立且只有一个顶层合格候选作为命中条件。嵌套路由 `main` 不参与候选，也不能向外层候选借出锚点；同族重复不增加分数。多候选、单一信号或跨 `main` 散落只使用 Global baseline，baseline 失败不注入。版本不进入候选、排序或决胜；选定契约在 generation 内锁定，能力只可降级。该策略容忍一族结构标记漂移，但任意上游 DOM 重写仍可能需要更新受审规则。Global 可用而 Glass 不可用时，owned 高可读性对比回退维持内容可辨认，同时不重新启用不可用的 optional effects。
 8. **伴侣 → CDP 文件输入 → Codex 渲染器**：准备脚本直接返回它创建的隐藏文件输入元素句柄；伴侣重新核验目标页面后，只把 lease 解析后的文件绑定到该句柄，中途导航会使旧句柄失效。页面只看到 `File` 内容和浏览器提供的文件名、大小、MIME type、修改时间，看不到完整绝对路径，并从该 `File` 创建 `blob:` URL。没有媒体 HTTP endpoint 或令牌。
 9. **伴侣 ↔ 注入层租约**：owner/generation 与心跳用于限定所有权和检测失联；清理移除媒体 `src`、撤销 `blob:` URL，并只删除本项目拥有的注入节点和样式。
 10. **用户 → 诊断导出文件**：只有用户从设置页主动确认并选择目标路径时，程序才写入 `schemaVersion: 2` 的 Environment、Runtime、Compatibility 类型化白名单 JSON；不打包日志、设置、页面数据或转储，也不上传。
@@ -86,7 +86,7 @@
 | 权限提升或持久化误用 | 扩大系统影响 | 标准用户运行；不写 Codex 包/系统目录；不安装驱动/服务；自动启动需透明可撤销 | **低/中**：Windows 启动项和用户目录仍可被同用户修改 |
 | 日志、诊断、截图或 Issue 泄露隐私 | 路径、聊天、设置、标识符或账号信息公开 | 不记录聊天/媒体路径；诊断必须由用户主动导出且使用无路径、无页面数据、无标识符/散列的固定类型白名单；报告模板要求脱敏 | **中**：截图、设置、转储、第三方异常以及用户选择的同步目录可能绕过约束 |
 | 依赖或 CI 供应链受损 | 恶意发行物获得 CDP 权限 | Actions 固定完整 SHA、Dependabot、CodeQL、最小权限、评审、SHA-256、SPDX SBOM、GitHub attestation | **中**：NuGet/维护者账号/构建平台仍是信任根；当前发布物可能无 Authenticode 签名 |
-| 更新后 DOM/协议/CSP 漂移 | 错误注入、崩溃或表现能力失效 | 安全层先行；版本无关的 `global-baseline-v1`/`codex-shell-v1`；零/多高级匹配 Global-only；baseline 与媒体加载失败关闭；五项能力独立降级且活动契约在 generation 内锁定；审核并更新内置证据规则 | **中**：受审最小结构特征仍可能产生假阳性/假阴性，Codex 是独立更新的外部产品 |
+| 更新后 DOM/协议/CSP 漂移 | 错误注入、崩溃、表现能力失效或透明表面造成低对比 | 安全层严格先行；独立的 `global-baseline-v1`；`codex-shell-v1` 仅对顶层 `main` 的 typed shell-main/direct-owned header/direct-owned viewport 使用唯一候选 2-of-3 quorum，嵌套 `main` 不参与或借出信号，同族重复不计分、多候选/单信号/跨 `main` 散落 Global-only；baseline 与媒体加载失败关闭；Glass 不可用时使用 owned 高可读性对比回退且 optional effects 仍禁用；五项能力独立降级且活动契约在 generation 内锁定；审核并更新内置证据规则 | **中**：quorum 可容忍一族标记漂移，但受审最小结构仍可能产生假阳性/假阴性，不能保证兼容任意 DOM 重写；Codex 是独立更新的外部产品 |
 | 首次启动主页面尚未挂载或存在多个合格页面 | 误报成功、注入错误窗口、遗留半注入资源 | 最长 10 秒结构就绪轮询；发现与注入前复验均排除 `initialRoute=/avatar-overlay` 辅助页面；只接受恰好一个合格工作页；持续多目标歧义拒绝且结构探针零调用；窗口结束后的单次 Global fallback 复验与安装另受 10 秒 operation deadline；只在验证页面完成媒体加载后报告成功；失败清理准备态节点 | **低/中**：极慢设备或短暂多窗口状态可能需要用户重试 |
 
 ## 必须保持的实现约束
@@ -100,8 +100,8 @@
 - 页面可见数据限于文件内容以及浏览器提供的文件名、大小、MIME type、修改时间；不得主动把完整绝对路径写入脚本、DOM、URL 或日志。
 - 清理必须移除媒体 `src`、停止视频、撤销 `blob:` URL，并按 owner/generation 只移除本项目拥有的节点和样式。
 - 安全准入必须独立验证 Windows 11 x64、官方 Store/MSIX 包名与包系列、Publisher、由已验证身份字段构造的完整包名、x64、应用 ID、可执行文件、当前 Windows 会话、PID、启动时间、监听器所有权、严格 IPv4 回环端点、CDP browser/socket/target 元数据和唯一页面；版本号和结构探针不能覆盖任何失败。安全失败或持续多目标歧义时不得调用结构证据探针。
-- 表现契约必须程序内置、只读且版本无关。`global-baseline-v1` 独立声明 Global；`codex-shell-v1` 只根据受审布尔证据声明 Glass/Advanced，Regions/Audio 继续标记未实现。baseline 不计入高级匹配数；高级契约恰好命中一个才选择它，零匹配或多重匹配只使用 Global baseline，不得用版本、注册顺序或隐藏优先级决胜。活动契约在 generation 内锁定，五项能力独立且只能降级，证据恢复不得重新升级或切换契约。
-- 注入前的结构就绪轮询最多等待 10 秒，且只允许一个合格工作页；窗口结束后的单次 Global fallback 复验与安装使用独立的 10 秒 operation deadline。持续多目标歧义、无目标、Global baseline 失败、operation deadline 到期或媒体加载失败必须清理并拒绝。高级契约零匹配或多重匹配只关闭非 Global 能力；玻璃或高级内容表面等单项证据失败只关闭对应能力。
+- 表现契约必须程序内置、只读且版本无关。`global-baseline-v1` 独立声明 Global；`codex-shell-v1` 必须只把没有 `main` 祖先的顶层 `main` 作为候选，并对候选自身的 typed shell-main、`closest(main)` 恰好为该候选的受审 header、`closest(main)` 恰好为该候选的受审 viewport 三族信号分别取布尔值。至少两族成立且全页恰好只有一个顶层合格候选时才声明 Glass/Advanced。嵌套 `main` 不得参与候选或把锚点借给外层；同族任意数量的重复锚点只计一次；多个合格候选、只有一族成立或信号跨 `main` 散落都不得命中 shell。Regions/Audio 继续标记未实现。baseline 不计入高级匹配数；高级契约零匹配或多重匹配只使用 Global baseline，不得用版本、注册顺序或隐藏优先级决胜。该 quorum 只承诺容忍一族漂移，不承诺任意上游 DOM 重写。活动契约在 generation 内锁定，五项能力独立且只能降级，证据恢复不得重新升级或切换契约。
+- 注入前的结构就绪轮询最多等待 10 秒，且只允许一个合格工作页；窗口结束后的单次 Global fallback 复验与安装使用独立的 10 秒 operation deadline。持续多目标歧义、无目标、Global baseline 失败、operation deadline 到期或媒体加载失败必须清理并拒绝。高级契约零匹配或多重匹配只关闭非 Global 能力；Glass 不可用时必须由 owner/generation 管理的主题感知高可读性对比回退保护内容可辨认，同时 Glass 与其他已判定不可用的 optional effects 保持禁用。
 - MSIX `file:` 页面只按系统实际报告的包根目录与精确入口路径授权；本地 `file:`、`app:` 和 `codex:` 壳层的 `initialRoute=/avatar-overlay` 辅助页面必须在端点发现及同 target 导航复验时拒绝；远程页面只接受受审主机及完整工作区路径段边界，认证路由、路径穿越和反斜杠歧义必须拒绝。不得以标题、包路径片段或任意 `127.0.0.1` 内容页作为充分证据。文件输入必须由准备求值直接返回元素句柄，捕获后重新核验页面，再只向该句柄上传。
 - 注入数据使用 JSON/DOM API 传递；不得把用户字符串插入可执行 JavaScript、HTML 或 CSS 源码。
 - schema 2 设置输入按未知字段、枚举、数值范围、UUIDv7、集合上限和引用完整性严格验证，写入使用同目录原子替换，并在发布前再次逐字节核对原文。1.4.0 不得新增序列化字段或引入 Settings V3；正常 Workspace、Application 和 runtime 接口只使用深复制的 `SettingsV2`，`SettingsV1` 只可出现在迁移、V1 原始备份恢复、降级兼容和对应测试中。V2 原生快照不得通过 V1 界面限制改写未编辑档案。V1 迁移必须先创建、逐字节核验并设为只读的原始备份；损坏、超大、不可读取、备份冲突或迁移失败进入恢复状态，未来 schema 进入只读状态，二者都不得被默认值或自动保存覆盖。废弃的 `LastCompatibilityProfileId` 只可原样透传；运行时不得生成、更新或读取它作控制，脏状态比较也必须忽略它。

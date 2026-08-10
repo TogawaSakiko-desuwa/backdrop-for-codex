@@ -11,6 +11,8 @@ internal static class PresentationEvidenceScriptBuilder
 {
     private const string AppRootSelector = "body > #root";
     private const string MainSelector = "main";
+    private const string ShellMainSelector =
+        "main[data-app-shell-main-surface]";
     private const string ShellHeaderSelector =
         "header[data-app-shell-application-menu-bar][data-app-shell-header-edge-scroll]";
     private const string MainViewportSelector =
@@ -27,6 +29,7 @@ internal static class PresentationEvidenceScriptBuilder
             new ProbeDefinition(
                 AppRootSelector,
                 MainSelector,
+                ShellMainSelector,
                 ShellHeaderSelector,
                 MainViewportSelector),
             SerializerOptions);
@@ -38,15 +41,50 @@ internal static class PresentationEvidenceScriptBuilder
               const root = document.documentElement;
               const body = document.body;
               const appRoot = document.querySelector(probe.appRootSelector);
-              const main = appRoot && appRoot.querySelector(probe.mainSelector);
+              const mains = appRoot
+                ? Array.from(appRoot.querySelectorAll(probe.mainSelector))
+                : [];
+              const main = mains[0] || null;
               const globalStructure = Boolean(
                 root && body && appRoot && main && appRoot.contains(main));
-              const shellHeader =
-                appRoot && appRoot.querySelector(probe.shellHeaderSelector);
-              const mainViewport =
-                main && main.querySelector(probe.mainViewportSelector);
-              const shellStructure = globalStructure && Boolean(
-                shellHeader && mainViewport);
+              const ownsSignal = (candidate, selector) =>
+                Array.from(candidate.querySelectorAll(selector)).some(
+                  signal => signal.closest(probe.mainSelector) === candidate);
+              const shellEvidence = globalStructure
+                ? mains
+                  .filter(candidate =>
+                    !candidate.parentElement?.closest(probe.mainSelector))
+                  .map(candidate => {
+                    const typedMain = candidate.matches(probe.shellMainSelector);
+                    const shellHeader = ownsSignal(
+                      candidate,
+                      probe.shellHeaderSelector);
+                    const mainViewport = ownsSignal(
+                      candidate,
+                      probe.mainViewportSelector);
+                    const signalCount =
+                      Number(typedMain) +
+                      Number(shellHeader) +
+                      Number(mainViewport);
+                    return Object.freeze({
+                      typedMain,
+                      shellHeader,
+                      mainViewport,
+                      signalCount
+                    });
+                  })
+                : [];
+              const shellCandidates = shellEvidence.filter(
+                evidence => evidence.signalCount >= 2);
+              const shellStructure =
+                globalStructure && shellCandidates.length === 1;
+              const typedShellMainPresent = shellEvidence.some(
+                evidence => evidence.typedMain);
+              const shellHeaderPresent = shellEvidence.some(
+                evidence => evidence.shellHeader);
+              const mainViewportPresent = shellEvidence.some(
+                evidence => evidence.mainViewport);
+              const shellCandidateAmbiguous = shellCandidates.length > 1;
               const cssApi = globalThis.CSS;
               const backdropFilterSupported = Boolean(
                 cssApi && typeof cssApi.supports === "function" &&
@@ -58,6 +96,10 @@ internal static class PresentationEvidenceScriptBuilder
               return JSON.stringify({
                 globalStructure,
                 shellStructure,
+                typedShellMainPresent,
+                shellHeaderPresent,
+                mainViewportPresent,
+                shellCandidateAmbiguous,
                 backdropFilterSupported,
                 selectorHasSupported
               });
@@ -75,6 +117,7 @@ internal static class PresentationEvidenceScriptBuilder
     private sealed record ProbeDefinition(
         string AppRootSelector,
         string MainSelector,
+        string ShellMainSelector,
         string ShellHeaderSelector,
         string MainViewportSelector);
 }

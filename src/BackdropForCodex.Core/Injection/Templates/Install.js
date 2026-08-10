@@ -59,6 +59,9 @@
   root.setAttribute("aria-hidden", "true");
   root.dataset.codexWallpaperOwner = cfg.owner;
   root.dataset.codexWallpaperGeneration = String(cfg.generation);
+  if (!cfg.glassEnabled) {
+    root.dataset.codexWallpaperContrastFallback = "true";
+  }
 
   const media = document.createElement(cfg.mediaKind === "video" ? "video" : "img");
   media.dataset.codexWallpaperOwner = cfg.owner;

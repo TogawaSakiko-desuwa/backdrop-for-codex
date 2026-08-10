@@ -21,9 +21,167 @@ public sealed class ReviewedSelectorBrowserContractTests
 
     [BrowserContractFact]
     [Trait("Category", "BrowserContract")]
+    public async Task PresentationProbe_UsesAUniqueColocatedTwoOfThreeShellQuorum()
+    {
+        (string Name, string Body, bool ExpectedShellStructure)[] cases =
+        [
+            (
+                "decoy first main",
+                """
+                <html><body><div id="root">
+                  <main data-fixture-id="decoy"></main>
+                  <main data-app-shell-main-surface="default">
+                    <header data-app-shell-application-menu-bar
+                            data-app-shell-header-edge-scroll></header>
+                    <div data-app-shell-main-content-layout
+                         data-app-shell-right-panel-full-width></div>
+                  </main>
+                </div></body></html>
+                """,
+                true),
+            (
+                "typed main signal missing",
+                """
+                <html><body><div id="root"><main>
+                  <header data-app-shell-application-menu-bar
+                          data-app-shell-header-edge-scroll></header>
+                  <div data-app-shell-main-content-layout
+                       data-app-shell-right-panel-full-width></div>
+                </main></div></body></html>
+                """,
+                true),
+            (
+                "header signal missing",
+                """
+                <html><body><div id="root">
+                  <main data-app-shell-main-surface="default">
+                    <div data-app-shell-main-content-layout
+                         data-app-shell-right-panel-full-width></div>
+                  </main>
+                </div></body></html>
+                """,
+                true),
+            (
+                "viewport signal missing",
+                """
+                <html><body><div id="root">
+                  <main data-app-shell-main-surface="default">
+                    <header data-app-shell-application-menu-bar
+                            data-app-shell-header-edge-scroll></header>
+                  </main>
+                </div></body></html>
+                """,
+                true),
+            (
+                "ambiguous qualifying mains",
+                """
+                <html><body><div id="root">
+                  <main data-app-shell-main-surface="default">
+                    <header data-app-shell-application-menu-bar
+                            data-app-shell-header-edge-scroll></header>
+                  </main>
+                  <main data-app-shell-main-surface="browser">
+                    <div data-app-shell-main-content-layout
+                         data-app-shell-right-panel-full-width></div>
+                  </main>
+                </div></body></html>
+                """,
+                false),
+            (
+                "only one shell signal",
+                """
+                <html><body><div id="root">
+                  <main data-app-shell-main-surface="default"></main>
+                </div></body></html>
+                """,
+                false),
+            (
+                "duplicate anchors do not inflate one signal family",
+                """
+                <html><body><div id="root"><main>
+                  <header data-app-shell-application-menu-bar
+                          data-app-shell-header-edge-scroll></header>
+                  <header data-app-shell-application-menu-bar
+                          data-app-shell-header-edge-scroll></header>
+                </main></div></body></html>
+                """,
+                false),
+            (
+                "signals scattered across mains",
+                """
+                <html><body><div id="root">
+                  <main data-app-shell-main-surface="default"></main>
+                  <main><header data-app-shell-application-menu-bar
+                                data-app-shell-header-edge-scroll></header></main>
+                  <main><div data-app-shell-main-content-layout
+                             data-app-shell-right-panel-full-width></div></main>
+                </div></body></html>
+                """,
+                false),
+            (
+                "outer typed main cannot borrow nested viewport",
+                """
+                <html><body><div id="root">
+                  <main data-app-shell-main-surface="default">
+                    <main>
+                      <div data-app-shell-main-content-layout
+                           data-app-shell-right-panel-full-width></div>
+                    </main>
+                  </main>
+                </div></body></html>
+                """,
+                false),
+            (
+                "valid outer shell ignores nested route candidate",
+                """
+                <html><body><div id="root">
+                  <main data-app-shell-main-surface="default">
+                    <header data-app-shell-application-menu-bar
+                            data-app-shell-header-edge-scroll></header>
+                    <main data-app-shell-main-surface="settings">
+                      <div data-app-shell-main-content-layout
+                           data-app-shell-right-panel-full-width></div>
+                    </main>
+                  </main>
+                </div></body></html>
+                """,
+                true),
+            (
+                "nested-only shell cannot masquerade as app shell",
+                """
+                <html><body><div id="root"><main>
+                  <main data-app-shell-main-surface="settings">
+                    <header data-app-shell-application-menu-bar
+                            data-app-shell-header-edge-scroll></header>
+                  </main>
+                </main></div></body></html>
+                """,
+                false),
+        ];
+
+        await EdgeBrowserContractHarness.WithPageAsync(async page =>
+        {
+            foreach (var testCase in cases)
+            {
+                await LoadFixtureAsync(page, testCase.Body);
+                var json = await page.EvaluateExpressionAsync<string>(
+                    PresentationEvidenceScriptBuilder.Build());
+                var evidence = PresentationEvidenceScriptBuilder.Parse(json);
+
+                Assert.True(evidence.GlobalStructure);
+                Assert.True(
+                    evidence.ShellStructure == testCase.ExpectedShellStructure,
+                    $"Case '{testCase.Name}' expected shell structure " +
+                    $"'{testCase.ExpectedShellStructure}', but observed '{evidence}'.");
+            }
+        });
+    }
+
+    [BrowserContractFact]
+    [Trait("Category", "BrowserContract")]
     public async Task ShellSelectors_MatchReviewedSurfacesAndPreserveNearMisses()
     {
-        await WithEdgePageAsync(async page =>
+        await EdgeBrowserContractHarness.WithPageAsync(async page =>
         {
             await LoadFixtureAsync(page, ShellFixture);
             await AddOwnedStyleAsync(page, BuildStyleSheet());
@@ -85,7 +243,7 @@ public sealed class ReviewedSelectorBrowserContractTests
     [Trait("Category", "BrowserContract")]
     public async Task AdvancedSelectors_UseNativeCssForMessagesFadesAndWideTables()
     {
-        await WithEdgePageAsync(async page =>
+        await EdgeBrowserContractHarness.WithPageAsync(async page =>
         {
             await LoadFixtureAsync(page, AdvancedFixture);
             await AddOwnedStyleAsync(page, BuildStyleSheet());
@@ -132,7 +290,7 @@ public sealed class ReviewedSelectorBrowserContractTests
     [Trait("Category", "BrowserContract")]
     public async Task RouteSelectors_ClearOnlyReviewedChromeAndKeepContentOpaque()
     {
-        await WithEdgePageAsync(async page =>
+        await EdgeBrowserContractHarness.WithPageAsync(async page =>
         {
             await LoadFixtureAsync(page, RouteFixture);
             await AddOwnedStyleAsync(page, BuildStyleSheet());
@@ -190,7 +348,7 @@ public sealed class ReviewedSelectorBrowserContractTests
     [Trait("Category", "BrowserContract")]
     public async Task CapabilityDowngrade_RemovesOnlyTheOwnedGlassOrAdvancedRules()
     {
-        await WithEdgePageAsync(async page =>
+        await EdgeBrowserContractHarness.WithPageAsync(async page =>
         {
             await LoadFixtureAsync(page, DowngradeFixture);
             await AddOwnedStyleAsync(page, BuildStyleSheet(), initializeOwnership: true);
@@ -233,79 +391,6 @@ public sealed class ReviewedSelectorBrowserContractTests
         });
     }
 
-    private static async Task WithEdgePageAsync(Func<IPage, Task> test)
-    {
-        ArgumentNullException.ThrowIfNull(test);
-        using var browser = await Puppeteer.LaunchAsync(new LaunchOptions
-        {
-            ExecutablePath = FindEdge(),
-            Headless = true,
-            Timeout = 15_000,
-            Args =
-            [
-                "--disable-extensions",
-                "--disable-gpu",
-                "--no-default-browser-check",
-                "--no-first-run",
-            ],
-        });
-        try
-        {
-            var page = await browser.NewPageAsync();
-            await page.SetViewportAsync(new ViewPortOptions
-            {
-                Width = 1280,
-                Height = 900,
-            });
-            await test(page);
-        }
-        finally
-        {
-            await browser.CloseAsync();
-        }
-    }
-
-    private static string FindEdge()
-    {
-        var configuredPath = Environment.GetEnvironmentVariable(
-            "BACKDROP_FOR_CODEX_EDGE_PATH");
-        if (!string.IsNullOrWhiteSpace(configuredPath) && File.Exists(configuredPath))
-        {
-            return configuredPath;
-        }
-
-        string[] candidates =
-        [
-            Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
-                "Microsoft",
-                "Edge",
-                "Application",
-                "msedge.exe"),
-            Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
-                "Microsoft",
-                "Edge",
-                "Application",
-                "msedge.exe"),
-            Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "Microsoft",
-                "Edge",
-                "Application",
-                "msedge.exe"),
-        ];
-        var edgePath = candidates.FirstOrDefault(File.Exists);
-        if (edgePath is null)
-        {
-            throw new FileNotFoundException(
-                "Microsoft Edge is required for Category=BrowserContract. " +
-                "Install Edge or set BACKDROP_FOR_CODEX_EDGE_PATH to msedge.exe.");
-        }
-
-        return edgePath;
-    }
-
     private static Task LoadFixtureAsync(IPage page, string body) =>
         page.SetContentAsync(
             $$"""
@@ -328,9 +413,23 @@ public sealed class ReviewedSelectorBrowserContractTests
               style.textContent = {{JsonSerializer.Serialize(styleSheet)}};
               document.head.append(style);
               if ({{(initializeOwnership ? "true" : "false")}}) {
+                const root = document.createElement("div");
+                root.id = {{JsonSerializer.Serialize(InjectionScriptBuilder.RootElementId)}};
+                root.dataset.codexWallpaperOwner =
+                  {{JsonSerializer.Serialize(InjectionScriptBuilder.Owner)}};
+                root.dataset.codexWallpaperGeneration = "{{Generation}}";
+                const overlay = document.createElement("div");
+                overlay.dataset.codexWallpaperOverlay = "";
+                overlay.dataset.codexWallpaperOwner =
+                  {{JsonSerializer.Serialize(InjectionScriptBuilder.Owner)}};
+                overlay.dataset.codexWallpaperGeneration = "{{Generation}}";
+                root.append(overlay);
+                document.body.append(root);
                 globalThis[{{JsonSerializer.Serialize(InjectionScriptBuilder.StateProperty)}}] = {
                   cleaned: false,
                   generation: {{Generation}},
+                  root,
+                  overlay,
                   style,
                   glassEnabled: true,
                   advancedSurfacesEnabled: true

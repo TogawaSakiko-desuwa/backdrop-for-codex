@@ -37,10 +37,30 @@ internal static class InjectionStyleScriptModule
               "use strict";
               const state = globalThis[{{JsonSerializer.Serialize(InjectionOwnershipContract.StateProperty)}}];
               if (!state || state.cleaned || state.generation !== {{generation}} ||
-                  !state.style?.isConnected ||
+                  !(state.style instanceof HTMLStyleElement) ||
+                  !state.style.isConnected ||
                   state.style.id !== {{JsonSerializer.Serialize(InjectionOwnershipContract.StyleElementId)}} ||
+                  document.getElementById({{JsonSerializer.Serialize(InjectionOwnershipContract.StyleElementId)}}) !== state.style ||
                   state.style.dataset.codexWallpaperOwner !== {{JsonSerializer.Serialize(InjectionOwnershipContract.Owner)}} ||
                   state.style.dataset.codexWallpaperGeneration !== {{JsonSerializer.Serialize(generation.ToString(System.Globalization.CultureInfo.InvariantCulture))}}) {
+                return false;
+              }
+              const ownsRoot = state.root instanceof HTMLDivElement &&
+                state.root.ownerDocument === document &&
+                state.root.isConnected &&
+                state.root.id === {{JsonSerializer.Serialize(InjectionOwnershipContract.RootElementId)}} &&
+                document.getElementById({{JsonSerializer.Serialize(InjectionOwnershipContract.RootElementId)}}) === state.root &&
+                state.root.dataset.codexWallpaperOwner === {{JsonSerializer.Serialize(InjectionOwnershipContract.Owner)}} &&
+                state.root.dataset.codexWallpaperGeneration === {{JsonSerializer.Serialize(generation.ToString(System.Globalization.CultureInfo.InvariantCulture))}};
+              const ownsOverlay = ownsRoot &&
+                state.overlay instanceof HTMLDivElement &&
+                state.overlay.ownerDocument === document &&
+                state.overlay.isConnected &&
+                state.overlay.parentElement === state.root &&
+                state.overlay.hasAttribute("data-codex-wallpaper-overlay") &&
+                state.overlay.dataset.codexWallpaperOwner === {{JsonSerializer.Serialize(InjectionOwnershipContract.Owner)}} &&
+                state.overlay.dataset.codexWallpaperGeneration === {{JsonSerializer.Serialize(generation.ToString(System.Globalization.CultureInfo.InvariantCulture))}};
+              if (!ownsRoot || !ownsOverlay) {
                 return false;
               }
               const removeBlocks = (css, start, end) => {
@@ -63,6 +83,7 @@ internal static class InjectionStyleScriptModule
                   {{JsonSerializer.Serialize(GlassEndMarker)}});
                 if (css === null) return false;
                 state.glassEnabled = false;
+                state.root.dataset.codexWallpaperContrastFallback = "true";
               }
               if (!{{(capabilities.Advanced.IsAvailable ? "true" : "false")}} &&
                   state.advancedSurfacesEnabled) {

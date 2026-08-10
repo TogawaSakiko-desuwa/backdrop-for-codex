@@ -139,8 +139,8 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
             Assert.Equal(
                 [
                     true, false, // root/main/aside only
-                    true, false, // reviewed header only
-                    true, false, // reviewed main viewport only
+                    true, true,  // typed main + reviewed header
+                    true, true,  // typed main + reviewed main viewport
                     true, true,  // both reviewed shell anchors
                 ],
                 evidenceScenarios);
@@ -1057,6 +1057,15 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
                     lightOverlay: 0));
 
             await session.ApplyAsync(endpoint, options);
+
+            Assert.Equal(
+                PresentationContractCatalog.CodexShellId,
+                session.PresentationContract.ActiveContractId);
+            Assert.Equal(
+                ContractMatchState.Matched,
+                session.PresentationContract.MatchState);
+            Assert.True(session.Capabilities.Glass.IsAvailable);
+            Assert.True(session.Capabilities.Advanced.IsAvailable);
 
             async Task<RasterContrastSample[]> CaptureThemeAsync(
                 string marker,

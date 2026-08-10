@@ -14,6 +14,10 @@ public sealed class PresentationContractTests
         Assert.Contains("body \\u003E #root", script, StringComparison.Ordinal);
         Assert.Contains("appRoot.contains(main)", script, StringComparison.Ordinal);
         Assert.Contains(
+            "\"shellMainSelector\":\"main[data-app-shell-main-surface]\"",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains(
             "\"shellHeaderSelector\":\"" +
             "header[data-app-shell-application-menu-bar]" +
             "[data-app-shell-header-edge-scroll]\"",
@@ -26,17 +30,33 @@ public sealed class PresentationContractTests
             script,
             StringComparison.Ordinal);
         Assert.Contains(
-            "appRoot && appRoot.querySelector(probe.shellHeaderSelector)",
+            "candidate.matches(probe.shellMainSelector)",
             script,
             StringComparison.Ordinal);
         Assert.Contains(
-            "main && main.querySelector(probe.mainViewportSelector)",
+            "!candidate.parentElement?.closest(probe.mainSelector)",
             script,
             StringComparison.Ordinal);
         Assert.Contains(
-            "shellHeader && mainViewport",
+            "candidate.querySelectorAll(selector)",
             script,
             StringComparison.Ordinal);
+        Assert.Contains(
+            "signal.closest(probe.mainSelector) === candidate",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "signalCount >= 2",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "shellCandidates.length === 1",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains("typedShellMainPresent", script, StringComparison.Ordinal);
+        Assert.Contains("shellHeaderPresent", script, StringComparison.Ordinal);
+        Assert.Contains("mainViewportPresent", script, StringComparison.Ordinal);
+        Assert.Contains("shellCandidateAmbiguous", script, StringComparison.Ordinal);
         Assert.DoesNotContain("aside", script, StringComparison.Ordinal);
         Assert.DoesNotContain(
             "data-app-shell-focus-area",

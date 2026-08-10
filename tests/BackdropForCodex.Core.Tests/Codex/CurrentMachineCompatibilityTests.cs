@@ -102,9 +102,11 @@ public sealed class CurrentMachineCompatibilityTests
             var decision = PresentationContractCatalog.Match(
                 evidence,
                 finalizeBaselineFallback: true);
+            var nonSensitiveEvidence =
+                $"Non-sensitive presentation evidence: {evidenceJson}";
 
-            Assert.True(evidence.GlobalStructure);
-            Assert.True(evidence.ShellStructure);
+            Assert.True(evidence.GlobalStructure, nonSensitiveEvidence);
+            Assert.True(evidence.ShellStructure, nonSensitiveEvidence);
             Assert.Equal(ContractMatchState.Matched, decision.Snapshot.MatchState);
             Assert.Equal(
                 PresentationContractCatalog.CodexShellId,

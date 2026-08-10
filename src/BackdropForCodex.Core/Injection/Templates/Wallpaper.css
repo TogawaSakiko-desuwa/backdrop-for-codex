@@ -35,6 +35,11 @@
       --codex-wallpaper-overlay: light-dark(
         rgb(255 255 255 / __BFC_LIGHT_OVERLAY__),
         rgb(0 0 0 / __BFC_DARK_OVERLAY__));
+      --codex-wallpaper-contrast-fallback-overlay-dark: rgb(0 0 0 / 0.84);
+      --codex-wallpaper-contrast-fallback-overlay-light: rgb(255 255 255 / 0.94);
+      --codex-wallpaper-contrast-fallback-overlay: light-dark(
+        var(--codex-wallpaper-contrast-fallback-overlay-light),
+        var(--codex-wallpaper-contrast-fallback-overlay-dark));
     }
     :root:is(.dark, .electron-dark, [data-theme="dark"]) {
       --codex-wallpaper-glass: var(--codex-wallpaper-glass-dark);
@@ -43,6 +48,8 @@
       --codex-wallpaper-activity-border:
         var(--codex-wallpaper-activity-border-dark);
       --codex-wallpaper-overlay: rgb(0 0 0 / __BFC_DARK_OVERLAY__);
+      --codex-wallpaper-contrast-fallback-overlay:
+        var(--codex-wallpaper-contrast-fallback-overlay-dark);
     }
     :root:is(.light, .electron-light, [data-theme="light"]) {
       --codex-wallpaper-glass: var(--codex-wallpaper-glass-light);
@@ -51,6 +58,8 @@
       --codex-wallpaper-activity-border:
         var(--codex-wallpaper-activity-border-light);
       --codex-wallpaper-overlay: rgb(255 255 255 / __BFC_LIGHT_OVERLAY__);
+      --codex-wallpaper-contrast-fallback-overlay:
+        var(--codex-wallpaper-contrast-fallback-overlay-light);
     }
     #__BFC_ROOT_ID__ {
       position: fixed;
@@ -79,6 +88,10 @@
       inset: 0;
       background-color: var(--codex-wallpaper-overlay);
       pointer-events: none;
+    }
+    #__BFC_ROOT_ID__[data-codex-wallpaper-contrast-fallback="true"]
+      > [data-codex-wallpaper-overlay] {
+      background-color: var(--codex-wallpaper-contrast-fallback-overlay);
     }
     @media (forced-colors: none) {
       html,
