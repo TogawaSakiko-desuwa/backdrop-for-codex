@@ -191,6 +191,34 @@ public sealed class WallpaperSourceProviderTests
     }
 
     [Fact]
+    public async Task LocalFileLeaseRetriesFailedStreamCleanupUntilSuccess()
+    {
+        var stream = new FailOnceDisposable();
+        var reference = CreateReference(@"C:\Wallpapers\retryable.png");
+        var lease = new LocalFileWallpaperSourceProvider.LocalFileMediaLease(
+            reference,
+            reference.SourceIdentifier,
+            new LocalFileIdentity(1, 1),
+            new MediaFileMetadata(
+                MediaFormat.Png,
+                MediaKind.Image,
+                "image/png",
+                ContentLength: 1,
+                PixelWidth: 1,
+                PixelHeight: 1),
+            stream);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => lease.DisposeAsync().AsTask());
+        Assert.Equal(1, stream.DisposeAttempts);
+
+        await lease.DisposeAsync();
+        await lease.DisposeAsync();
+
+        Assert.Equal(2, stream.DisposeAttempts);
+    }
+
+    [Fact]
     public void CoreAssemblyNoLongerReferencesAspNetCoreOrExportsLoopbackMediaServer()
     {
         var assembly = typeof(LocalFileWallpaperSourceProvider).Assembly;
@@ -232,6 +260,20 @@ public sealed class WallpaperSourceProviderTests
         SourceIdentifier = mediaPath,
         LastKnownKind = MediaKind.None,
     };
+
+    private sealed class FailOnceDisposable : IDisposable
+    {
+        public int DisposeAttempts { get; private set; }
+
+        public void Dispose()
+        {
+            DisposeAttempts++;
+            if (DisposeAttempts == 1)
+            {
+                throw new InvalidOperationException("Synthetic stream cleanup failure.");
+            }
+        }
+    }
 
     private static async Task<string> CreatePngAsync(string directoryPath, string fileName)
     {

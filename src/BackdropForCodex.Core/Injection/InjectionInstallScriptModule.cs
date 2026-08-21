@@ -88,16 +88,43 @@ internal static class InjectionInstallScriptModule
         return BuildStyleSheet(options, InjectionStyleScriptModule.Resolve(capabilities));
     }
 
+    internal static string BuildStyleSheet(
+        DynamicWallpaperInjectionOptions options,
+        CompatibilityCapabilities capabilities)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(capabilities);
+        return BuildStyleSheet(
+            options.ObjectFit,
+            options.MediaOpacity,
+            options.Glass,
+            options.Composition,
+            InjectionStyleScriptModule.Resolve(capabilities));
+    }
+
     private static string BuildStyleSheet(
         WallpaperInjectionOptions options,
+        InjectionStyleCapabilities capabilities) =>
+        BuildStyleSheet(
+            options.ObjectFit,
+            options.MediaOpacity,
+            options.Glass,
+            options.Composition,
+            capabilities);
+
+    private static string BuildStyleSheet(
+        WallpaperObjectFit objectFitValue,
+        double mediaOpacity,
+        GlassEffectOptions glass,
+        WallpaperCompositionOptions composition,
         InjectionStyleCapabilities capabilities)
     {
-        var objectFit = InjectionMediaScriptModule.ToCss(options.ObjectFit);
-        var focusX = options.ObjectFit == WallpaperObjectFit.Cover
-            ? options.Composition.FocusX * 100
+        var objectFit = InjectionMediaScriptModule.ToCss(objectFitValue);
+        var focusX = objectFitValue == WallpaperObjectFit.Cover
+            ? composition.FocusX * 100
             : 50;
-        var focusY = options.ObjectFit == WallpaperObjectFit.Cover
-            ? options.Composition.FocusY * 100
+        var focusY = objectFitValue == WallpaperObjectFit.Cover
+            ? composition.FocusY * 100
             : 50;
         var glassBodySelector = capabilities.GlassEnabled
             ? "body"
@@ -112,18 +139,18 @@ internal static class InjectionInstallScriptModule
             ("__BFC_OBJECT_FIT__", objectFit),
             ("__BFC_FOCUS_X_PERCENT__", Format(focusX)),
             ("__BFC_FOCUS_Y_PERCENT__", Format(focusY)),
-            ("__BFC_MEDIA_OPACITY__", Format(options.MediaOpacity)),
-            ("__BFC_DARK_OVERLAY__", Format(options.Composition.DarkOverlay)),
-            ("__BFC_LIGHT_OVERLAY__", Format(options.Composition.LightOverlay)),
-            ("__BFC_GLASS_RED__", options.Glass.Red.ToString(CultureInfo.InvariantCulture)),
-            ("__BFC_GLASS_GREEN__", options.Glass.Green.ToString(CultureInfo.InvariantCulture)),
-            ("__BFC_GLASS_BLUE__", options.Glass.Blue.ToString(CultureInfo.InvariantCulture)),
-            ("__BFC_GLASS_OPACITY__", Format(options.Glass.Opacity)),
-            ("__BFC_GLASS_OPACITY_PERCENT__", Format(options.Glass.Opacity * 100)),
+            ("__BFC_MEDIA_OPACITY__", Format(mediaOpacity)),
+            ("__BFC_DARK_OVERLAY__", Format(composition.DarkOverlay)),
+            ("__BFC_LIGHT_OVERLAY__", Format(composition.LightOverlay)),
+            ("__BFC_GLASS_RED__", glass.Red.ToString(CultureInfo.InvariantCulture)),
+            ("__BFC_GLASS_GREEN__", glass.Green.ToString(CultureInfo.InvariantCulture)),
+            ("__BFC_GLASS_BLUE__", glass.Blue.ToString(CultureInfo.InvariantCulture)),
+            ("__BFC_GLASS_OPACITY__", Format(glass.Opacity)),
+            ("__BFC_GLASS_OPACITY_PERCENT__", Format(glass.Opacity * 100)),
             ("__BFC_HOME_HOVER_OPACITY_PERCENT__", Format(
-                Math.Min(options.Glass.Opacity + 0.08, 1) * 100)),
-            ("__BFC_GLASS_BLUR_PIXELS__", Format(options.Glass.BlurPixels)),
-            ("__BFC_GLASS_SATURATION__", Format(options.Glass.Saturation)),
+                Math.Min(glass.Opacity + 0.08, 1) * 100)),
+            ("__BFC_GLASS_BLUR_PIXELS__", Format(glass.BlurPixels)),
+            ("__BFC_GLASS_SATURATION__", Format(glass.Saturation)),
             ("__BFC_GLASS_BODY_SELECTOR__", glassBodySelector),
             ("__BFC_ADVANCED_BODY_SELECTOR__", advancedBodySelector),
         };

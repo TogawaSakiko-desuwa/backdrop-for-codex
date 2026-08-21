@@ -3,8 +3,9 @@ using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
-using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Shapes;
+using BackdropForCodex.App.Services.Localization;
 using BackdropForCodex.App.ViewModels;
 using BackdropForCodex.App.Views;
 using BackdropForCodex.Core.Media;
@@ -57,6 +58,7 @@ public sealed class WallpaperLibraryViewTests
                 var profile = new WallpaperProfileCardItem(
                     Guid.CreateVersion7(),
                     "Profile",
+                    "Profile",
                     null,
                     null,
                     null,
@@ -76,9 +78,6 @@ public sealed class WallpaperLibraryViewTests
                     },
                     "wallpaper.png",
                     false);
-                var source = CreateSource(
-                    WallpaperContentKind.Scene,
-                    WallpaperDeliveryKind.WallpaperEngineWindow);
                 var view = new WallpaperLibraryView
                 {
                     ProfileItemsSource = new ObservableCollection<WallpaperProfileCardItem>
@@ -89,10 +88,7 @@ public sealed class WallpaperLibraryViewTests
                     {
                         recent,
                     },
-                    SourceItemsSource = new ObservableCollection<WallpaperSourceDescriptor>
-                    {
-                        source,
-                    },
+                    WallpaperEngineProjectCount = 37,
                 };
                 view.RaiseEvent(new RoutedEventArgs(FrameworkElement.LoadedEvent, view));
                 view.Measure(new Size(WallpaperLibraryView.ExpandedWidth, 720));
@@ -101,198 +97,143 @@ public sealed class WallpaperLibraryViewTests
 
                 var profiles = Assert.IsType<ListBox>(FindElement(view, "ProfileList"));
                 var recents = Assert.IsType<ListBox>(FindElement(view, "RecentList"));
-                var sources = Assert.IsType<ListBox>(FindElement(view, "SourceList"));
                 Assert.Equal(
                     ScrollBarVisibility.Disabled,
                     ScrollViewer.GetHorizontalScrollBarVisibility(profiles));
                 Assert.Equal(
                     ScrollBarVisibility.Disabled,
                     ScrollViewer.GetHorizontalScrollBarVisibility(recents));
-                Assert.Equal(
-                    ScrollBarVisibility.Disabled,
-                    ScrollViewer.GetHorizontalScrollBarVisibility(sources));
-
                 var profileItem = Assert.IsType<ListBoxItem>(
                     profiles.ItemContainerGenerator.ContainerFromItem(profile));
                 var recentItem = Assert.IsType<ListBoxItem>(
                     recents.ItemContainerGenerator.ContainerFromItem(recent));
-                var sourceItem = Assert.IsType<ListBoxItem>(
-                    sources.ItemContainerGenerator.ContainerFromItem(source));
                 Assert.True(profileItem.MinHeight >= 32);
                 Assert.True(recentItem.MinHeight >= 32);
-                Assert.True(sourceItem.MinHeight >= 32);
                 Assert.Equal(
                     profile.AutomationName,
                     AutomationProperties.GetName(profileItem));
                 Assert.Equal(
                     recent.DisplayName,
                     AutomationProperties.GetName(recentItem));
-                Assert.Equal(
-                    source.DisplayName,
-                    AutomationProperties.GetName(sourceItem));
-                var unavailableStatus = AutomationProperties.GetItemStatus(sourceItem);
-                Assert.False(sourceItem.IsEnabled);
-                Assert.False(string.IsNullOrWhiteSpace(unavailableStatus));
-                Assert.Equal(
-                    unavailableStatus,
-                    AutomationProperties.GetHelpText(sourceItem));
-                Assert.True(VirtualizingPanel.GetIsVirtualizing(sources));
-                Assert.Equal(
-                    VirtualizationMode.Recycling,
-                    VirtualizingPanel.GetVirtualizationMode(sources));
-                Assert.True(ScrollViewer.GetCanContentScroll(sources));
-                Assert.Equal(ScrollBarVisibility.Auto, ScrollViewer.GetVerticalScrollBarVisibility(sources));
-                Assert.Equal(320, sources.MaxHeight);
+
+                var wallpaperEngineEntry = Assert.IsAssignableFrom<ButtonBase>(
+                    FindElement(view, "ExpandedWallpaperEngineButton"));
+                Assert.True(wallpaperEngineEntry.MinHeight >= 32);
+                Assert.False(
+                    string.IsNullOrWhiteSpace(
+                        AutomationProperties.GetName(wallpaperEngineEntry)));
 
                 view.IsCompact = true;
 
-                Assert.Equal(240, sources.MaxHeight);
+                Assert.Equal(
+                    Visibility.Visible,
+                    FindElement(view, "CompactWallpaperEngineButton").Visibility);
             });
     }
 
     [Fact]
-    public void SourceSection_TracksRealProviderItemsAndOtherwiseStaysHidden()
+    public void WallpaperEngineEntry_IsASinglePersistentProviderGateway()
     {
         StaTest.Run(
             () =>
             {
-                var sourceItems = new ObservableCollection<WallpaperSourceDescriptor>();
                 var view = new WallpaperLibraryView
                 {
-                    SourceItemsSource = sourceItems,
+                    WallpaperEngineProjectCount = 12,
+                    WallpaperEngineAvailability = WallpaperSourceAvailability.NotInstalled,
                 };
                 view.RaiseEvent(new RoutedEventArgs(FrameworkElement.LoadedEvent, view));
                 view.Measure(new Size(WallpaperLibraryView.ExpandedWidth, 720));
                 view.Arrange(new Rect(0, 0, WallpaperLibraryView.ExpandedWidth, 720));
                 view.UpdateLayout();
 
-                var sourceSection = FindElement(view, "SourceSection");
-                Assert.Equal(Visibility.Collapsed, sourceSection.Visibility);
-
-                sourceItems.Add(
-                    CreateSource(
-                        WallpaperContentKind.Web,
-                        WallpaperDeliveryKind.WallpaperEngineWindow));
-                view.UpdateLayout();
-
-                Assert.Equal(Visibility.Visible, sourceSection.Visibility);
                 Assert.Equal(
                     Visibility.Visible,
-                    FindElement(view, "ExpandedSourcesHeader").Visibility);
+                    FindElement(view, "ExpandedWallpaperEngineButton").Visibility);
+                Assert.Null(view.FindName("SourceList"));
+                Assert.Null(view.FindName("SourcesSection"));
 
                 view.IsCompact = true;
 
                 Assert.Equal(
                     Visibility.Collapsed,
-                    FindElement(view, "ExpandedSourcesHeader").Visibility);
+                    FindElement(view, "ExpandedWallpaperEngineButton").Visibility);
                 Assert.Equal(
                     Visibility.Visible,
-                    FindElement(view, "CompactSourcesHeader").Visibility);
-
-                sourceItems.Clear();
-                view.UpdateLayout();
-
-                Assert.Equal(Visibility.Collapsed, sourceSection.Visibility);
+                    FindElement(view, "CompactWallpaperEngineButton").Visibility);
             });
     }
 
     [Fact]
-    public void SourceSelection_InvokesThroughTheKeyboardEventSeam()
+    public void WallpaperEngineEntry_DefaultStateIsNotLoadedAndUsesANeutralStatus()
     {
         StaTest.Run(
             () =>
             {
-                var source = CreateSource(
-                    WallpaperContentKind.Image,
-                    WallpaperDeliveryKind.DirectMedia);
-                var view = new WallpaperLibraryView
-                {
-                    SourceItemsSource = new[] { source },
-                    SelectedSource = source,
-                };
-                var invoked = 0;
-                view.SourceInvoked += (_, _) => invoked++;
+                var view = new WallpaperLibraryView();
                 view.RaiseEvent(new RoutedEventArgs(FrameworkElement.LoadedEvent, view));
                 view.Measure(new Size(WallpaperLibraryView.ExpandedWidth, 720));
                 view.Arrange(new Rect(0, 0, WallpaperLibraryView.ExpandedWidth, 720));
                 view.UpdateLayout();
 
-                var sourceList = Assert.IsType<ListBox>(FindElement(view, "SourceList"));
-                sourceList.RaiseEvent(
-                    new KeyEventArgs(
-                        Keyboard.PrimaryDevice,
-                        new TestPresentationSource(view),
-                        timestamp: 0,
-                        Key.Enter)
-                    {
-                        RoutedEvent = Keyboard.PreviewKeyDownEvent,
-                    });
-
-                var sourceItem = Assert.IsType<ListBoxItem>(
-                    sourceList.ItemContainerGenerator.ContainerFromItem(source));
-                sourceList.RaiseEvent(
-                    new MouseButtonEventArgs(
-                        Mouse.PrimaryDevice,
-                        timestamp: 0,
-                        MouseButton.Left)
-                    {
-                        RoutedEvent = Control.MouseDoubleClickEvent,
-                        Source = sourceItem,
-                    });
-
-                Assert.Equal(2, invoked);
-                Assert.Same(source, view.SelectedSource);
+                Assert.Equal(
+                    WallpaperSourceAvailability.NotLoaded,
+                    view.WallpaperEngineAvailability);
+                var button = FindElement(view, "ExpandedWallpaperEngineButton");
+                Assert.Contains(
+                    FindVisualDescendants<TextBlock>(button),
+                    text => string.Equals(
+                        text.Text,
+                        new AppTextProvider().GetString("Source_NotLoaded"),
+                        StringComparison.Ordinal));
+                var statusDot = Assert.IsType<Ellipse>(
+                    FindVisualDescendant<Ellipse>(button));
+                var expectedBrush = Assert.IsType<SolidColorBrush>(
+                    view.FindResource("TextFillColorDisabledBrush"));
+                var actualBrush = Assert.IsType<SolidColorBrush>(statusDot.Fill);
+                Assert.Equal(expectedBrush.Color, actualBrush.Color);
             });
     }
 
     [Fact]
-    public void RendererBackedSource_IsDisabledAndCannotInvoke()
+    public void WallpaperEngineEntry_RequestsTheDedicatedLibrary()
     {
         StaTest.Run(
             () =>
             {
-                var source = CreateSource(
-                    WallpaperContentKind.Scene,
-                    WallpaperDeliveryKind.WallpaperEngineWindow);
-                var view = new WallpaperLibraryView
-                {
-                    SourceItemsSource = new[] { source },
-                    SelectedSource = source,
-                };
+                var view = new WallpaperLibraryView();
                 var invoked = 0;
-                view.SourceInvoked += (_, _) => invoked++;
+                view.WallpaperEngineLibraryRequested += (_, _) => invoked++;
                 view.RaiseEvent(new RoutedEventArgs(FrameworkElement.LoadedEvent, view));
                 view.Measure(new Size(WallpaperLibraryView.ExpandedWidth, 720));
                 view.Arrange(new Rect(0, 0, WallpaperLibraryView.ExpandedWidth, 720));
                 view.UpdateLayout();
 
-                var sourceList = Assert.IsType<ListBox>(FindElement(view, "SourceList"));
-                var sourceItem = Assert.IsType<ListBoxItem>(
-                    sourceList.ItemContainerGenerator.ContainerFromItem(source));
-                Assert.False(sourceItem.IsEnabled);
-                Assert.False(WallpaperSourcesSection.CanInvokeSource(source));
+                var button = Assert.IsAssignableFrom<ButtonBase>(
+                    FindElement(view, "ExpandedWallpaperEngineButton"));
+                button.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent, button));
 
-                view.SelectedSource = source;
-                sourceList.RaiseEvent(
-                    new KeyEventArgs(
-                        Keyboard.PrimaryDevice,
-                        new TestPresentationSource(view),
-                        timestamp: 0,
-                        Key.Enter)
-                    {
-                        RoutedEvent = Keyboard.PreviewKeyDownEvent,
-                    });
-                sourceList.RaiseEvent(
-                    new MouseButtonEventArgs(
-                        Mouse.PrimaryDevice,
-                        timestamp: 0,
-                        MouseButton.Left)
-                    {
-                        RoutedEvent = Control.MouseDoubleClickEvent,
-                        Source = sourceItem,
-                    });
+                Assert.Equal(1, invoked);
+            });
+    }
 
-                Assert.Equal(0, invoked);
+    [Fact]
+    public void RendererUnavailable_DoesNotDisableBrowsingTheLibrary()
+    {
+        StaTest.Run(
+            () =>
+            {
+                var view = new WallpaperLibraryView
+                {
+                    WallpaperEngineAvailability = WallpaperSourceAvailability.RendererUnavailable,
+                };
+                view.RaiseEvent(new RoutedEventArgs(FrameworkElement.LoadedEvent, view));
+                view.Measure(new Size(WallpaperLibraryView.ExpandedWidth, 720));
+                view.Arrange(new Rect(0, 0, WallpaperLibraryView.ExpandedWidth, 720));
+                view.UpdateLayout();
+
+                Assert.True(
+                    FindElement(view, "ExpandedWallpaperEngineButton").IsEnabled);
             });
     }
 
@@ -313,31 +254,18 @@ public sealed class WallpaperLibraryViewTests
                 view.Arrange(new Rect(0, 0, WallpaperLibraryView.ExpandedWidth, 720));
                 view.UpdateLayout();
 
-                Assert.Equal(Visibility.Visible, FindElement(view, "SourceSection").Visibility);
-                var expandedFailure = FindElement(view, "ExpandedSourceFailure");
-                var compactFailure = Assert.IsAssignableFrom<ButtonBase>(
-                    FindElement(view, "CompactSourceFailureButton"));
-                Assert.Equal(Visibility.Visible, expandedFailure.Visibility);
-                Assert.Equal(Visibility.Collapsed, compactFailure.Visibility);
-
                 var retryButton = Assert.IsAssignableFrom<Button>(
-                    FindElement(view, "ExpandedSourceRetryButton"));
+                    FindElement(view, "ExpandedWallpaperEngineRefreshButton"));
                 Assert.Same(view.RefreshSourcesCommand, retryButton.Command);
                 retryButton.Command.Execute(retryButton.CommandParameter);
                 Assert.Equal(1, retries);
 
                 view.IsCompact = true;
 
-                Assert.Equal(Visibility.Collapsed, expandedFailure.Visibility);
-                Assert.Equal(Visibility.Visible, compactFailure.Visibility);
-                var compactRetryButton = Assert.IsAssignableFrom<Button>(compactFailure);
-                Assert.Same(view.RefreshSourcesCommand, compactRetryButton.Command);
-                compactRetryButton.Command.Execute(compactRetryButton.CommandParameter);
-                Assert.Equal(2, retries);
-
-                view.HasSourceDiscoveryFailures = false;
-                view.UpdateLayout();
-                Assert.Equal(Visibility.Collapsed, FindElement(view, "SourceSection").Visibility);
+                Assert.Equal(Visibility.Collapsed, retryButton.Visibility);
+                Assert.Equal(
+                    Visibility.Visible,
+                    FindElement(view, "CompactWallpaperEngineButton").Visibility);
             });
     }
 
@@ -349,12 +277,6 @@ public sealed class WallpaperLibraryViewTests
             {
                 var view = new WallpaperLibraryView
                 {
-                    SourceItemsSource = new[]
-                    {
-                        CreateSource(
-                            WallpaperContentKind.Video,
-                            WallpaperDeliveryKind.DirectMedia),
-                    },
                     CanChooseMedia = false,
                 };
                 view.RaiseEvent(new RoutedEventArgs(FrameworkElement.LoadedEvent, view));
@@ -362,7 +284,8 @@ public sealed class WallpaperLibraryViewTests
                 view.Arrange(new Rect(0, 0, WallpaperLibraryView.ExpandedWidth, 720));
                 view.UpdateLayout();
 
-                Assert.False(FindElement(view, "SourceList").IsEnabled);
+                Assert.False(FindElement(view, "ExpandedChooseMediaButton").IsEnabled);
+                Assert.True(FindElement(view, "ExpandedWallpaperEngineButton").IsEnabled);
             });
     }
 
@@ -374,6 +297,7 @@ public sealed class WallpaperLibraryViewTests
             {
                 var profile = new WallpaperProfileCardItem(
                     Guid.CreateVersion7(),
+                    "Profile",
                     "Profile",
                     null,
                     null,
@@ -428,7 +352,7 @@ public sealed class WallpaperLibraryViewTests
     }
 
     [Fact]
-    public void LibraryFacade_ComposesThreeAssemblyInternalSections()
+    public void LibraryFacade_ComposesProfilesAndRecentsAroundTheProviderGateway()
     {
         StaTest.Run(
             () =>
@@ -436,14 +360,13 @@ public sealed class WallpaperLibraryViewTests
                 var view = new WallpaperLibraryView();
 
                 Assert.False(typeof(WallpaperProfilesSection).IsPublic);
-                Assert.False(typeof(WallpaperSourcesSection).IsPublic);
                 Assert.False(typeof(WallpaperRecentsSection).IsPublic);
                 Assert.IsType<WallpaperProfilesSection>(
                     FindElement(view, "ProfilesSection"));
-                Assert.IsType<WallpaperSourcesSection>(
-                    FindElement(view, "SourcesSection"));
                 Assert.IsType<WallpaperRecentsSection>(
                     FindElement(view, "RecentsSection"));
+                Assert.IsAssignableFrom<ButtonBase>(
+                    FindElement(view, "ExpandedWallpaperEngineButton"));
             });
     }
 
@@ -485,29 +408,42 @@ public sealed class WallpaperLibraryViewTests
         return null;
     }
 
-    private static WallpaperSourceDescriptor CreateSource(
-        WallpaperContentKind contentKind,
-        WallpaperDeliveryKind deliveryKind) =>
-        new(
-            contentKind is WallpaperContentKind.Image or WallpaperContentKind.Video
-                ? MediaSourceKind.LocalFile
-                : MediaSourceKind.WallpaperEngineLocalProject,
-            contentKind is WallpaperContentKind.Image or WallpaperContentKind.Video
-                ? @"C:\wallpapers\sample.png"
-                : @"C:\wallpaper-engine\projects\sample",
-            $"{contentKind} source",
-            contentKind,
-            deliveryKind,
-            deliveryKind == WallpaperDeliveryKind.WallpaperEngineWindow
-                ? WallpaperDeliveryCapabilities.DynamicFrames
-                : WallpaperDeliveryCapabilities.None);
-
-    private sealed class TestPresentationSource(Visual rootVisual) : PresentationSource
+    private static T? FindVisualDescendant<T>(DependencyObject parent)
+        where T : DependencyObject
     {
-        public override bool IsDisposed => false;
+        for (var index = 0; index < VisualTreeHelper.GetChildrenCount(parent); index++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, index);
+            if (child is T match)
+            {
+                return match;
+            }
 
-        public override Visual RootVisual { get; set; } = rootVisual;
+            if (FindVisualDescendant<T>(child) is { } descendant)
+            {
+                return descendant;
+            }
+        }
 
-        protected override CompositionTarget GetCompositionTargetCore() => null!;
+        return null;
     }
+
+    private static IEnumerable<T> FindVisualDescendants<T>(DependencyObject parent)
+        where T : DependencyObject
+    {
+        for (var index = 0; index < VisualTreeHelper.GetChildrenCount(parent); index++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, index);
+            if (child is T match)
+            {
+                yield return match;
+            }
+
+            foreach (var descendant in FindVisualDescendants<T>(child))
+            {
+                yield return descendant;
+            }
+        }
+    }
+
 }

@@ -8,10 +8,20 @@ namespace BackdropForCodex.App.Services.Media;
 /// </summary>
 public static class AppWallpaperSources
 {
+    public static AppWallpaperEngineInstallationLocator WallpaperEngineLocator { get; } =
+        new();
+
     public static IWallpaperSourceProviderRegistry Registry { get; } =
         new WallpaperSourceProviderRegistry(
-            [new LocalFileWallpaperSourceProvider()]);
+            [
+                new LocalFileWallpaperSourceProvider(),
+                new WallpaperEngineLocalProjectSourceProvider(WallpaperEngineLocator),
+                new WallpaperEngineWorkshopProjectSourceProvider(WallpaperEngineLocator),
+            ]);
 
     public static SafeMediaPreviewService Preview { get; } =
         new SafeMediaPreviewService(Registry);
+
+    public static WallpaperThumbnailPreviewService Thumbnails { get; } =
+        new(Registry);
 }

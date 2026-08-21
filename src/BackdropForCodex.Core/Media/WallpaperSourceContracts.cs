@@ -69,18 +69,19 @@ public sealed record WallpaperSourceDescriptor
         }
 
         ArgumentNullException.ThrowIfNull(displayName);
-        if (string.IsNullOrWhiteSpace(displayName))
-        {
-            throw new ArgumentException(
-                "The wallpaper source display name is required.",
-                nameof(displayName));
-        }
-
         if (displayName.Length > MaximumDisplayNameLength)
         {
             throw new ArgumentException(
                 $"The wallpaper source display name cannot exceed " +
                 $"{MaximumDisplayNameLength} characters.",
+                nameof(displayName));
+        }
+
+        displayName = WallpaperDisplayNameSanitizer.Sanitize(displayName);
+        if (string.IsNullOrWhiteSpace(displayName))
+        {
+            throw new ArgumentException(
+                "The wallpaper source display name is required.",
                 nameof(displayName));
         }
 
@@ -174,7 +175,18 @@ public sealed record WallpaperSourceResolution
         ArgumentNullException.ThrowIfNull(canonicalReference);
         ArgumentNullException.ThrowIfNull(descriptor);
 
-        var snapshot = canonicalReference.Snapshot();
+        var snapshot = canonicalReference with
+        {
+            LastKnownKind = descriptor.ContentKind switch
+            {
+                WallpaperContentKind.Image => MediaKind.Image,
+                WallpaperContentKind.Video => MediaKind.Video,
+                _ => MediaKind.None,
+            },
+            LastKnownContentKind = descriptor.ContentKind,
+            LastKnownDisplayName = descriptor.DisplayName,
+        };
+        snapshot = snapshot.Snapshot();
         if (snapshot.SourceKind != descriptor.SourceKind ||
             !WallpaperSourceIdentifier.AreEqual(
                 descriptor.SourceKind,

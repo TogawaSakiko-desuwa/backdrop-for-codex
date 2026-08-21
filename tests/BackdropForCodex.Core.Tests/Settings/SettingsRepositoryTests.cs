@@ -13,7 +13,7 @@ public sealed class SettingsRepositoryTests
         CreateVersion1SerializerOptions();
 
     [Fact]
-    public async Task LoadAsyncReturnsFreshV2DefaultsWhenDocumentDoesNotExist()
+    public async Task LoadAsyncReturnsFreshV3DefaultsWhenDocumentDoesNotExist()
     {
         var directoryPath = CreateTemporaryDirectory();
         try
@@ -24,7 +24,8 @@ public sealed class SettingsRepositoryTests
 
             var ready = Assert.IsType<SettingsLoadResult.Ready>(result);
             Assert.False(ready.MigratedFromVersion1);
-            Assert.Equal(2, ready.Settings.SchemaVersion);
+            Assert.False(ready.MigratedFromVersion2);
+            Assert.Equal(3, ready.Settings.SchemaVersion);
             Assert.Equal(7, Assert.Single(ready.Settings.Profiles).ProfileId.Version);
             Assert.False(File.Exists(Path.Combine(directoryPath, "settings.json")));
         }
@@ -35,7 +36,7 @@ public sealed class SettingsRepositoryTests
     }
 
     [Fact]
-    public async Task SaveAsyncReturnsAndPersistsTheCanonicalV2Snapshot()
+    public async Task SaveAsyncReturnsAndPersistsTheCanonicalV3Snapshot()
     {
         var directoryPath = CreateTemporaryDirectory();
         try
@@ -64,7 +65,7 @@ public sealed class SettingsRepositoryTests
                 PerformancePolicy = PerformancePolicy.PreferQuality,
             };
             var settings = WithLegacyCompatibilityProfileId(
-                new SettingsV2
+                new SettingsV3
                 {
                     Profiles = [profile],
                     MediaCatalog = [media],
@@ -97,7 +98,7 @@ public sealed class SettingsRepositoryTests
                 GetLegacyCompatibilityProfileId(loaded));
 
             var json = await File.ReadAllTextAsync(settingsPath);
-            Assert.Contains("\"schemaVersion\": 2", json, StringComparison.Ordinal);
+            Assert.Contains("\"schemaVersion\": 3", json, StringComparison.Ordinal);
             Assert.Contains("\"sourceKind\": \"LocalFile\"", json, StringComparison.Ordinal);
             Assert.Contains("\"Global\"", json, StringComparison.Ordinal);
             Assert.Contains("\"performancePolicy\": \"PreferQuality\"", json, StringComparison.Ordinal);
@@ -118,7 +119,7 @@ public sealed class SettingsRepositoryTests
     }
 
     [Fact]
-    public async Task SaveAsyncRoundTripsWorkshopVideoWithoutExtendingSchemaVersionTwo()
+    public async Task SaveAsyncRoundTripsWorkshopVideoMetadataWithoutDerivedRuntimeState()
     {
         var directoryPath = CreateTemporaryDirectory();
         try
@@ -131,8 +132,10 @@ public sealed class SettingsRepositoryTests
                 SourceKind = MediaSourceKind.WallpaperEngineWorkshopProject,
                 SourceIdentifier = "123456",
                 LastKnownKind = MediaKind.Video,
+                LastKnownContentKind = WallpaperContentKind.Video,
+                LastKnownDisplayName = "Workshop video",
             };
-            var defaults = SettingsV2.CreateDefault();
+            var defaults = SettingsV3.CreateDefault();
             var profile = Assert.Single(defaults.Profiles) with
             {
                 MediaId = media.MediaId,
@@ -149,7 +152,7 @@ public sealed class SettingsRepositoryTests
             var loaded = Assert.IsType<SettingsLoadResult.Ready>(
                 await repository.LoadAsync()).Settings;
 
-            Assert.Equal(2, loaded.SchemaVersion);
+            Assert.Equal(3, loaded.SchemaVersion);
             var loadedMedia = Assert.Single(loaded.MediaCatalog);
             Assert.Equal(media.MediaId, loadedMedia.MediaId);
             Assert.Equal(
@@ -157,11 +160,13 @@ public sealed class SettingsRepositoryTests
                 loadedMedia.SourceKind);
             Assert.Equal("123456", loadedMedia.SourceIdentifier);
             Assert.Equal(MediaKind.Video, loadedMedia.LastKnownKind);
+            Assert.Equal(WallpaperContentKind.Video, loadedMedia.LastKnownContentKind);
+            Assert.Equal("Workshop video", loadedMedia.LastKnownDisplayName);
 
             using var document = JsonDocument.Parse(
                 await File.ReadAllTextAsync(settingsPath));
             var root = document.RootElement;
-            Assert.Equal(2, root.GetProperty("schemaVersion").GetInt32());
+            Assert.Equal(3, root.GetProperty("schemaVersion").GetInt32());
             var mediaJson = Assert.Single(
                 root.GetProperty("mediaCatalog").EnumerateArray());
             Assert.Equal(
@@ -169,10 +174,17 @@ public sealed class SettingsRepositoryTests
                 mediaJson.GetProperty("sourceKind").GetString());
             Assert.Equal("123456", mediaJson.GetProperty("sourceIdentifier").GetString());
             Assert.Equal("Video", mediaJson.GetProperty("lastKnownKind").GetString());
-            Assert.False(mediaJson.TryGetProperty("contentKind", out _));
+            Assert.Equal(
+                "Video",
+                mediaJson.GetProperty("lastKnownContentKind").GetString());
+            Assert.Equal(
+                "Workshop video",
+                mediaJson.GetProperty("lastKnownDisplayName").GetString());
             Assert.False(mediaJson.TryGetProperty("deliveryKind", out _));
             Assert.False(mediaJson.TryGetProperty("deliveryCapabilities", out _));
             Assert.False(mediaJson.TryGetProperty("launchPath", out _));
+            Assert.False(mediaJson.TryGetProperty("pid", out _));
+            Assert.False(mediaJson.TryGetProperty("hwnd", out _));
         }
         finally
         {
@@ -189,7 +201,7 @@ public sealed class SettingsRepositoryTests
             var settingsPath = Path.Combine(directoryPath, "settings.json");
             using var repository = new SettingsRepository(settingsPath);
 
-            await repository.SaveAsync(SettingsV2.CreateDefault());
+            await repository.SaveAsync(SettingsV3.CreateDefault());
 
             var loaded = Assert.IsType<SettingsLoadResult.Ready>(
                 await repository.LoadAsync()).Settings;
@@ -198,6 +210,154 @@ public sealed class SettingsRepositoryTests
                 "\"lastCompatibilityProfileId\"",
                 await File.ReadAllTextAsync(settingsPath),
                 StringComparison.Ordinal);
+        }
+        finally
+        {
+            DeleteTemporaryDirectory(directoryPath);
+        }
+    }
+
+    [Fact]
+    public async Task LoadAsyncMigratesV2AtomicallyAndPreservesRawBackupOnce()
+    {
+        var directoryPath = CreateTemporaryDirectory();
+        try
+        {
+            var settingsPath = Path.Combine(directoryPath, "settings.json");
+            var originalBytes = SerializeVersion2Document(directoryPath);
+            await File.WriteAllBytesAsync(settingsPath, originalBytes);
+            using var repository = new SettingsRepository(settingsPath);
+
+            var ready = Assert.IsType<SettingsLoadResult.Ready>(
+                await repository.LoadAsync());
+
+            Assert.False(ready.MigratedFromVersion1);
+            Assert.True(ready.MigratedFromVersion2);
+            Assert.Equal(SettingsV3.CurrentSchemaVersion, ready.Settings.SchemaVersion);
+            var media = Assert.Single(ready.Settings.MediaCatalog);
+            Assert.Equal(MediaKind.Video, media.LastKnownKind);
+            Assert.Equal(WallpaperContentKind.Video, media.LastKnownContentKind);
+            Assert.Equal("legacy-video.mp4", media.LastKnownDisplayName);
+
+            var backupPath = Path.Combine(
+                directoryPath,
+                SettingsRepository.Version2BackupFileName);
+            Assert.True(repository.HasVersion2Backup);
+            Assert.Equal(originalBytes, await File.ReadAllBytesAsync(backupPath));
+            Assert.True(File.GetAttributes(backupPath).HasFlag(FileAttributes.ReadOnly));
+            Assert.NotEqual(originalBytes, await File.ReadAllBytesAsync(settingsPath));
+            Assert.Empty(Directory.GetFiles(directoryPath, "*.tmp"));
+
+            var secondLoad = Assert.IsType<SettingsLoadResult.Ready>(
+                await repository.LoadAsync());
+            Assert.False(secondLoad.MigratedFromVersion1);
+            Assert.False(secondLoad.MigratedFromVersion2);
+            Assert.Equal(originalBytes, await File.ReadAllBytesAsync(backupPath));
+        }
+        finally
+        {
+            DeleteTemporaryDirectory(directoryPath);
+        }
+    }
+
+    [Fact]
+    public async Task LoadAsyncRefusesConflictingV2BackupWithoutReplacingEitherFile()
+    {
+        var directoryPath = CreateTemporaryDirectory();
+        try
+        {
+            var settingsPath = Path.Combine(directoryPath, "settings.json");
+            var originalBytes = SerializeVersion2Document(directoryPath);
+            var backupPath = Path.Combine(
+                directoryPath,
+                SettingsRepository.Version2BackupFileName);
+            var conflictingBytes = Encoding.UTF8.GetBytes("conflicting backup");
+            await File.WriteAllBytesAsync(settingsPath, originalBytes);
+            await File.WriteAllBytesAsync(backupPath, conflictingBytes);
+            File.SetAttributes(
+                backupPath,
+                File.GetAttributes(backupPath) | FileAttributes.ReadOnly);
+            using var repository = new SettingsRepository(settingsPath);
+
+            var recovery = Assert.IsType<SettingsLoadResult.RecoveryRequired>(
+                await repository.LoadAsync());
+
+            Assert.Equal(SettingsRecoveryReason.Version2BackupConflict, recovery.Reason);
+            Assert.True(recovery.HasVersion2Backup);
+            Assert.Equal(originalBytes, await File.ReadAllBytesAsync(settingsPath));
+            Assert.Equal(conflictingBytes, await File.ReadAllBytesAsync(backupPath));
+        }
+        finally
+        {
+            DeleteTemporaryDirectory(directoryPath);
+        }
+    }
+
+    [Fact]
+    public async Task SchemaTwoCannotSmuggleVersionThreeMediaFields()
+    {
+        var directoryPath = CreateTemporaryDirectory();
+        try
+        {
+            var settingsPath = Path.Combine(directoryPath, "settings.json");
+            var version2Json = Encoding.UTF8.GetString(
+                SerializeVersion2Document(directoryPath));
+            var invalidBytes = Encoding.UTF8.GetBytes(
+                version2Json.Replace(
+                    "\"lastKnownKind\": \"Video\"",
+                    "\"lastKnownKind\": \"Video\",\n" +
+                    "      \"lastKnownContentKind\": \"Video\"",
+                    StringComparison.Ordinal));
+            await File.WriteAllBytesAsync(settingsPath, invalidBytes);
+            using var repository = new SettingsRepository(settingsPath);
+
+            var recovery = Assert.IsType<SettingsLoadResult.RecoveryRequired>(
+                await repository.LoadAsync());
+
+            Assert.Equal(SettingsRecoveryReason.InvalidDocument, recovery.Reason);
+            Assert.False(repository.HasVersion2Backup);
+            Assert.Equal(invalidBytes, await File.ReadAllBytesAsync(settingsPath));
+        }
+        finally
+        {
+            DeleteTemporaryDirectory(directoryPath);
+        }
+    }
+
+    [Fact]
+    public async Task CaseVariantDuplicateMediaCatalogCannotSmuggleVersionThreeFieldsOrCreateBackup()
+    {
+        var directoryPath = CreateTemporaryDirectory();
+        try
+        {
+            var settingsPath = Path.Combine(directoryPath, "settings.json");
+            var version2Json = Encoding.UTF8.GetString(
+                SerializeVersion2Document(directoryPath));
+            var duplicateCatalogJson = version2Json.Replace(
+                "\"mediaCatalog\": [",
+                "\"mediaCatalog\": [],\n  \"MediaCatalog\": [",
+                StringComparison.Ordinal);
+            var invalidBytes = Encoding.UTF8.GetBytes(
+                duplicateCatalogJson.Replace(
+                    "\"lastKnownKind\": \"Video\"",
+                    "\"lastKnownKind\": \"Video\",\n" +
+                    "      \"lastKnownContentKind\": \"Video\"",
+                    StringComparison.Ordinal));
+            await File.WriteAllBytesAsync(settingsPath, invalidBytes);
+            using var repository = new SettingsRepository(settingsPath);
+
+            var recovery = Assert.IsType<SettingsLoadResult.RecoveryRequired>(
+                await repository.LoadAsync());
+
+            Assert.Equal(SettingsRecoveryReason.InvalidDocument, recovery.Reason);
+            Assert.False(repository.HasVersion2Backup);
+            Assert.False(
+                File.Exists(
+                    Path.Combine(
+                        directoryPath,
+                        SettingsRepository.Version2BackupFileName)));
+            Assert.Equal(invalidBytes, await File.ReadAllBytesAsync(settingsPath));
+            Assert.Empty(Directory.GetFiles(directoryPath, "*.tmp"));
         }
         finally
         {
@@ -242,10 +402,17 @@ public sealed class SettingsRepositoryTests
 
             var ready = Assert.IsType<SettingsLoadResult.Ready>(result);
             Assert.True(ready.MigratedFromVersion1);
+            Assert.False(ready.MigratedFromVersion2);
             var migrated = ready.Settings;
             var profile = Assert.Single(migrated.Profiles);
             Assert.Equal(selectedPath, migrated.FindMedia(profile.MediaId!.Value)!.SourceIdentifier);
             Assert.Equal(MediaKind.Video, migrated.FindMedia(profile.MediaId.Value)!.LastKnownKind);
+            Assert.Equal(
+                WallpaperContentKind.Video,
+                migrated.FindMedia(profile.MediaId.Value)!.LastKnownContentKind);
+            Assert.Equal(
+                "does-not-exist.webm",
+                migrated.FindMedia(profile.MediaId.Value)!.LastKnownDisplayName);
             Assert.Equal(WallpaperFit.Stretch, profile.Fit);
             Assert.Equal(0.2, profile.FocusX);
             Assert.Equal(0.8, profile.FocusY);
@@ -282,7 +449,7 @@ public sealed class SettingsRepositoryTests
             using (var document = JsonDocument.Parse(await File.ReadAllBytesAsync(settingsPath)))
             {
                 Assert.Equal(
-                    SettingsV2.CurrentSchemaVersion,
+                    SettingsV3.CurrentSchemaVersion,
                     document.RootElement.GetProperty("schemaVersion").GetInt32());
             }
 
@@ -301,14 +468,14 @@ public sealed class SettingsRepositoryTests
     }
 
     [Fact]
-    public async Task SaveAsyncAtomicallyReplacesAnExistingV2AndCleansTemporaryFiles()
+    public async Task SaveAsyncAtomicallyReplacesAnExistingV3AndCleansTemporaryFiles()
     {
         var directoryPath = CreateTemporaryDirectory();
         try
         {
             var settingsPath = Path.Combine(directoryPath, "settings.json");
             using var repository = new SettingsRepository(settingsPath);
-            var original = await repository.SaveAsync(SettingsV2.CreateDefault());
+            var original = await repository.SaveAsync(SettingsV3.CreateDefault());
             var replacement = WithLegacyCompatibilityProfileId(
                 original with { AcceptedCdpRisk = true },
                 "replacement-profile");
@@ -344,7 +511,7 @@ public sealed class SettingsRepositoryTests
         {
             var selectedPath = Path.Combine(directoryPath, "selected.png");
             var settingsPath = Path.Combine(directoryPath, "settings.json");
-            var version1 = SettingsV1.CreateDefault() with
+            var version1 = new SettingsV1
             {
                 MediaPath = selectedPath,
                 MediaKind = MediaKind.Image,
@@ -376,7 +543,7 @@ public sealed class SettingsRepositoryTests
             var settingsPath = Path.Combine(directoryPath, "settings.json");
             var canonicalPath = Path.Combine(directoryPath, "wallpaper.png");
             var aliasPath = Path.Combine(directoryPath, "unused", "..", "wallpaper.png");
-            var version1 = SettingsV1.CreateDefault() with
+            var version1 = new SettingsV1
             {
                 RecentMediaPaths = [aliasPath, canonicalPath],
             };
@@ -406,7 +573,7 @@ public sealed class SettingsRepositoryTests
             var backupPath = Path.Combine(
                 directoryPath,
                 SettingsRepository.Version1BackupFileName);
-            var originalBytes = SerializeVersion1(SettingsV1.CreateDefault());
+            var originalBytes = SerializeVersion1(new SettingsV1());
             await File.WriteAllBytesAsync(settingsPath, originalBytes);
             await File.WriteAllBytesAsync(backupPath, originalBytes);
             using var repository = new SettingsRepository(settingsPath);
@@ -433,7 +600,7 @@ public sealed class SettingsRepositoryTests
             var backupPath = Path.Combine(
                 directoryPath,
                 SettingsRepository.Version1BackupFileName);
-            var originalBytes = SerializeVersion1(SettingsV1.CreateDefault() with
+            var originalBytes = SerializeVersion1(new SettingsV1
             {
                 AcceptedCdpRisk = true,
             });
@@ -457,13 +624,13 @@ public sealed class SettingsRepositoryTests
     }
 
     [Fact]
-    public async Task MigrationFailureKeepsV1AndDoesNotPublishV2()
+    public async Task MigrationFailureKeepsV1AndDoesNotPublishV3()
     {
         var directoryPath = CreateTemporaryDirectory();
         try
         {
             var settingsPath = Path.Combine(directoryPath, "settings.json");
-            var originalBytes = SerializeVersion1(SettingsV1.CreateDefault());
+            var originalBytes = SerializeVersion1(new SettingsV1());
             await File.WriteAllBytesAsync(settingsPath, originalBytes);
             Directory.CreateDirectory(
                 Path.Combine(directoryPath, SettingsRepository.Version1BackupFileName));
@@ -498,13 +665,13 @@ public sealed class SettingsRepositoryTests
                 Assert.IsType<SettingsLoadResult.RecoveryRequired>(invalidResult);
             Assert.Equal(SettingsRecoveryReason.InvalidDocument, invalidRecovery.Reason);
             await Assert.ThrowsAsync<SettingsRepositoryException>(
-                () => repository.SaveAsync(SettingsV2.CreateDefault()));
+                () => repository.SaveAsync(SettingsV3.CreateDefault()));
             Assert.Equal(invalidBytes, await File.ReadAllBytesAsync(settingsPath));
 
             var unknownBytes = Encoding.UTF8.GetBytes(
                 """
                 {
-                  "schemaVersion": 2,
+                  "schemaVersion": 3,
                   "profiles": [],
                   "mediaCatalog": [],
                   "recentMediaIds": [],
@@ -550,7 +717,7 @@ public sealed class SettingsRepositoryTests
             await File.WriteAllBytesAsync(settingsPath, futureBytes);
             await File.WriteAllBytesAsync(
                 backupPath,
-                SerializeVersion1(SettingsV1.CreateDefault()));
+            SerializeVersion1(new SettingsV1()));
             File.SetAttributes(
                 backupPath,
                 File.GetAttributes(backupPath) | FileAttributes.ReadOnly);
@@ -562,7 +729,7 @@ public sealed class SettingsRepositoryTests
             Assert.Equal(99, future.SchemaVersion);
             Assert.True(future.HasVersion1Backup);
             await Assert.ThrowsAsync<SettingsRepositoryException>(
-                () => repository.SaveAsync(SettingsV2.CreateDefault()));
+                () => repository.SaveAsync(SettingsV3.CreateDefault()));
             Assert.Equal(futureBytes, await File.ReadAllBytesAsync(settingsPath));
         }
         finally
@@ -642,10 +809,10 @@ public sealed class SettingsRepositoryTests
                 SettingsRepository.Version1BackupFileName);
             var backupBytes = SerializeVersion1(
                 WithLegacyCompatibilityProfileId(
-                    SettingsV1.CreateDefault() with
-                    {
-                        AcceptedCdpRisk = true,
-                    },
+            new SettingsV1
+            {
+                AcceptedCdpRisk = true,
+            },
                     "backup-profile"));
             await File.WriteAllTextAsync(settingsPath, "{ corrupt }");
             await File.WriteAllBytesAsync(backupPath, backupBytes);
@@ -673,7 +840,7 @@ public sealed class SettingsRepositoryTests
     }
 
     [Fact]
-    public async Task ResetAsyncDeletesV2AndReadOnlyBackupButDoesNotPersistDefaults()
+    public async Task ResetAsyncDeletesV3AndBothReadOnlyBackupsButDoesNotPersistDefaults()
     {
         var directoryPath = CreateTemporaryDirectory();
         try
@@ -682,18 +849,26 @@ public sealed class SettingsRepositoryTests
             var backupPath = Path.Combine(
                 directoryPath,
                 SettingsRepository.Version1BackupFileName);
+            var version2BackupPath = Path.Combine(
+                directoryPath,
+                SettingsRepository.Version2BackupFileName);
             using var repository = new SettingsRepository(settingsPath);
-            await repository.SaveAsync(SettingsV2.CreateDefault());
+            await repository.SaveAsync(SettingsV3.CreateDefault());
             await File.WriteAllTextAsync(backupPath, "backup");
             File.SetAttributes(
                 backupPath,
                 File.GetAttributes(backupPath) | FileAttributes.ReadOnly);
+            await File.WriteAllTextAsync(version2BackupPath, "backup-v2");
+            File.SetAttributes(
+                version2BackupPath,
+                File.GetAttributes(version2BackupPath) | FileAttributes.ReadOnly);
 
             var defaults = await repository.ResetAsync();
 
             defaults.Validate();
             Assert.False(File.Exists(settingsPath));
             Assert.False(File.Exists(backupPath));
+            Assert.False(File.Exists(version2BackupPath));
             Assert.Equal(
                 7,
                 Assert.Single(defaults.Profiles).ProfileId.Version);
@@ -751,7 +926,7 @@ public sealed class SettingsRepositoryTests
                 directoryPath,
                 SettingsRepository.Version1BackupFileName);
             using var repository = new SettingsRepository(settingsPath);
-            await repository.SaveAsync(SettingsV2.CreateDefault());
+            await repository.SaveAsync(SettingsV3.CreateDefault());
             await File.WriteAllTextAsync(backupPath, "preserved-backup");
             File.SetAttributes(
                 backupPath,
@@ -776,7 +951,7 @@ public sealed class SettingsRepositoryTests
     }
 
     [Fact]
-    public async Task SaveAsyncPreservesNativeV2OverlayValuesAcrossAllProfiles()
+    public async Task SaveAsyncPreservesNativeV3OverlayValuesAcrossAllProfiles()
     {
         var directoryPath = CreateTemporaryDirectory();
         try
@@ -791,7 +966,7 @@ public sealed class SettingsRepositoryTests
                 DarkOverlay = 0.95,
                 LightOverlay = 0.90,
             };
-            var settings = new SettingsV2
+            var settings = new SettingsV3
             {
                 Profiles = [global, hidden],
                 RegionBindings = new Dictionary<SemanticRegion, Guid>
@@ -818,16 +993,16 @@ public sealed class SettingsRepositoryTests
     }
 
     [Fact]
-    public async Task SaveAsyncRejectsInvalidSettingsBeforeReplacingCurrentV2()
+    public async Task SaveAsyncRejectsInvalidSettingsBeforeReplacingCurrentV3()
     {
         var directoryPath = CreateTemporaryDirectory();
         try
         {
             var settingsPath = Path.Combine(directoryPath, "settings.json");
             using var repository = new SettingsRepository(settingsPath);
-            await repository.SaveAsync(SettingsV2.CreateDefault());
+            await repository.SaveAsync(SettingsV3.CreateDefault());
             var originalBytes = await File.ReadAllBytesAsync(settingsPath);
-            var invalid = SettingsV2.CreateDefault() with
+            var invalid = SettingsV3.CreateDefault() with
             {
                 Profiles = [],
             };
@@ -860,7 +1035,7 @@ public sealed class SettingsRepositoryTests
                 .Select(index => WallpaperProfile.CreateDefault(
                     $"{index:D4}-{new string('x', 100)}"))
                 .ToArray();
-            var oversized = new SettingsV2
+            var oversized = new SettingsV3
             {
                 Profiles = profiles,
                 RegionBindings = new Dictionary<SemanticRegion, Guid>
@@ -892,13 +1067,13 @@ public sealed class SettingsRepositoryTests
         try
         {
             var settingsPath = Path.Combine(directoryPath, "settings.json");
-            using var converter = new BlockingSettingsV2Converter();
+            using var converter = new BlockingSettingsV3Converter();
             var serializerOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
             serializerOptions.Converters.Add(converter);
             var repository = new SettingsRepository(settingsPath, serializerOptions);
 
             var saveTask = Task.Run(
-                () => repository.SaveAsync(SettingsV2.CreateDefault()));
+                () => repository.SaveAsync(SettingsV3.CreateDefault()));
             Assert.True(converter.WriteEntered.Wait(TimeSpan.FromSeconds(5)));
 
             repository.Dispose();
@@ -925,16 +1100,16 @@ public sealed class SettingsRepositoryTests
             var settingsPath = Path.Combine(directoryPath, "settings.json");
             using (var initialRepository = new SettingsRepository(settingsPath))
             {
-                await initialRepository.SaveAsync(SettingsV2.CreateDefault());
+                await initialRepository.SaveAsync(SettingsV3.CreateDefault());
             }
 
-            using var converter = new BlockingSettingsV2Converter();
+            using var converter = new BlockingSettingsV3Converter();
             var serializerOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
             serializerOptions.Converters.Add(converter);
             using var repository = new SettingsRepository(settingsPath, serializerOptions);
             var saveTask = Task.Run(
                 () => repository.SaveAsync(
-                    SettingsV2.CreateDefault() with { AcceptedCdpRisk = true }));
+                    SettingsV3.CreateDefault() with { AcceptedCdpRisk = true }));
             Assert.True(converter.WriteEntered.Wait(TimeSpan.FromSeconds(5)));
             var futureBytes = Encoding.UTF8.GetBytes(
                 """
@@ -967,7 +1142,7 @@ public sealed class SettingsRepositoryTests
             var duplicateEnvelope = Encoding.UTF8.GetBytes(
                 """
                 {
-                  "schemaVersion": 2,
+                  "schemaVersion": 3,
                   "SchemaVersion": 3
                 }
                 """);
@@ -996,14 +1171,58 @@ public sealed class SettingsRepositoryTests
         string? profileId) =>
         settings with { LastCompatibilityProfileId = profileId };
 
-    private static SettingsV2 WithLegacyCompatibilityProfileId(
-        SettingsV2 settings,
+    private static SettingsV3 WithLegacyCompatibilityProfileId(
+        SettingsV3 settings,
         string? profileId) =>
         settings with { LastCompatibilityProfileId = profileId };
 
-    private static string? GetLegacyCompatibilityProfileId(SettingsV2 settings) =>
+    private static string? GetLegacyCompatibilityProfileId(SettingsV3 settings) =>
         settings.LastCompatibilityProfileId;
 #pragma warning restore CS0618
+
+    private static byte[] SerializeVersion2Document(string directoryPath)
+    {
+        var profileId = Guid.CreateVersion7();
+        var mediaId = Guid.CreateVersion7();
+        var sourceIdentifier = JsonSerializer.Serialize(
+            Path.Combine(directoryPath, "legacy-video.mp4"));
+        return Encoding.UTF8.GetBytes(
+            $$"""
+            {
+              "schemaVersion": 2,
+              "profiles": [
+                {
+                  "profileId": "{{profileId}}",
+                  "name": "Global",
+                  "mediaId": "{{mediaId}}",
+                  "fit": "Cover",
+                  "focusX": 0.5,
+                  "focusY": 0.5,
+                  "panelOpacity": 0.78,
+                  "blurPx": 14,
+                  "darkOverlay": 0.3,
+                  "lightOverlay": 0.18,
+                  "soundEnabled": false,
+                  "volume": 0.5,
+                  "performancePolicy": "Automatic"
+                }
+              ],
+              "mediaCatalog": [
+                {
+                  "mediaId": "{{mediaId}}",
+                  "sourceKind": "LocalFile",
+                  "sourceIdentifier": {{sourceIdentifier}},
+                  "lastKnownKind": "Video"
+                }
+              ],
+              "recentMediaIds": ["{{mediaId}}"],
+              "regionBindings": {
+                "Global": "{{profileId}}"
+              },
+              "acceptedCdpRisk": true
+            }
+            """);
+    }
 
     private static byte[] SerializeVersion1(
         SettingsV1 settings,
@@ -1038,7 +1257,7 @@ public sealed class SettingsRepositoryTests
         return options;
     }
 
-    private sealed class BlockingSettingsV2Converter : JsonConverter<SettingsV2>, IDisposable
+    private sealed class BlockingSettingsV3Converter : JsonConverter<SettingsV3>, IDisposable
     {
         private static readonly JsonSerializerOptions PassthroughOptions =
             CreatePassthroughOptions();
@@ -1047,13 +1266,13 @@ public sealed class SettingsRepositoryTests
 
         public ManualResetEventSlim AllowWrite { get; } = new(initialState: false);
 
-        public override SettingsV2 Read(
+        public override SettingsV3 Read(
             ref Utf8JsonReader reader,
             Type typeToConvert,
             JsonSerializerOptions options)
         {
             using var document = JsonDocument.ParseValue(ref reader);
-            return JsonSerializer.Deserialize<SettingsV2>(
+            return JsonSerializer.Deserialize<SettingsV3>(
                        document.RootElement.GetRawText(),
                        PassthroughOptions)
                    ?? throw new JsonException("The settings document is empty.");
@@ -1061,7 +1280,7 @@ public sealed class SettingsRepositoryTests
 
         public override void Write(
             Utf8JsonWriter writer,
-            SettingsV2 value,
+            SettingsV3 value,
             JsonSerializerOptions options)
         {
             WriteEntered.Set();

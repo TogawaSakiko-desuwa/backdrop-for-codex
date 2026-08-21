@@ -11,9 +11,163 @@ public sealed class WallpaperWorkspaceCoordinatorTests
     private static readonly TimeSpan TestTimeout = TimeSpan.FromSeconds(10);
 
     [Fact]
+    public async Task InitializePreservesProviderUnavailableWallpaperMetadataAndRecents()
+    {
+        var media = new MediaReference
+        {
+            MediaId = Guid.CreateVersion7(),
+            SourceKind = MediaSourceKind.WallpaperEngineWorkshopProject,
+            SourceIdentifier = "123456",
+            LastKnownContentKind = WallpaperContentKind.Scene,
+            LastKnownDisplayName = "Saved Workshop scene",
+        };
+        var profile = WallpaperProfile.CreateDefault() with { MediaId = media.MediaId };
+        var initial = new SettingsV3
+        {
+            Profiles = [profile],
+            MediaCatalog = [media],
+            RecentMediaIds = [media.MediaId],
+            RegionBindings = new Dictionary<SemanticRegion, Guid>
+            {
+                [SemanticRegion.Global] = profile.ProfileId,
+            },
+            AcceptedCdpRisk = true,
+        }.CreateSnapshot();
+        var repository = new ControllableSettingsRepository(initial);
+        var runtime = new ControllableRuntime();
+        var localProviderOnly = new ControllableSourceProvider();
+
+        await using var coordinator = await CreateCoordinatorAsync(
+            repository,
+            runtime,
+            localProviderOnly);
+
+        var saved = coordinator.State.SavedDesired;
+        Assert.Equal(media.MediaId, saved.ResolveProfile(SemanticRegion.Global).MediaId);
+        Assert.Equal(media.MediaId, Assert.Single(saved.RecentMediaIds));
+        var retained = Assert.Single(saved.MediaCatalog);
+        Assert.Equal(WallpaperContentKind.Scene, retained.LastKnownContentKind);
+        Assert.Equal("Saved Workshop scene", retained.LastKnownDisplayName);
+        Assert.Equal(0, localProviderOnly.ResolveCount);
+    }
+
+    [Theory]
+    [InlineData(WallpaperContentKind.Scene, "Workshop scene")]
+    [InlineData(WallpaperContentKind.Web, "Workshop web wallpaper")]
+    public async Task ApplyCanonicalizesDynamicProjectAndForwardsItToRuntime(
+        WallpaperContentKind contentKind,
+        string displayName)
+    {
+        var mediaId = Guid.CreateVersion7();
+        var source = new ControllableProjectSourceProvider(contentKind, displayName);
+        var media = new MediaReference
+        {
+            MediaId = mediaId,
+            SourceKind = source.SourceKind,
+            SourceIdentifier = "424242",
+            LastKnownContentKind = WallpaperContentKind.Unknown,
+            LastKnownDisplayName = "Older cached name",
+        };
+        var profile = WallpaperProfile.CreateDefault() with { MediaId = mediaId };
+        var draft = new SettingsV3
+        {
+            Profiles = [profile],
+            MediaCatalog = [media],
+            RegionBindings = new Dictionary<SemanticRegion, Guid>
+            {
+                [SemanticRegion.Global] = profile.ProfileId,
+            },
+            AcceptedCdpRisk = true,
+        }.CreateSnapshot();
+        var repository = new ControllableSettingsRepository(SettingsV3.CreateDefault());
+        var runtime = new ControllableRuntime();
+        await using var coordinator = new WallpaperWorkspaceCoordinator(
+            repository,
+            runtime,
+            new WallpaperSourceProviderRegistry([source]),
+            ownsSettingsRepository: false,
+            ownsRuntime: false);
+        await coordinator.InitializeAsync().WaitAsync(TestTimeout);
+
+        coordinator.ReplaceDraft(draft);
+        var result = await coordinator.ApplyAsync().WaitAsync(TestTimeout);
+
+        Assert.Equal(RuntimeActivationOutcome.MediaActive, result.Outcome);
+        var request = Assert.Single(runtime.Requests);
+        var canonical = Assert.Single(request.SettingsSnapshot.MediaCatalog);
+        Assert.Equal(mediaId, canonical.MediaId);
+        Assert.Equal(contentKind, canonical.LastKnownContentKind);
+        Assert.Equal(MediaKind.None, canonical.LastKnownKind);
+        Assert.Equal(displayName, canonical.LastKnownDisplayName);
+        Assert.Equal("424242", canonical.SourceIdentifier);
+        Assert.Equal(mediaId, Assert.Single(request.SettingsSnapshot.RecentMediaIds));
+        Assert.Equal(1, source.ResolveCount);
+        Assert.Equal(0, source.AcquireCount);
+    }
+
+    [Fact]
+    public async Task ApplyRejectsAProjectWhoseResolvedKindChangedAfterPrivacyAuthorization()
+    {
+        var mediaId = Guid.CreateVersion7();
+        var source = new ControllableProjectSourceProvider(
+            WallpaperContentKind.Web,
+            "Changed to Web");
+        var media = new MediaReference
+        {
+            MediaId = mediaId,
+            SourceKind = source.SourceKind,
+            SourceIdentifier = "424242",
+            LastKnownContentKind = WallpaperContentKind.Scene,
+            LastKnownDisplayName = "Authorized scene",
+        };
+        var profile = WallpaperProfile.CreateDefault() with { MediaId = mediaId };
+        var draft = new SettingsV3
+        {
+            Profiles = [profile],
+            MediaCatalog = [media],
+            RegionBindings = new Dictionary<SemanticRegion, Guid>
+            {
+                [SemanticRegion.Global] = profile.ProfileId,
+            },
+            AcceptedCdpRisk = true,
+        }.CreateSnapshot();
+        var authorizedResolution = new WallpaperSourceResolution(
+            media,
+            new WallpaperSourceDescriptor(
+                media.SourceKind,
+                media.SourceIdentifier,
+                "Authorized scene",
+                WallpaperContentKind.Scene,
+                WallpaperDeliveryKind.WallpaperEngineWindow,
+                WallpaperDeliveryCapabilities.DynamicFrames),
+            directMediaMetadata: null);
+        var repository = new ControllableSettingsRepository(SettingsV3.CreateDefault());
+        var runtime = new ControllableRuntime();
+        await using var coordinator = new WallpaperWorkspaceCoordinator(
+            repository,
+            runtime,
+            new WallpaperSourceProviderRegistry([source]),
+            ownsSettingsRepository: false,
+            ownsRuntime: false);
+        await coordinator.InitializeAsync().WaitAsync(TestTimeout);
+        coordinator.ReplaceDraft(draft);
+
+        var result = await coordinator
+            .ApplyAsync(
+                RuntimeLaunchMode.ManualApply,
+                authorizedResolution,
+                CancellationToken.None)
+            .WaitAsync(TestTimeout);
+
+        Assert.Equal(RuntimeActivationOutcome.Failed, result.Outcome);
+        Assert.Equal(0, repository.SaveCount);
+        Assert.Empty(runtime.Requests);
+    }
+
+    [Fact]
     public async Task NewApplyReplacesPendingAndOnlyLatestPendingRuns()
     {
-        var repository = new ControllableSettingsRepository(SettingsV2.CreateDefault());
+        var repository = new ControllableSettingsRepository(SettingsV3.CreateDefault());
         var runtime = new ControllableRuntime();
         var provider = new ControllableSourceProvider();
         var firstPreflight = new AsyncCheckpoint();
@@ -52,7 +206,7 @@ public sealed class WallpaperWorkspaceCoordinatorTests
     [Fact]
     public async Task RunningApplyExitsBeforeReplacementTouchesRuntime()
     {
-        var repository = new ControllableSettingsRepository(SettingsV2.CreateDefault());
+        var repository = new ControllableSettingsRepository(SettingsV3.CreateDefault());
         var runtime = new ControllableRuntime();
         var provider = new ControllableSourceProvider();
         var firstRuntime = new AsyncCheckpoint();
@@ -103,7 +257,7 @@ public sealed class WallpaperWorkspaceCoordinatorTests
     [Fact]
     public async Task SupersededSaveCommitUpdatesDesiredButDoesNotActivate()
     {
-        var repository = new ControllableSettingsRepository(SettingsV2.CreateDefault());
+        var repository = new ControllableSettingsRepository(SettingsV3.CreateDefault());
         var runtime = new ControllableRuntime();
         var provider = new ControllableSourceProvider();
         var firstSave = new AsyncCheckpoint();
@@ -170,7 +324,7 @@ public sealed class WallpaperWorkspaceCoordinatorTests
         Assert.Equal("after rename", ProfileName(coordinator.State.ActiveSnapshot!));
         Assert.Equal("after rename", ProfileName(runtime.ActiveSnapshot!));
         Assert.True(
-            SettingsV2Comparer.DurableEquals(
+            SettingsV3Comparer.DurableEquals(
                 coordinator.State.SavedDesired,
                 coordinator.State.ActiveSnapshot!));
     }
@@ -178,7 +332,7 @@ public sealed class WallpaperWorkspaceCoordinatorTests
     [Fact]
     public async Task EmptyProfileSkipsRiskAndPreflightAndActivatesOfficial()
     {
-        var official = SettingsV2.CreateDefault();
+        var official = SettingsV3.CreateDefault();
         var repository = new ControllableSettingsRepository(official);
         var runtime = new ControllableRuntime();
         var provider = new ControllableSourceProvider();
@@ -205,7 +359,7 @@ public sealed class WallpaperWorkspaceCoordinatorTests
     [Fact]
     public async Task StaleRuntimeSuccessCannotPublishOverNewerRevision()
     {
-        var repository = new ControllableSettingsRepository(SettingsV2.CreateDefault());
+        var repository = new ControllableSettingsRepository(SettingsV3.CreateDefault());
         var runtime = new ControllableRuntime();
         var provider = new ControllableSourceProvider();
         var firstRuntime = new AsyncCheckpoint();
@@ -246,7 +400,7 @@ public sealed class WallpaperWorkspaceCoordinatorTests
     [Fact]
     public async Task CancelStopsRunningApplyWithoutSavingOrRestoringOfficial()
     {
-        var initial = SettingsV2.CreateDefault();
+        var initial = SettingsV3.CreateDefault();
         var repository = new ControllableSettingsRepository(initial);
         var runtime = new ControllableRuntime();
         var provider = new ControllableSourceProvider();
@@ -268,7 +422,7 @@ public sealed class WallpaperWorkspaceCoordinatorTests
         Assert.Equal(0, repository.SaveCount);
         Assert.Empty(runtime.Requests);
         Assert.True(
-            SettingsV2Comparer.DurableEquals(
+            SettingsV3Comparer.DurableEquals(
                 initial,
                 coordinator.State.SavedDesired));
         Assert.Equal(
@@ -279,7 +433,7 @@ public sealed class WallpaperWorkspaceCoordinatorTests
     [Fact]
     public async Task CancelRemovesPendingImmediatelyAndCleansACompletedRunningMutation()
     {
-        var repository = new ControllableSettingsRepository(SettingsV2.CreateDefault());
+        var repository = new ControllableSettingsRepository(SettingsV3.CreateDefault());
         var runtime = new ControllableRuntime();
         var provider = new ControllableSourceProvider();
         var runningRuntime = new AsyncCheckpoint();
@@ -458,7 +612,7 @@ public sealed class WallpaperWorkspaceCoordinatorTests
     public async Task HundredRapidAppliesEndAtLastSnapshotWithAtMostOneLease()
     {
         const int submissionCount = 100;
-        var repository = new ControllableSettingsRepository(SettingsV2.CreateDefault());
+        var repository = new ControllableSettingsRepository(SettingsV3.CreateDefault());
         var runtime = new ControllableRuntime();
         var provider = new ControllableSourceProvider();
         var firstRuntime = new AsyncCheckpoint();
@@ -514,7 +668,7 @@ public sealed class WallpaperWorkspaceCoordinatorTests
         return coordinator;
     }
 
-    private static SettingsV2 CreateMediaSettings(string name, int pathMarker)
+    private static SettingsV3 CreateMediaSettings(string name, int pathMarker)
     {
         var media = new MediaReference
         {
@@ -527,7 +681,7 @@ public sealed class WallpaperWorkspaceCoordinatorTests
         {
             MediaId = media.MediaId,
         };
-        return new SettingsV2
+        return new SettingsV3
         {
             Profiles = new ReadOnlyCollection<WallpaperProfile>([profile]),
             MediaCatalog = new ReadOnlyCollection<MediaReference>([media]),
@@ -540,7 +694,7 @@ public sealed class WallpaperWorkspaceCoordinatorTests
         }.CreateSnapshot();
     }
 
-    private static SettingsV2 RenameGlobalProfile(SettingsV2 settings, string name)
+    private static SettingsV3 RenameGlobalProfile(SettingsV3 settings, string name)
     {
         var globalId = settings.RegionBindings[SemanticRegion.Global];
         return (settings with
@@ -555,7 +709,7 @@ public sealed class WallpaperWorkspaceCoordinatorTests
         }).CreateSnapshot();
     }
 
-    private static string ProfileName(SettingsV2 settings) =>
+    private static string ProfileName(SettingsV3 settings) =>
         settings.ResolveProfile(SemanticRegion.Global).Name;
 
     private static TaskCompletionSource NewCompletionSource() =>
@@ -575,11 +729,11 @@ public sealed class WallpaperWorkspaceCoordinatorTests
     }
 
     private sealed class ControllableSettingsRepository(
-        SettingsV2 initialSettings) : ISettingsRepository
+        SettingsV3 initialSettings) : ISettingsRepository
     {
-        private SettingsV2 _stored = initialSettings.CreateSnapshot();
+        private SettingsV3 _stored = initialSettings.CreateSnapshot();
 
-        internal Func<int, SettingsV2, CancellationToken, Task>? BeforeSaveAsync
+        internal Func<int, SettingsV3, CancellationToken, Task>? BeforeSaveAsync
         {
             get;
             set;
@@ -591,6 +745,8 @@ public sealed class WallpaperWorkspaceCoordinatorTests
 
         public bool HasVersion1Backup => false;
 
+        public bool HasVersion2Backup => false;
+
         public Task<SettingsLoadResult> LoadAsync(
             CancellationToken cancellationToken = default)
         {
@@ -599,8 +755,8 @@ public sealed class WallpaperWorkspaceCoordinatorTests
                 new SettingsLoadResult.Ready(_stored.CreateSnapshot(), false));
         }
 
-        public async Task<SettingsV2> SaveAsync(
-            SettingsV2 settings,
+        public async Task<SettingsV3> SaveAsync(
+            SettingsV3 settings,
             CancellationToken cancellationToken = default)
         {
             var call = ++SaveCount;
@@ -622,16 +778,16 @@ public sealed class WallpaperWorkspaceCoordinatorTests
                 new SettingsLoadResult.Ready(_stored.CreateSnapshot(), false));
         }
 
-        public Task<SettingsV2> ResetAsync(
+        public Task<SettingsV3> ResetAsync(
             CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (ResetException is not null)
             {
-                return Task.FromException<SettingsV2>(ResetException);
+                return Task.FromException<SettingsV3>(ResetException);
             }
 
-            _stored = SettingsV2.CreateDefault();
+            _stored = SettingsV3.CreateDefault();
             return Task.FromResult(_stored.CreateSnapshot());
         }
 
@@ -705,10 +861,59 @@ public sealed class WallpaperWorkspaceCoordinatorTests
                 "The workspace preflight provider must not acquire runtime leases.");
     }
 
+    private sealed class ControllableProjectSourceProvider(
+        WallpaperContentKind contentKind,
+        string displayName) : IWallpaperEngineProjectSourceProvider
+    {
+        public MediaSourceKind SourceKind =>
+            MediaSourceKind.WallpaperEngineWorkshopProject;
+
+        public int ResolveCount { get; private set; }
+
+        public int AcquireCount { get; private set; }
+
+        public ValueTask<IReadOnlyList<WallpaperSourceDescriptor>> DiscoverAsync(
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return ValueTask.FromResult<IReadOnlyList<WallpaperSourceDescriptor>>([]);
+        }
+
+        public ValueTask<WallpaperSourceResolution> ResolveAsync(
+            MediaReference reference,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            ResolveCount++;
+            var canonical = reference.Snapshot();
+            return ValueTask.FromResult(
+                new WallpaperSourceResolution(
+                    canonical,
+                    new WallpaperSourceDescriptor(
+                        SourceKind,
+                        canonical.SourceIdentifier,
+                        displayName,
+                        contentKind,
+                        WallpaperDeliveryKind.WallpaperEngineWindow,
+                        WallpaperDeliveryCapabilities.DynamicFrames),
+                    directMediaMetadata: null));
+        }
+
+        public ValueTask<IWallpaperEngineProjectLease> AcquireProjectLeaseAsync(
+            MediaReference reference,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            AcquireCount++;
+            throw new InvalidOperationException(
+                "Workspace canonicalization must not acquire the runtime project lease.");
+        }
+    }
+
     private sealed class ControllableRuntime : IWallpaperRuntime
     {
         private readonly List<RuntimeActivationRequest> _requests = [];
-        private SettingsV2? _activeSnapshot;
+        private SettingsV3? _activeSnapshot;
         private WallpaperRuntimeSurface _surface;
         private WallpaperRuntimeStatusChangedEventArgs _status =
             new(WallpaperRuntimePhase.Idle, "Idle.");
@@ -716,7 +921,7 @@ public sealed class WallpaperWorkspaceCoordinatorTests
         private int _concurrentActivations;
 
         internal ControllableRuntime(
-            SettingsV2? initialActiveSnapshot = null,
+            SettingsV3? initialActiveSnapshot = null,
             long initialGeneration = 0)
         {
             if (initialActiveSnapshot is null)
@@ -781,7 +986,7 @@ public sealed class WallpaperWorkspaceCoordinatorTests
 
         public WallpaperRuntimeSurface Surface => _surface;
 
-        public SettingsV2? ActiveSnapshot => _activeSnapshot?.CreateSnapshot();
+        public SettingsV3? ActiveSnapshot => _activeSnapshot?.CreateSnapshot();
 
         public async Task<RuntimeActivationResult> ActivateAsync(
             RuntimeActivationRequest request,
@@ -865,7 +1070,7 @@ public sealed class WallpaperWorkspaceCoordinatorTests
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (_activeSnapshot is null ||
-                !SettingsV2Comparer.RuntimeEquivalent(
+                !SettingsV3Comparer.RuntimeEquivalent(
                     _activeSnapshot,
                     request.SettingsSnapshot))
             {

@@ -18,6 +18,7 @@ public sealed record WallpaperProfileCardItem
     internal WallpaperProfileCardItem(
         Guid profileId,
         string name,
+        string displayName,
         Guid? mediaId,
         MediaReference? mediaReference,
         string? previewPath,
@@ -30,6 +31,7 @@ public sealed record WallpaperProfileCardItem
     {
         ProfileId = profileId;
         Name = name;
+        DisplayName = displayName;
         MediaId = mediaId;
         _mediaReference = mediaReference?.Snapshot();
         PreviewPath = previewPath;
@@ -44,6 +46,8 @@ public sealed record WallpaperProfileCardItem
     public Guid ProfileId { get; }
 
     public string Name { get; }
+
+    public string DisplayName { get; }
 
     public Guid? MediaId { get; }
 
@@ -95,17 +99,19 @@ public sealed class WallpaperProfileCardProjection
         _previewMedia = previewMedia ?? AppWallpaperSources.Preview;
     }
 
-    public IReadOnlyList<WallpaperProfileCardItem> CreateItems(SettingsV2 settings)
+    public IReadOnlyList<WallpaperProfileCardItem> CreateItems(SettingsV3 settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
         var snapshot = settings.CreateSnapshot();
 
         var mediaById = snapshot.MediaCatalog.ToDictionary(media => media.MediaId);
         var availabilityByMediaId = new Dictionary<Guid, bool>();
+        var globalProfileId = snapshot.RegionBindings[SemanticRegion.Global];
         var items = snapshot.Profiles
             .Select(
                 profile => CreateItem(
                     profile,
+                    profile.ProfileId == globalProfileId,
                     mediaById,
                     availabilityByMediaId))
             .ToArray();
@@ -114,14 +120,20 @@ public sealed class WallpaperProfileCardProjection
 
     private WallpaperProfileCardItem CreateItem(
         WallpaperProfile profile,
+        bool isGlobalProfile,
         Dictionary<Guid, MediaReference> mediaById,
         Dictionary<Guid, bool> availabilityByMediaId)
     {
+        var displayName = isGlobalProfile &&
+            string.Equals(profile.Name, "Global", StringComparison.Ordinal)
+                ? _text.GetStringOrFallback("Profile_DefaultName", "Default")
+                : profile.Name;
         if (profile.MediaId is not { } mediaId)
         {
             var official = _text.GetStringOrFallback("Profile_Official", "Official background");
             return CreateCard(
                 profile,
+                displayName,
                 mediaId: null,
                 mediaReference: null,
                 previewPath: null,
@@ -152,6 +164,7 @@ public sealed class WallpaperProfileCardProjection
 
         return CreateCard(
             profile,
+            displayName,
             mediaId,
             media,
             previewPath,
@@ -178,6 +191,7 @@ public sealed class WallpaperProfileCardProjection
 
     private WallpaperProfileCardItem CreateCard(
         WallpaperProfile profile,
+        string displayName,
         Guid? mediaId,
         MediaReference? mediaReference,
         string? previewPath,
@@ -189,16 +203,17 @@ public sealed class WallpaperProfileCardProjection
         var automationName = FormatLocalized(
             "Profile_AutomationName",
             "{0}, {1}",
-            profile.Name,
+            displayName,
             subtitle);
         var actionsAutomationName = FormatLocalized(
             "Profile_ActionsAutomationName",
             "More actions for {0}",
-            profile.Name);
+            displayName);
 
         return new WallpaperProfileCardItem(
             profile.ProfileId,
             profile.Name,
+            displayName,
             mediaId,
             mediaReference,
             previewPath,

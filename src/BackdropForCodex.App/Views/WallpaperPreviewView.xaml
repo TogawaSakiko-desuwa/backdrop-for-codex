@@ -202,7 +202,7 @@
                          TextAlignment="Center"
                          TextWrapping="Wrap" />
               <TextBlock Margin="0,8,0,0"
-                         Text="{localization:Loc Preview_Unavailable_Message, Fallback='This source needs a provider or renderer that is not connected yet.'}"
+                     Text="{localization:Loc Preview_Unavailable_Message, Fallback='This source cannot be previewed here. You can still apply it after safety checks pass.'}"
                          Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                          TextAlignment="Center"
                          TextWrapping="Wrap" />
@@ -503,6 +503,31 @@
                          FontWeight="SemiBold"
                          Text="{Binding SelectedMediaName}"
                          TextTrimming="CharacterEllipsis" />
+            </StackPanel>
+          </Border>
+
+          <Border x:Name="StaticPreviewPill"
+                  HorizontalAlignment="Right"
+                  VerticalAlignment="Bottom"
+                  Margin="16"
+                  Padding="10,6"
+                  CornerRadius="7"
+                  BorderThickness="0"
+                  Background="#D911161B"
+                  Visibility="Collapsed"
+                  IsHitTestVisible="False"
+                  AutomationProperties.Name="{localization:Loc Source_StaticPreview, Fallback='Static preview'}"
+                  AutomationProperties.HelpText="{localization:Loc Source_StaticPreviewHint, Fallback='This is the project thumbnail, not the live Wallpaper Engine output.'}">
+            <StackPanel Orientation="Horizontal">
+              <ui:SymbolIcon Symbol="Image24"
+                             FontSize="14"
+                             Foreground="White"
+                             VerticalAlignment="Center" />
+              <TextBlock Margin="6,0,0,0"
+                         Text="{localization:Loc Source_StaticPreview, Fallback='Static preview'}"
+                         Foreground="White"
+                         FontWeight="SemiBold"
+                         VerticalAlignment="Center" />
             </StackPanel>
           </Border>
 

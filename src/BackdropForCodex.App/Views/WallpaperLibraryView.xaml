@@ -14,6 +14,93 @@
       <ResourceDictionary.MergedDictionaries>
         <ResourceDictionary Source="/BackdropForCodex;component/Themes/WorkbenchTheme.xaml" />
       </ResourceDictionary.MergedDictionaries>
+
+      <Style x:Key="WallpaperEngineRailStatusTextStyle"
+             TargetType="TextBlock"
+             BasedOn="{StaticResource WorkbenchCaptionTextStyle}">
+        <Setter Property="Text"
+                Value="{localization:Loc Source_NotLoaded, Fallback='Not loaded'}" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        <Setter Property="TextWrapping" Value="NoWrap" />
+        <Style.Triggers>
+          <DataTrigger Binding="{Binding WallpaperEngineAvailability, ElementName=Root}"
+                       Value="Ready">
+            <Setter Property="Text"
+                    Value="{localization:Loc Source_Ready, Fallback=Ready}" />
+          </DataTrigger>
+          <DataTrigger Binding="{Binding WallpaperEngineAvailability, ElementName=Root}"
+                       Value="Refreshing">
+            <Setter Property="Text"
+                    Value="{localization:Loc Source_Refreshing, Fallback=Refreshing}" />
+          </DataTrigger>
+          <DataTrigger Binding="{Binding WallpaperEngineAvailability, ElementName=Root}"
+                       Value="NotInstalled">
+            <Setter Property="Text"
+                    Value="{localization:Loc Source_NotInstalled, Fallback='Not installed'}" />
+          </DataTrigger>
+          <DataTrigger Binding="{Binding WallpaperEngineAvailability, ElementName=Root}"
+                       Value="InstallationSelectionRequired">
+            <Setter Property="Text"
+                    Value="{localization:Loc Source_InstallationSelectionRequiredShort, Fallback='Choose installation'}" />
+          </DataTrigger>
+          <DataTrigger Binding="{Binding WallpaperEngineAvailability, ElementName=Root}"
+                       Value="InstallationSelectionInvalid">
+            <Setter Property="Text"
+                    Value="{localization:Loc Source_InstallationSelectionInvalidShort, Fallback='Installation invalid'}" />
+          </DataTrigger>
+          <DataTrigger Binding="{Binding WallpaperEngineAvailability, ElementName=Root}"
+                       Value="InstallationSelectionFailed">
+            <Setter Property="Text"
+                    Value="{localization:Loc Source_InstallationSelectionFailedShort, Fallback='Choice not saved'}" />
+          </DataTrigger>
+          <DataTrigger Binding="{Binding WallpaperEngineAvailability, ElementName=Root}"
+                       Value="Stale">
+            <Setter Property="Text"
+                    Value="{localization:Loc Source_Stale, Fallback='Refresh required'}" />
+          </DataTrigger>
+          <DataTrigger Binding="{Binding WallpaperEngineAvailability, ElementName=Root}"
+                       Value="RendererUnavailable">
+            <Setter Property="Text"
+                Value="{localization:Loc Source_RendererUnavailable, Fallback='Live playback unavailable'}" />
+          </DataTrigger>
+          <MultiDataTrigger>
+            <MultiDataTrigger.Conditions>
+              <Condition Binding="{Binding HasSourceDiscoveryFailures, ElementName=Root}"
+                         Value="True" />
+              <Condition Binding="{Binding WallpaperEngineAvailability, ElementName=Root}"
+                         Value="Ready" />
+            </MultiDataTrigger.Conditions>
+            <Setter Property="Text"
+                    Value="{localization:Loc Source_Stale, Fallback='Refresh required'}" />
+          </MultiDataTrigger>
+        </Style.Triggers>
+      </Style>
+
+      <Style x:Key="WallpaperEngineStatusDotStyle" TargetType="Ellipse">
+        <Setter Property="Fill" Value="{DynamicResource TextFillColorDisabledBrush}" />
+        <Style.Triggers>
+          <DataTrigger Binding="{Binding WallpaperEngineAvailability, ElementName=Root}"
+                       Value="Ready">
+            <Setter Property="Fill" Value="{DynamicResource SystemFillColorSuccessBrush}" />
+          </DataTrigger>
+          <DataTrigger Binding="{Binding IsWallpaperEngineRefreshing, ElementName=Root}"
+                       Value="True">
+            <Setter Property="Fill" Value="{DynamicResource AccentFillColorDefaultBrush}" />
+          </DataTrigger>
+          <DataTrigger Binding="{Binding HasSourceDiscoveryFailures, ElementName=Root}"
+                       Value="True">
+            <Setter Property="Fill" Value="{DynamicResource SystemFillColorCautionBrush}" />
+          </DataTrigger>
+          <DataTrigger Binding="{Binding WallpaperEngineAvailability, ElementName=Root}"
+                       Value="NotInstalled">
+            <Setter Property="Fill" Value="{DynamicResource TextFillColorDisabledBrush}" />
+          </DataTrigger>
+          <DataTrigger Binding="{Binding WallpaperEngineAvailability, ElementName=Root}"
+                       Value="RendererUnavailable">
+            <Setter Property="Fill" Value="{DynamicResource SystemFillColorCautionBrush}" />
+          </DataTrigger>
+        </Style.Triggers>
+      </Style>
     </ResourceDictionary>
   </UserControl.Resources>
 
@@ -74,14 +161,107 @@
             <ui:SymbolIcon Symbol="FolderOpen24" />
           </ui:Button>
 
-          <views:WallpaperSourcesSection x:Name="SourcesSection"
-                                         SourceItemsSource="{Binding SourceItemsSource, ElementName=Root}"
-                                         SelectedSource="{Binding SelectedSource, ElementName=Root, Mode=TwoWay}"
-                                         HasDiscoveryFailures="{Binding HasSourceDiscoveryFailures, ElementName=Root}"
-                                         RefreshSourcesCommand="{Binding RefreshSourcesCommand, ElementName=Root}"
-                                         CanChooseSources="{Binding CanChooseMedia, ElementName=Root}"
-                                         IsCompact="{Binding IsCompact, ElementName=Root}"
-                                         SourceInvoked="SourcesSection_SourceInvoked" />
+          <Grid Margin="4,8,4,0">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="32" />
+            </Grid.ColumnDefinitions>
+            <ui:Button x:Name="ExpandedWallpaperEngineButton"
+                       Grid.ColumnSpan="2"
+                       MinHeight="52"
+                       Padding="10,6,40,6"
+                       Style="{DynamicResource WorkbenchRailActionButtonStyle}"
+                  ToolTip="{localization:Loc Source_LibraryHint, Fallback='Browse installed Wallpaper Engine projects. Scene and Web require Wallpaper Engine to be running and may play sound through it.'}"
+                       AutomationProperties.Name="{localization:Loc Source_LibraryTitle, Fallback='Wallpaper Engine'}"
+                  AutomationProperties.HelpText="{localization:Loc Source_LibraryHint, Fallback='Browse installed Wallpaper Engine projects. Scene and Web require Wallpaper Engine to be running and may play sound through it.'}"
+                       Click="WallpaperEngineLibrary_Click">
+              <Grid>
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="32" />
+                  <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Grid Width="32" Height="32">
+                  <Border Background="{DynamicResource ControlFillColorTertiaryBrush}"
+                          CornerRadius="{DynamicResource WorkbenchRadius8}">
+                    <ui:SymbolIcon Symbol="Library24"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center" />
+                  </Border>
+                  <Ellipse Width="8"
+                           Height="8"
+                           Margin="0,0,-2,-2"
+                           HorizontalAlignment="Right"
+                           VerticalAlignment="Bottom"
+                           Stroke="{DynamicResource LayerFillColorDefaultBrush}"
+                           StrokeThickness="2"
+                           Style="{StaticResource WallpaperEngineStatusDotStyle}" />
+                </Grid>
+                <StackPanel Grid.Column="1"
+                            Margin="8,0,0,0"
+                            VerticalAlignment="Center">
+                  <TextBlock Text="{localization:Loc Source_LibraryTitle, Fallback='Wallpaper Engine'}"
+                             FontWeight="SemiBold"
+                             TextTrimming="CharacterEllipsis" />
+                  <Grid Margin="0,2,0,0">
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="Auto" />
+                      <ColumnDefinition Width="12" />
+                      <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Style="{StaticResource WorkbenchCaptionTextStyle}"
+                               TextWrapping="NoWrap">
+                      <Run Text="{Binding WallpaperEngineProjectCount, ElementName=Root}" />
+                      <Run Text="{localization:Loc Source_ProjectCountSuffix, Fallback=' projects'}" />
+                    </TextBlock>
+                    <Border Grid.Column="1"
+                            Width="2"
+                            Height="2"
+                            Background="{DynamicResource TextFillColorSecondaryBrush}"
+                            CornerRadius="1"
+                            VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="2"
+                               Style="{StaticResource WallpaperEngineRailStatusTextStyle}" />
+                  </Grid>
+                </StackPanel>
+              </Grid>
+            </ui:Button>
+            <ui:Button x:Name="ExpandedWallpaperEngineRefreshButton"
+                       Grid.Column="1"
+                       Width="28"
+                       Height="28"
+                       Padding="0"
+                       Margin="0,0,4,0"
+                       VerticalAlignment="Center"
+                       Style="{DynamicResource WorkbenchIconButtonStyle}"
+                       Command="{Binding RefreshSourcesCommand, ElementName=Root}"
+                       ToolTip="{localization:Loc Action_Refresh, Fallback=Refresh}"
+                       AutomationProperties.Name="{localization:Loc Action_Refresh, Fallback=Refresh}">
+              <ui:SymbolIcon Symbol="ArrowClockwise24" FontSize="15" />
+            </ui:Button>
+          </Grid>
+
+          <ui:Button x:Name="CompactWallpaperEngineButton"
+                     Width="40"
+                     Height="40"
+                     Margin="4,8,4,0"
+                     Padding="0"
+                     Visibility="Collapsed"
+                     Style="{DynamicResource WorkbenchIconButtonStyle}"
+                     ToolTip="{localization:Loc Source_LibraryTitle, Fallback='Wallpaper Engine'}"
+                     AutomationProperties.Name="{localization:Loc Source_LibraryTitle, Fallback='Wallpaper Engine'}"
+                     Click="WallpaperEngineLibrary_Click">
+            <Grid Width="24" Height="24">
+              <ui:SymbolIcon Symbol="Library24" />
+              <Ellipse Width="8"
+                       Height="8"
+                       Margin="0,0,-3,-3"
+                       HorizontalAlignment="Right"
+                       VerticalAlignment="Bottom"
+                       Stroke="{DynamicResource LayerFillColorDefaultBrush}"
+                       StrokeThickness="2"
+                       Style="{StaticResource WallpaperEngineStatusDotStyle}" />
+            </Grid>
+          </ui:Button>
 
           <views:WallpaperRecentsSection x:Name="RecentsSection"
                                          RecentItemsSource="{Binding RecentItemsSource, ElementName=Root}"

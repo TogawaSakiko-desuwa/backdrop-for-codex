@@ -1,4 +1,5 @@
 using BackdropForCodex.Core.Codex;
+using BackdropForCodex.Core.Dynamic;
 
 namespace BackdropForCodex.Core.Injection;
 
@@ -13,6 +14,8 @@ public static class InjectionScriptBuilder
     public const string StyleElementId = InjectionOwnershipContract.StyleElementId;
     public const string FileInputElementId = InjectionOwnershipContract.FileInputElementId;
     public const string StateProperty = InjectionOwnershipContract.StateProperty;
+    public const string PendingStreamStateProperty =
+        InjectionOwnershipContract.PendingStreamStateProperty;
 
     public static readonly TimeSpan HeartbeatInterval =
         InjectionLifecycleScriptModule.HeartbeatInterval;
@@ -30,6 +33,30 @@ public static class InjectionScriptBuilder
 
     public static string BuildActivateMedia(long generation) =>
         InjectionMediaScriptModule.BuildActivateMedia(generation);
+
+    public static string BuildPrepareEncodedStream(
+        DynamicWallpaperInjectionOptions options,
+        EncodedWallpaperStreamDescriptor descriptor) =>
+        EncodedStreamInjectionScriptModule.BuildPrepare(
+            options,
+            descriptor,
+            PresentationContractCatalog.CreateFullySupportedCapabilities());
+
+    internal static string BuildPrepareEncodedStream(
+        DynamicWallpaperInjectionOptions options,
+        EncodedWallpaperStreamDescriptor descriptor,
+        CompatibilityCapabilities capabilities) =>
+        EncodedStreamInjectionScriptModule.BuildPrepare(options, descriptor, capabilities);
+
+    public static string BuildAppendEncodedStream(
+        EncodedWallpaperSegment segment) =>
+        EncodedStreamInjectionScriptModule.BuildAppend(segment);
+
+    public static string BuildCleanupEncodedStream(long generation) =>
+        EncodedStreamInjectionScriptModule.BuildCleanup(generation);
+
+    public static string BuildSetEncodedStreamPaused(long generation, bool paused) =>
+        EncodedStreamInjectionScriptModule.BuildSetPaused(generation, paused);
 
     public static string BuildCapabilityDowngrade(
         long generation,

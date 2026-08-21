@@ -42,7 +42,7 @@ public sealed class WorkbenchThemeRegressionTests
                     var profile = fixture.ViewModel.ProfileCards[0];
                     var profileText = FindVisualElement<TextBlock>(
                         profileList,
-                        element => element.Text == profile.Name);
+                        element => element.Text == profile.DisplayName);
                     var chooseMedia = FindVisualElement<Wpf.Ui.Controls.Button>(
                         window,
                         element => element.Name == "ExpandedChooseMediaButton");

@@ -3,8 +3,14 @@ using System.Text.Json;
 
 namespace BackdropForCodex.Core.Injection;
 
+/// <summary>
+/// Resolves reviewed style capabilities and emits monotonic, ownership-checked downgrades for an
+/// installed generation.
+/// </summary>
 internal static class InjectionStyleScriptModule
 {
+    // Optional blocks are delimited so a capability downgrade can remove only the affected rules
+    // without regenerating the global baseline or disturbing unrelated page styles.
     private const string GlassStartMarker = "/* codex-wallpaper-glass:start */";
     private const string GlassEndMarker = "/* codex-wallpaper-glass:end */";
     private const string AdvancedStartMarker = "/* codex-wallpaper-advanced:start */";
@@ -32,6 +38,8 @@ internal static class InjectionStyleScriptModule
     {
         InjectionMediaScriptModule.EnsureGeneration(generation);
         ArgumentNullException.ThrowIfNull(capabilities);
+        // Capability recovery requires a new generation. The exact style ownership guard keeps a
+        // stale observation from editing the replacement generation while removing optional rules.
         return $$"""
             (() => {
               "use strict";

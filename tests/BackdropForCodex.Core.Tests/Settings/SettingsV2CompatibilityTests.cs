@@ -6,7 +6,7 @@ using Xunit;
 
 namespace BackdropForCodex.Core.Tests.Settings;
 
-public sealed class SettingsV2CompatibilityTests
+public sealed class SettingsV2MigrationCompatibilityTests
 {
     private const string GoldenResourceSuffix =
         "Settings.Fixtures.settings-v1.3.5-schema2.json";
@@ -15,7 +15,37 @@ public sealed class SettingsV2CompatibilityTests
         CreateVersion135Options();
 
     [Fact]
-    public async Task Version135SchemaTwoGoldenFileIsBidirectionallyCompatible()
+    public void LegacyContractsExposeValidationAndMigrationSurfacesOnly()
+    {
+        var version1PublicMethods = typeof(SettingsV1)
+            .GetMethods(System.Reflection.BindingFlags.Public |
+                System.Reflection.BindingFlags.Static |
+                System.Reflection.BindingFlags.Instance |
+                System.Reflection.BindingFlags.DeclaredOnly)
+            .Select(method => method.Name)
+            .ToHashSet(StringComparer.Ordinal);
+        var version2PublicMethods = typeof(SettingsV2)
+            .GetMethods(System.Reflection.BindingFlags.Public |
+                System.Reflection.BindingFlags.Static |
+                System.Reflection.BindingFlags.Instance |
+                System.Reflection.BindingFlags.DeclaredOnly)
+            .Select(method => method.Name)
+            .ToHashSet(StringComparer.Ordinal);
+
+        Assert.DoesNotContain("CreateDefault", version1PublicMethods);
+        Assert.DoesNotContain("AddRecentMediaPath", version1PublicMethods);
+        Assert.DoesNotContain("RemoveRecentMediaPath", version1PublicMethods);
+        Assert.DoesNotContain("ClearRecentMediaPaths", version1PublicMethods);
+        Assert.DoesNotContain("CreateDefault", version2PublicMethods);
+        Assert.DoesNotContain("CreateSnapshot", version2PublicMethods);
+        Assert.Null(typeof(SettingsV1).Assembly.GetType(
+            "BackdropForCodex.Core.Settings.SettingsV1Projection"));
+        Assert.Null(typeof(SettingsV1).Assembly.GetType(
+            "BackdropForCodex.Core.Settings.SettingsProjectionException"));
+    }
+
+    [Fact]
+    public async Task Version135SchemaTwoGoldenFileMigratesOnceAndPreservesRawBackup()
     {
         var goldenBytes = ReadGoldenBytes();
         var version135 = JsonSerializer.Deserialize<Version135Settings>(
@@ -33,8 +63,12 @@ public sealed class SettingsV2CompatibilityTests
             await File.WriteAllBytesAsync(settingsPath, goldenBytes);
             using var repository = new SettingsRepository(settingsPath);
 
-            var loadedResult = await repository.LoadAsync();
-            var loaded = Assert.IsType<SettingsLoadResult.Ready>(loadedResult).Settings;
+            var loadedResult = Assert.IsType<SettingsLoadResult.Ready>(
+                await repository.LoadAsync());
+            Assert.False(loadedResult.MigratedFromVersion1);
+            Assert.True(loadedResult.MigratedFromVersion2);
+            var loaded = loadedResult.Settings;
+            Assert.Equal(SettingsV3.CurrentSchemaVersion, loaded.SchemaVersion);
 
             Assert.Equal(2, loaded.Profiles.Count);
             Assert.Equal(
@@ -60,45 +94,56 @@ public sealed class SettingsV2CompatibilityTests
             Assert.Equal(
                 "stable-v1.3.5-marker",
                 GetLastCompatibilityProfileId(loaded));
-
-            await repository.SaveAsync(loaded);
-            var version140Bytes = await File.ReadAllBytesAsync(settingsPath);
-
-            var readableByVersion135 =
-                JsonSerializer.Deserialize<Version135Settings>(
-                    version140Bytes,
-                    Version135Options);
-            Assert.NotNull(readableByVersion135);
-            Assert.Equal(version135.Profiles.Count, readableByVersion135.Profiles.Count);
-            Assert.Equal(
-                version135.LastCompatibilityProfileId,
-                readableByVersion135.LastCompatibilityProfileId);
-            Assert.Equal(2, readableByVersion135.MediaCatalog.Count);
             Assert.All(
-                readableByVersion135.Profiles,
-                profile => Assert.Equal(sharedMediaId, profile.MediaId));
-            Assert.Contains(
-                readableByVersion135.MediaCatalog,
-                media => media.MediaId == orphanMediaId);
+                loaded.MediaCatalog,
+                media =>
+                {
+                    Assert.False(string.IsNullOrWhiteSpace(media.LastKnownDisplayName));
+                    Assert.Equal(
+                        media.LastKnownKind == MediaKind.Image
+                            ? WallpaperContentKind.Image
+                            : WallpaperContentKind.Video,
+                        media.LastKnownContentKind);
+                });
 
-            var version135WriterBytes = JsonSerializer.SerializeToUtf8Bytes(
-                readableByVersion135,
-                Version135Options);
-            await File.WriteAllBytesAsync(settingsPath, version135WriterBytes);
+            var backupPath = Path.Combine(
+                directoryPath,
+                SettingsRepository.Version2BackupFileName);
+            Assert.True(repository.HasVersion2Backup);
+            Assert.Equal(goldenBytes, await File.ReadAllBytesAsync(backupPath));
+            Assert.True(File.GetAttributes(backupPath).HasFlag(FileAttributes.ReadOnly));
 
-            var roundTripped = Assert.IsType<SettingsLoadResult.Ready>(
-                await repository.LoadAsync()).Settings;
-            Assert.True(SettingsV2Comparer.DurableEquals(loaded, roundTripped));
+            var migratedBytes = await File.ReadAllBytesAsync(settingsPath);
+            Assert.Throws<JsonException>(
+                () => JsonSerializer.Deserialize<Version135Settings>(
+                    migratedBytes,
+                    Version135Options));
+
+            var secondLoad = Assert.IsType<SettingsLoadResult.Ready>(
+                await repository.LoadAsync());
+            Assert.False(secondLoad.MigratedFromVersion1);
+            Assert.False(secondLoad.MigratedFromVersion2);
+            Assert.True(SettingsV3Comparer.DurableEquals(loaded, secondLoad.Settings));
+            Assert.Equal(goldenBytes, await File.ReadAllBytesAsync(backupPath));
         }
         finally
         {
+            foreach (var filePath in Directory.EnumerateFiles(directoryPath))
+            {
+                var attributes = File.GetAttributes(filePath);
+                if ((attributes & FileAttributes.ReadOnly) != 0)
+                {
+                    File.SetAttributes(filePath, attributes & ~FileAttributes.ReadOnly);
+                }
+            }
+
             Directory.Delete(directoryPath, recursive: true);
         }
     }
 
     private static byte[] ReadGoldenBytes()
     {
-        var assembly = typeof(SettingsV2CompatibilityTests).Assembly;
+        var assembly = typeof(SettingsV2MigrationCompatibilityTests).Assembly;
         var resourceName = assembly
             .GetManifestResourceNames()
             .Single(name => name.EndsWith(
@@ -125,7 +170,7 @@ public sealed class SettingsV2CompatibilityTests
     }
 
 #pragma warning disable CS0618 // Compatibility test intentionally covers the deprecated field.
-    private static string? GetLastCompatibilityProfileId(SettingsV2 settings) =>
+    private static string? GetLastCompatibilityProfileId(SettingsV3 settings) =>
         settings.LastCompatibilityProfileId;
 #pragma warning restore CS0618
 

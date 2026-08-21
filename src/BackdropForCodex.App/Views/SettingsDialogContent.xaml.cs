@@ -55,7 +55,9 @@ public partial class SettingsDialogContent : UserControl
     {
         RiskStateText.Text = _viewModel.Editor.AcceptedCdpRisk
             ? _text.GetStringOrFallback("Risk_AcknowledgementSaved", "Acknowledgement saved")
-            : _text.GetStringOrFallback("Risk_Revoked", "Acknowledgement is not currently saved.");
+            : _text.GetStringOrFallback(
+                "Risk_NotAcknowledged",
+                "Not confirmed. You will be asked before enhanced launch.");
         RevokeRiskButton.IsEnabled =
             _viewModel.Editor.AcceptedCdpRisk &&
             _viewModel.CanEdit;

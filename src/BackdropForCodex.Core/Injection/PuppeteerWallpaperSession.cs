@@ -4,19 +4,44 @@ using System.Text.Json;
 
 namespace BackdropForCodex.Core.Injection;
 
+/// <summary>
+/// Controls the generation-scoped lifetime of a wallpaper installed into an already verified
+/// Codex page. A session owns only its injected resources and CDP connection; stopping or
+/// disposing it never closes the Codex-owned browser.
+/// </summary>
 public interface IWallpaperInjectionSession : IAsyncDisposable
 {
+    /// <summary>
+    /// Gets whether an applied generation is connected and being maintained by its heartbeat.
+    /// </summary>
     bool IsActive { get; }
 
+    /// <summary>
+    /// Gets the current or retained generation identity. A nonzero value may survive a fault or a
+    /// same-generation transport failure for health correlation and fail-closed compatibility.
+    /// </summary>
     long Generation { get; }
 
+    /// <summary>
+    /// Applies <paramref name="options"/> to the sole eligible work page exposed by
+    /// <paramref name="endpoint"/>. Reapplying the same generation preserves its fail-closed
+    /// compatibility decisions; a new generation establishes a new ownership boundary.
+    /// </summary>
     Task ApplyAsync(
         VerifiedCdpEndpoint endpoint,
         WallpaperInjectionOptions options,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Updates host pause intent for the active generation. The operation fails when no owned,
+    /// active page accepts the generation-scoped update.
+    /// </summary>
     Task SetPausedAsync(bool paused, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Removes session-owned page resources, stops lease maintenance, and disconnects the CDP
+    /// controller. Cleanup is idempotent and completes before cancellation is observed.
+    /// </summary>
     Task StopAsync(CancellationToken cancellationToken = default);
 }
 

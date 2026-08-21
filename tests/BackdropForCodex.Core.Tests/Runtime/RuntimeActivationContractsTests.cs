@@ -1,4 +1,5 @@
 using BackdropForCodex.Core.Media;
+using BackdropForCodex.Core.Dynamic;
 using BackdropForCodex.Core.Runtime;
 using BackdropForCodex.Core.Settings;
 using Xunit;
@@ -7,6 +8,61 @@ namespace BackdropForCodex.Core.Tests.Runtime;
 
 public sealed class RuntimeActivationContractsTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void RuntimeErrorPreservesAllowListedDynamicReasonWithoutLeakingWrapperDetails(
+        bool wrapException)
+    {
+        var dynamicFailure = new DynamicWallpaperUnavailableException(
+            DynamicWallpaperCapabilityReasonCode.FallbackRenderTierUnavailable,
+            new IOException(@"encoder failed for C:\private\wallpaper.mp4"));
+        Exception exception = wrapException
+            ? new InvalidOperationException(
+                @"pipeline failed for C:\private\wallpaper.mp4",
+                dynamicFailure)
+            : dynamicFailure;
+
+        var error = WallpaperRuntimeError.FromException("dynamic-failed", exception);
+
+        Assert.Equal("dynamic-failed", error.Code);
+        Assert.Equal(
+            DynamicWallpaperCapabilityReasonCode.FallbackRenderTierUnavailable,
+            error.DynamicReasonCode);
+        Assert.Equal(
+            "The 720p dynamic wallpaper tier could not sustain 15 frames per second.",
+            error.Message);
+        Assert.Equal(
+            typeof(DynamicWallpaperUnavailableException).FullName,
+            error.ExceptionType);
+        Assert.DoesNotContain("private", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("encoder failed", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("pipeline failed", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void RuntimeErrorFindsDynamicReasonInsideAggregateWithoutLeakingSiblingDetails()
+    {
+        const string sensitiveDetail = @"C:\private\driver-reset.log";
+        var exception = new AggregateException(
+            new IOException(sensitiveDetail),
+            new InvalidOperationException(
+                "pipeline wrapper",
+                new DynamicWallpaperUnavailableException(
+                    DynamicWallpaperCapabilityReasonCode.GraphicsDeviceUnavailable)));
+
+        var error = WallpaperRuntimeError.FromException("dynamic-failed", exception);
+
+        Assert.Equal(
+            DynamicWallpaperCapabilityReasonCode.GraphicsDeviceUnavailable,
+            error.DynamicReasonCode);
+        Assert.Equal(
+            "A compatible Direct3D graphics device is unavailable.",
+            error.Message);
+        Assert.DoesNotContain("private", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("wrapper", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public void RequestCreatesDeepSnapshotAndDerivesGlobalMembersFromIt()
     {
@@ -22,7 +78,7 @@ public sealed class RuntimeActivationContractsTests
         {
             [SemanticRegion.Global] = profile.ProfileId,
         };
-        var settings = new SettingsV2
+        var settings = new SettingsV3
         {
             Profiles = profiles,
             MediaCatalog = catalog,
@@ -53,7 +109,7 @@ public sealed class RuntimeActivationContractsTests
     [Fact]
     public void RequestDefaultsToManualOfficialActivation()
     {
-        var request = RuntimeActivationRequest.Create(1, SettingsV2.CreateDefault());
+        var request = RuntimeActivationRequest.Create(1, SettingsV3.CreateDefault());
 
         Assert.Equal(RuntimeLaunchMode.ManualApply, request.LaunchMode);
         Assert.Null(request.Media);
@@ -64,11 +120,11 @@ public sealed class RuntimeActivationContractsTests
     public void RequestRejectsInvalidRevisionAndLaunchMode()
     {
         Assert.Throws<ArgumentOutOfRangeException>(
-            () => RuntimeActivationRequest.Create(0, SettingsV2.CreateDefault()));
+            () => RuntimeActivationRequest.Create(0, SettingsV3.CreateDefault()));
         Assert.Throws<ArgumentOutOfRangeException>(
             () => RuntimeActivationRequest.Create(
                 1,
-                SettingsV2.CreateDefault(),
+                SettingsV3.CreateDefault(),
                 (RuntimeLaunchMode)99));
     }
 
@@ -198,14 +254,14 @@ public sealed class RuntimeActivationContractsTests
         Assert.Null(result.ActiveSnapshot);
     }
 
-    private static SettingsV2 CreateMediaSettings()
+    private static SettingsV3 CreateMediaSettings()
     {
         var media = CreateMedia();
         var profile = WallpaperProfile.CreateDefault() with
         {
             MediaId = media.MediaId,
         };
-        return new SettingsV2
+        return new SettingsV3
         {
             Profiles = [profile],
             MediaCatalog = [media],

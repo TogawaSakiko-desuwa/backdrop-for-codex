@@ -167,6 +167,7 @@ public sealed class SafeMediaPreviewService : ISafeMediaPreviewService
         MediaReferenceValidationException or
         MediaSourceNotSupportedException or
         WallpaperSourceCapabilityException or
+        WallpaperEngineProjectUnavailableException or
         WallpaperRendererUnavailableException or
         IOException or
         UnauthorizedAccessException or

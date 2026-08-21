@@ -18,6 +18,8 @@ public sealed record MediaReference
 {
     public const int MaximumSourceIdentifierLength = 32767;
 
+    public const int MaximumDisplayNameLength = 256;
+
     public Guid MediaId { get; init; }
 
     public MediaSourceKind SourceKind { get; init; }
@@ -25,6 +27,19 @@ public sealed record MediaReference
     public string SourceIdentifier { get; init; } = string.Empty;
 
     public MediaKind LastKnownKind { get; init; } = MediaKind.None;
+
+    /// <summary>
+    /// Last successfully resolved provider content kind. This is durable fallback metadata only;
+    /// providers must still resolve the source before it can be applied.
+    /// </summary>
+    public WallpaperContentKind LastKnownContentKind { get; init; } =
+        WallpaperContentKind.Unknown;
+
+    /// <summary>
+    /// Last successfully resolved, user-facing source name. No provider-derived path or runtime
+    /// process/window identity is stored in the settings document.
+    /// </summary>
+    public string? LastKnownDisplayName { get; init; }
 
     public void Validate()
     {
@@ -57,6 +72,25 @@ public sealed record MediaReference
             errors.Add("The last known media kind is not supported.");
         }
 
+        if (!Enum.IsDefined(LastKnownContentKind))
+        {
+            errors.Add("The last known wallpaper content kind is not supported.");
+        }
+
+        if (LastKnownDisplayName is not null)
+        {
+            if (string.IsNullOrWhiteSpace(LastKnownDisplayName))
+            {
+                errors.Add("The last known wallpaper display name cannot be empty.");
+            }
+            else if (LastKnownDisplayName.Length > MaximumDisplayNameLength)
+            {
+                errors.Add(
+                    $"The last known wallpaper display name cannot exceed " +
+                    $"{MaximumDisplayNameLength} characters.");
+            }
+        }
+
         if (string.IsNullOrWhiteSpace(SourceIdentifier))
         {
             errors.Add("The media source identifier is required.");
@@ -84,10 +118,15 @@ public sealed record MediaReference
     public MediaReference Snapshot()
     {
         Validate();
-        return this with
+        var snapshot = this with
         {
             SourceIdentifier = NormalizeIdentifier(SourceKind, SourceIdentifier),
+            LastKnownDisplayName = LastKnownDisplayName is null
+                ? null
+                : WallpaperDisplayNameSanitizer.Sanitize(LastKnownDisplayName),
         };
+        snapshot.Validate();
+        return snapshot;
     }
 
     private static string NormalizeIdentifier(MediaSourceKind sourceKind, string identifier) =>

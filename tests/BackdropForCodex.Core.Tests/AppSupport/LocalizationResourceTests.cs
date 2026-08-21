@@ -109,6 +109,37 @@ public sealed class LocalizationResourceTests
             $"Conflicting localization fallbacks:{Environment.NewLine}{string.Join(Environment.NewLine, conflicts)}");
     }
 
+    [Theory]
+    [InlineData("en")]
+    [InlineData("zh-Hans")]
+    public void DynamicWallpaperPrivacyCopyDescribesCurrentAudioBehavior(
+        string cultureName)
+    {
+        var text = new AppTextProvider(CultureInfo.GetCultureInfo(cultureName));
+        var libraryHint = text.GetString("Source_LibraryHint");
+        var webNotice = text.GetString("WebPrivacy_Message");
+        var privacy = text.GetString("Settings_PrivacyDescription");
+        var combined = $"{libraryHint} {webNotice} {privacy}";
+
+        if (string.Equals(cultureName, "zh-Hans", StringComparison.Ordinal))
+        {
+            Assert.Contains("可能播放声音", combined, StringComparison.Ordinal);
+            Assert.Contains("不会枚举、静音或更改", combined, StringComparison.Ordinal);
+            Assert.Contains("不会把音频送入 Codex", combined, StringComparison.Ordinal);
+            Assert.Contains("网络", webNotice, StringComparison.Ordinal);
+        }
+        else
+        {
+            Assert.Contains("may play sound", combined, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(
+                "does not enumerate, mute, or change",
+                combined,
+                StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("sends no audio into Codex", combined, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("network", webNotice, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
     private static void AddFallback(
         Dictionary<string, HashSet<string>> fallbacksByKey,
         string key,

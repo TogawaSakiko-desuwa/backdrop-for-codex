@@ -11,6 +11,8 @@
     <converters:MediaThumbnailConverter x:Key="ProfileThumbnailConverter" />
     <converters:ProfileCardTrackWidthConverter x:Key="ProfileCardTrackWidthConverter" />
 
+    <!-- Each item needs a distinct menu instance because PlacementTarget supplies the card-scoped
+         data context and command owner. -->
     <ContextMenu x:Key="ProfileActionsMenu"
                  x:Shared="False"
                  DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
@@ -26,6 +28,8 @@
                 CommandParameter="{Binding}" />
     </ContextMenu>
 
+    <!-- Selection and keyboard focus use independent borders so pointer and keyboard navigation
+         remain distinguishable without changing the card content template. -->
     <Style x:Key="ProfileCardItemStyle" TargetType="ListBoxItem">
       <Setter Property="Margin" Value="0,0,10,0" />
       <Setter Property="Padding" Value="0" />
@@ -89,6 +93,8 @@
       </StackPanel>
     </Grid>
 
+    <!-- The outer viewer owns horizontal scrolling. The non-virtualized, converter-sized list
+         keeps the New profile button immediately after the actual card track. -->
     <ScrollViewer HorizontalScrollBarVisibility="Auto"
                   VerticalScrollBarVisibility="Disabled"
                   CanContentScroll="False"
@@ -207,7 +213,7 @@
                 <StackPanel Grid.Column="1"
                             Margin="8,2,5,0"
                             ToolTip="{Binding MediaDisplayName}">
-                  <TextBlock Text="{Binding Name}"
+            <TextBlock Text="{Binding DisplayName}"
                              FontWeight="SemiBold"
                              TextTrimming="CharacterEllipsis" />
                   <TextBlock Margin="0,3,0,0"

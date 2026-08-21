@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using BackdropForCodex.App.Models;
 using BackdropForCodex.App.Services.Errors;
 using BackdropForCodex.App.Services.Localization;
@@ -6,6 +7,7 @@ using BackdropForCodex.App.Services.Preferences;
 using BackdropForCodex.App.Services.Wallpaper;
 using BackdropForCodex.App.ViewModels;
 using BackdropForCodex.Core.Codex;
+using BackdropForCodex.Core.Dynamic;
 using BackdropForCodex.Core.Injection;
 using BackdropForCodex.Core.Media;
 using BackdropForCodex.Core.Runtime;
@@ -18,13 +20,51 @@ namespace BackdropForCodex.Core.Tests.AppSupport;
 public sealed class MainWindowViewModelTests
 {
     [Fact]
+    public async Task StartupResolvesCurrentWallpaperEngineReferenceWithoutDiscoveringLibrary()
+    {
+        var media = CreateWorkshopMedia("123456");
+        var descriptor = new WallpaperSourceDescriptor(
+            MediaSourceKind.WallpaperEngineWorkshopProject,
+            media.SourceIdentifier,
+            "Workshop video",
+            WallpaperContentKind.Video,
+            WallpaperDeliveryKind.DirectMedia,
+            WallpaperDeliveryCapabilities.None);
+        var provider = new CountingWorkshopProvider(descriptor);
+        var wallpaper = new FakeWallpaperApplicationService(
+            WithSelectedMedia(SettingsV3.CreateDefault(), media));
+        using var preferencesStore = new FakeAppPreferencesStore();
+        using var viewModel = CreateViewModel(
+            wallpaper,
+            preferencesStore,
+            sourceRegistry: new WallpaperSourceProviderRegistry([provider]));
+
+        await viewModel.InitializeAsync();
+
+        Assert.Equal(
+            WallpaperSourceAvailability.NotLoaded,
+            viewModel.SourceLibrary.IntegrationAvailability);
+        Assert.Equal(0, provider.DiscoveryCount);
+        Assert.Equal(1, provider.ResolveCount);
+        Assert.True(viewModel.CanSubmitApply);
+
+        await viewModel.RefreshWallpaperEngineLibraryAsync();
+
+        Assert.Equal(
+            WallpaperSourceAvailability.Ready,
+            viewModel.SourceLibrary.IntegrationAvailability);
+        Assert.Equal(1, provider.DiscoveryCount);
+        Assert.Equal(1, provider.ResolveCount);
+    }
+
+    [Fact]
     public async Task SourceDiscoveryFailureIsVisibleAndRetryRestoresReadyStatus()
     {
         var provider = new RecoveringDiscoveryProvider();
         var registry = new WallpaperSourceProviderRegistry([provider]);
         using var preferencesStore = new FakeAppPreferencesStore();
         using var viewModel = new MainWindowViewModel(
-            new FakeWallpaperApplicationService(SettingsV2.CreateDefault()),
+            new FakeWallpaperApplicationService(SettingsV3.CreateDefault()),
             preferencesStore,
             new StubErrorMapper(),
             new FallbackTextProvider(),
@@ -32,6 +72,12 @@ public sealed class MainWindowViewModelTests
 
         await viewModel.InitializeAsync();
 
+        Assert.Equal(0, provider.DiscoveryCount);
+        Assert.False(viewModel.SourceLibrary.HasDiscoveryFailures);
+
+        await viewModel.RefreshWallpaperEngineLibraryAsync();
+
+        Assert.Equal(1, provider.DiscoveryCount);
         Assert.True(viewModel.SourceLibrary.HasDiscoveryFailures);
         Assert.True(viewModel.IsStatusOpen);
         Assert.Equal(UiStatusTone.Warning, viewModel.StatusTone);
@@ -49,7 +95,7 @@ public sealed class MainWindowViewModelTests
     public async Task UnregisteredRecentSourceStaysPersistedButIsHiddenAndCannotBeSelected()
     {
         var media = CreateWorkshopMedia("123456");
-        var settings = AddRecent(SettingsV2.CreateDefault(), media);
+        var settings = AddRecent(SettingsV3.CreateDefault(), media);
         var wallpaper = new FakeWallpaperApplicationService(settings);
         using var preferencesStore = new FakeAppPreferencesStore();
         using var viewModel = CreateViewModel(wallpaper, preferencesStore);
@@ -67,19 +113,17 @@ public sealed class MainWindowViewModelTests
     public async Task RegisteredWorkshopVideoAppearsAndCanReuseEditorSelection()
     {
         var media = CreateWorkshopMedia("123456");
-        var settings = AddRecent(SettingsV2.CreateDefault(), media);
+        var settings = AddRecent(SettingsV3.CreateDefault(), media);
         var wallpaper = new FakeWallpaperApplicationService(settings);
         using var preferencesStore = new FakeAppPreferencesStore();
         var provider = new RegisteredWorkshopProvider();
         var registry = new WallpaperSourceProviderRegistry([provider]);
         var preview = new ReferenceOnlyPreviewService();
-        using var viewModel = new MainWindowViewModel(
+        using var viewModel = CreateViewModel(
             wallpaper,
             preferencesStore,
-            new StubErrorMapper(),
-            new FallbackTextProvider(),
-            preview,
-            registry);
+            previewMedia: preview,
+            sourceRegistry: registry);
 
         await viewModel.InitializeAsync();
         var recent = Assert.Single(viewModel.Recents);
@@ -108,32 +152,493 @@ public sealed class MainWindowViewModelTests
     public async Task RendererBackedSource_IsTypedUnavailableAndCannotEnterApplyPath()
     {
         var wallpaper = new FakeWallpaperApplicationService(
-            SettingsV2.CreateDefault());
+            SettingsV3.CreateDefault());
         using var preferencesStore = new FakeAppPreferencesStore();
-        using var viewModel = CreateViewModel(wallpaper, preferencesStore);
+        var preview = new FileExistencePreviewService();
+        var registry = new WallpaperSourceProviderRegistry(
+            [
+                new LocalFileWallpaperSourceProvider(),
+                new RegisteredWorkshopProvider(),
+            ]);
+        using var viewModel = new MainWindowViewModel(
+            wallpaper,
+            preferencesStore,
+            new StubErrorMapper(),
+            new FallbackTextProvider(),
+            preview,
+            registry);
         await viewModel.InitializeAsync();
         var source = new WallpaperSourceDescriptor(
-            MediaSourceKind.LocalFile,
-            @"C:\wallpaper-engine\scene-project",
+            MediaSourceKind.WallpaperEngineWorkshopProject,
+            "123456",
             "Scene project",
             WallpaperContentKind.Scene,
             WallpaperDeliveryKind.WallpaperEngineWindow,
             WallpaperDeliveryCapabilities.DynamicFrames);
 
-        Assert.Throws<WallpaperRendererUnavailableException>(
-            () => viewModel.SelectSource(source));
-        Assert.False(viewModel.Editor.HasSelectedMedia);
-
         var canSubmitChanged = false;
         viewModel.PropertyChanged += (_, eventArgs) =>
             canSubmitChanged |= eventArgs.PropertyName == nameof(viewModel.CanSubmitApply);
-        viewModel.Editor.SelectSource(source);
+        viewModel.SelectSource(source);
 
         Assert.True(canSubmitChanged);
+        Assert.True(viewModel.Editor.HasSelectedMedia);
+        Assert.Equal(
+            WallpaperContentKind.Scene,
+            SelectedMedia(viewModel.ConfigurationState.Draft)?.LastKnownContentKind);
         Assert.True(viewModel.Editor.IsPreviewUnavailable);
         Assert.False(viewModel.CanSubmitApply);
         Assert.False(await viewModel.ApplyAsync());
         Assert.Equal(0, wallpaper.ApplyCallCount);
+    }
+
+    [Fact]
+    public async Task AvailableDynamicSourceCanSubmitDespiteHavingOnlyAStaticPreview()
+    {
+        var wallpaper = new FakeDynamicWallpaperApplicationService(
+            CreateSettings(acceptedCdpRisk: true),
+            DynamicWallpaperCapability.Available());
+        using var preferencesStore = new FakeAppPreferencesStore();
+        var registry = new WallpaperSourceProviderRegistry(
+            [
+                new LocalFileWallpaperSourceProvider(),
+                new MutableWorkshopDiscoveryProvider(
+                    [CreateDynamicDescriptor("123456", WallpaperContentKind.Scene)]),
+            ]);
+        using var viewModel = new MainWindowViewModel(
+            wallpaper,
+            preferencesStore,
+            new StubErrorMapper(),
+            new FallbackTextProvider(),
+            new FileExistencePreviewService(),
+            registry);
+        await viewModel.InitializeAsync();
+        var source = new WallpaperSourceDescriptor(
+            MediaSourceKind.WallpaperEngineWorkshopProject,
+            "123456",
+            "Scene project",
+            WallpaperContentKind.Scene,
+            WallpaperDeliveryKind.WallpaperEngineWindow,
+            WallpaperDeliveryCapabilities.DynamicFrames);
+
+        viewModel.SelectSource(source);
+
+        Assert.Equal(1, wallpaper.ProbeCount);
+        Assert.True(viewModel.Editor.IsPreviewUnavailable);
+        Assert.True(viewModel.CanSubmitApply);
+        Assert.True(await viewModel.ApplyAsync());
+        Assert.Equal(1, wallpaper.ApplyCallCount);
+    }
+
+    [Theory]
+    [InlineData(WallpaperContentKind.Scene)]
+    [InlineData(WallpaperContentKind.Web)]
+    public async Task DynamicApplyWithFullCompatibilityShowsNormalSuccess(
+        WallpaperContentKind contentKind)
+    {
+        var compatibility = CreateCompatibilitySnapshot(
+            PresentationEvidence.FullySupported);
+        var wallpaper = new FakeDynamicWallpaperApplicationService(
+            CreateSettings(acceptedCdpRisk: true),
+            DynamicWallpaperCapability.Available(),
+            compatibility);
+        using var preferencesStore = new FakeAppPreferencesStore(
+            AppPreferencesV1.CreateDefault() with
+            {
+                HasAcknowledgedWebWallpaperPrivacyNotice = true,
+            });
+        var source = CreateDynamicDescriptor("123456", contentKind);
+        var registry = new WallpaperSourceProviderRegistry(
+            [new MutableWorkshopDiscoveryProvider([source])]);
+        using var viewModel = CreateViewModel(
+            wallpaper,
+            preferencesStore,
+            sourceRegistry: registry);
+        await viewModel.InitializeAsync();
+        viewModel.SelectSource(source);
+
+        Assert.True(await viewModel.ApplyAsync());
+
+        Assert.Equal(ContractMatchState.Matched, compatibility.Presentation.MatchState);
+        Assert.True(compatibility.Capabilities.GlassStyle.IsAvailable);
+        Assert.True(compatibility.Capabilities.AdvancedSurfaces.IsAvailable);
+        Assert.Equal("Wallpaper is active", viewModel.StatusTitle);
+        Assert.Equal(UiStatusTone.Success, viewModel.StatusTone);
+        Assert.DoesNotContain(
+            "reduced effects",
+            viewModel.StatusTitle,
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData(WallpaperContentKind.Scene)]
+    [InlineData(WallpaperContentKind.Web)]
+    public async Task DynamicApplyWithGlobalOnlyCompatibilityShowsReducedEffectsWarning(
+        WallpaperContentKind contentKind)
+    {
+        var compatibility = CreateCompatibilitySnapshot(
+            PresentationEvidence.FullySupported with { ShellStructure = false });
+        var wallpaper = new FakeDynamicWallpaperApplicationService(
+            CreateSettings(acceptedCdpRisk: true),
+            DynamicWallpaperCapability.Available(),
+            compatibility);
+        using var preferencesStore = new FakeAppPreferencesStore(
+            AppPreferencesV1.CreateDefault() with
+            {
+                HasAcknowledgedWebWallpaperPrivacyNotice = true,
+            });
+        var source = CreateDynamicDescriptor("123456", contentKind);
+        var registry = new WallpaperSourceProviderRegistry(
+            [new MutableWorkshopDiscoveryProvider([source])]);
+        using var viewModel = CreateViewModel(
+            wallpaper,
+            preferencesStore,
+            sourceRegistry: registry);
+        await viewModel.InitializeAsync();
+        viewModel.SelectSource(source);
+
+        Assert.True(await viewModel.ApplyAsync());
+
+        Assert.Equal(
+            ContractMatchState.NoMatchUsingGlobalBaseline,
+            compatibility.Presentation.MatchState);
+        Assert.True(compatibility.Capabilities.GlobalBackground.IsAvailable);
+        Assert.False(compatibility.Capabilities.GlassStyle.IsAvailable);
+        Assert.False(compatibility.Capabilities.AdvancedSurfaces.IsAvailable);
+        Assert.Equal("Wallpaper active with reduced effects", viewModel.StatusTitle);
+        Assert.Equal(UiStatusTone.Warning, viewModel.StatusTone);
+    }
+
+    [Fact]
+    public async Task WebWallpaperApplyRequiresExplicitPrivacyAcknowledgementAndPersistsItOnce()
+    {
+        var wallpaper = new FakeDynamicWallpaperApplicationService(
+            CreateSettings(acceptedCdpRisk: true),
+            DynamicWallpaperCapability.Available());
+        using var preferencesStore = new FakeAppPreferencesStore();
+        var source = CreateDynamicDescriptor("123456", WallpaperContentKind.Web);
+        var registry = new WallpaperSourceProviderRegistry(
+            [new MutableWorkshopDiscoveryProvider([source])]);
+        using var viewModel = CreateViewModel(
+            wallpaper,
+            preferencesStore,
+            sourceRegistry: registry);
+        var promptCount = 0;
+        var shouldAcknowledge = false;
+        viewModel.WebWallpaperPrivacyPromptAsync = _ =>
+        {
+            promptCount++;
+            return Task.FromResult(shouldAcknowledge);
+        };
+        await viewModel.InitializeAsync();
+        viewModel.SelectSource(source);
+
+        Assert.False(await viewModel.ApplyAsync());
+        Assert.Equal(1, promptCount);
+        Assert.Equal(0, wallpaper.ApplyCallCount);
+        Assert.False(preferencesStore.Current.HasAcknowledgedWebWallpaperPrivacyNotice);
+
+        shouldAcknowledge = true;
+        Assert.True(await viewModel.ApplyAsync());
+        Assert.True(preferencesStore.Current.HasAcknowledgedWebWallpaperPrivacyNotice);
+        Assert.Equal(2, promptCount);
+        Assert.Equal(1, wallpaper.ApplyCallCount);
+        Assert.Equal(
+            WallpaperContentKind.Web,
+            wallpaper.LastExpectedSourceResolution?.Descriptor.ContentKind);
+        Assert.Equal(
+            source.SourceIdentifier,
+            wallpaper.LastExpectedSourceResolution?.CanonicalReference.SourceIdentifier);
+
+        Assert.True(await viewModel.ApplyAsync());
+        Assert.Equal(2, promptCount);
+        Assert.Equal(2, wallpaper.ApplyCallCount);
+    }
+
+    [Fact]
+    public async Task ConcurrentWebWallpaperAppliesEachCarryTheAuthorizedResolution()
+    {
+        var wallpaper = new FakeDynamicWallpaperApplicationService(
+            CreateSettings(acceptedCdpRisk: true),
+            DynamicWallpaperCapability.Available());
+        using var preferencesStore = new FakeAppPreferencesStore();
+        var source = CreateDynamicDescriptor("123456", WallpaperContentKind.Web);
+        var registry = new WallpaperSourceProviderRegistry(
+            [new MutableWorkshopDiscoveryProvider([source])]);
+        using var viewModel = CreateViewModel(
+            wallpaper,
+            preferencesStore,
+            sourceRegistry: registry);
+        var promptEntered = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var releasePrompt = new TaskCompletionSource<bool>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        viewModel.WebWallpaperPrivacyPromptAsync = async _ =>
+        {
+            promptEntered.TrySetResult();
+            return await releasePrompt.Task.ConfigureAwait(false);
+        };
+        await viewModel.InitializeAsync();
+        viewModel.SelectSource(source);
+
+        var firstApply = viewModel.ApplyAsync();
+        await promptEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var secondApply = viewModel.ApplyAsync();
+        releasePrompt.TrySetResult(true);
+        _ = await Task.WhenAll(firstApply, secondApply);
+
+        Assert.Equal(2, wallpaper.ExpectedSourceResolutions.Count);
+        Assert.All(
+            wallpaper.ExpectedSourceResolutions,
+            resolution => Assert.Equal(
+                WallpaperContentKind.Web,
+                resolution?.Descriptor.ContentKind));
+    }
+
+    [Fact]
+    public async Task WebPrivacyUsesCurrentProviderKindInsteadOfStaleSceneMetadata()
+    {
+        var wallpaper = new FakeDynamicWallpaperApplicationService(
+            CreateSettings(acceptedCdpRisk: true),
+            DynamicWallpaperCapability.Available());
+        using var preferencesStore = new FakeAppPreferencesStore();
+        var currentWeb = CreateDynamicDescriptor("123456", WallpaperContentKind.Web);
+        var registry = new WallpaperSourceProviderRegistry(
+            [new MutableWorkshopDiscoveryProvider([currentWeb])]);
+        using var viewModel = CreateViewModel(
+            wallpaper,
+            preferencesStore,
+            sourceRegistry: registry);
+        var promptCount = 0;
+        viewModel.WebWallpaperPrivacyPromptAsync = _ =>
+        {
+            promptCount++;
+            return Task.FromResult(false);
+        };
+        await viewModel.InitializeAsync();
+        viewModel.SelectSource(
+            CreateWorkshopDynamicMedia("123456", WallpaperContentKind.Scene));
+
+        Assert.False(await viewModel.EnsureWebWallpaperPrivacyAcknowledgedAsync());
+        Assert.Equal(1, promptCount);
+        Assert.False(preferencesStore.Current.HasAcknowledgedWebWallpaperPrivacyNotice);
+    }
+
+    [Fact]
+    public async Task WebPrivacyDoesNotPromptWhenCurrentProviderKindChangedToScene()
+    {
+        var wallpaper = new FakeDynamicWallpaperApplicationService(
+            CreateSettings(acceptedCdpRisk: true),
+            DynamicWallpaperCapability.Available());
+        using var preferencesStore = new FakeAppPreferencesStore();
+        var currentScene = CreateDynamicDescriptor("123456", WallpaperContentKind.Scene);
+        var registry = new WallpaperSourceProviderRegistry(
+            [new MutableWorkshopDiscoveryProvider([currentScene])]);
+        using var viewModel = CreateViewModel(
+            wallpaper,
+            preferencesStore,
+            sourceRegistry: registry);
+        var promptCount = 0;
+        viewModel.WebWallpaperPrivacyPromptAsync = _ =>
+        {
+            promptCount++;
+            return Task.FromResult(true);
+        };
+        await viewModel.InitializeAsync();
+        viewModel.SelectSource(
+            CreateWorkshopDynamicMedia("123456", WallpaperContentKind.Web));
+
+        Assert.True(await viewModel.EnsureWebWallpaperPrivacyAcknowledgedAsync());
+        Assert.Equal(0, promptCount);
+        Assert.False(preferencesStore.Current.HasAcknowledgedWebWallpaperPrivacyNotice);
+    }
+
+    [Fact]
+    public async Task WebWallpaperAutoLaunchFailsClosedWhenPrivacyPromptIsUnavailable()
+    {
+        var source = CreateDynamicDescriptor("123456", WallpaperContentKind.Web);
+        var settings = WithSelectedMedia(
+            CreateSettings(acceptedCdpRisk: true),
+            CreateWorkshopDynamicMedia("123456", WallpaperContentKind.Web));
+        var wallpaper = new FakeDynamicWallpaperApplicationService(
+            settings,
+            DynamicWallpaperCapability.Available());
+        using var preferencesStore = new FakeAppPreferencesStore();
+        using var viewModel = CreateViewModel(
+            wallpaper,
+            preferencesStore,
+            sourceRegistry: new WallpaperSourceProviderRegistry(
+                [new MutableWorkshopDiscoveryProvider([source])]));
+        await viewModel.InitializeAsync();
+
+        var outcome = await viewModel.AutoLaunchAsync();
+
+        Assert.Equal(AutoLaunchOutcome.NeedsPrivacyAcknowledgement, outcome);
+        Assert.Equal(0, wallpaper.ApplyCallCount);
+        Assert.False(preferencesStore.Current.HasAcknowledgedWebWallpaperPrivacyNotice);
+    }
+
+    [Fact]
+    public async Task MissingDynamicProjectCannotApplyAndRevivesAfterRediscovery()
+    {
+        var media = CreateWorkshopDynamicMedia(
+            "123456",
+            WallpaperContentKind.Scene);
+        var settings = WithSelectedMedia(
+            SettingsV3.CreateDefault() with { AcceptedCdpRisk = true },
+            media);
+        var wallpaper = new FakeDynamicWallpaperApplicationService(
+            settings,
+            DynamicWallpaperCapability.Available());
+        var provider = new MutableWorkshopDiscoveryProvider([]);
+        using var preferencesStore = new FakeAppPreferencesStore();
+        using var viewModel = CreateViewModel(
+            wallpaper,
+            preferencesStore,
+            sourceRegistry: new WallpaperSourceProviderRegistry([provider]));
+
+        await viewModel.InitializeAsync();
+
+        Assert.True(viewModel.Editor.HasSelectedMedia);
+        Assert.False(viewModel.CanSubmitApply);
+        var canSubmitChanged = false;
+        viewModel.PropertyChanged += (_, eventArgs) =>
+            canSubmitChanged |= eventArgs.PropertyName == nameof(viewModel.CanSubmitApply);
+
+        provider.Sources =
+            [CreateDynamicDescriptor("123456", WallpaperContentKind.Scene)];
+        await viewModel.SourceLibrary.RefreshAsync();
+
+        Assert.True(canSubmitChanged);
+        Assert.True(viewModel.CanSubmitApply);
+    }
+
+    [Fact]
+    public async Task DynamicCapabilityRefreshImmediatelyInvalidatesApplyState()
+    {
+        var wallpaper = new FakeDynamicWallpaperApplicationService(
+            CreateSettings(acceptedCdpRisk: true),
+            DynamicWallpaperCapability.Available());
+        using var preferencesStore = new FakeAppPreferencesStore();
+        var registry = new WallpaperSourceProviderRegistry(
+            [
+                new MutableWorkshopDiscoveryProvider(
+                    [CreateDynamicDescriptor("123456", WallpaperContentKind.Scene)]),
+            ]);
+        using var viewModel = CreateViewModel(
+            wallpaper,
+            preferencesStore,
+            sourceRegistry: registry);
+        await viewModel.InitializeAsync();
+        viewModel.SelectSource(
+            new WallpaperSourceDescriptor(
+                MediaSourceKind.WallpaperEngineWorkshopProject,
+                "123456",
+                "Scene project",
+                WallpaperContentKind.Scene,
+                WallpaperDeliveryKind.WallpaperEngineWindow,
+                WallpaperDeliveryCapabilities.DynamicFrames));
+        Assert.True(viewModel.CanSubmitApply);
+        var canSubmitChanged = false;
+        viewModel.PropertyChanged += (_, eventArgs) =>
+            canSubmitChanged |= eventArgs.PropertyName == nameof(viewModel.CanSubmitApply);
+
+        wallpaper.Capability = DynamicWallpaperCapability.Unavailable(
+            DynamicWallpaperCapabilityReasonCode.WallpaperEnginePlacementUnavailable);
+        await viewModel.SourceLibrary.RefreshAsync();
+
+        Assert.True(canSubmitChanged);
+        Assert.False(viewModel.CanSubmitApply);
+        Assert.Equal(
+            DynamicWallpaperCapabilityReasonCode.WallpaperEnginePlacementUnavailable,
+            viewModel.SourceLibrary.DynamicCapability.ReasonCode);
+    }
+
+    [Fact]
+    public async Task RuntimeCapabilityChangeReprobesDynamicApplyCommands()
+    {
+        var wallpaper = new FakeDynamicWallpaperApplicationService(
+            CreateSettings(acceptedCdpRisk: true),
+            DynamicWallpaperCapability.Available());
+        using var preferencesStore = new FakeAppPreferencesStore();
+        using var viewModel = CreateViewModel(
+            wallpaper,
+            preferencesStore,
+            sourceRegistry: new WallpaperSourceProviderRegistry(
+                [
+                    new MutableWorkshopDiscoveryProvider(
+                        [CreateDynamicDescriptor("123456", WallpaperContentKind.Web)]),
+                ]));
+        await viewModel.InitializeAsync();
+        viewModel.SelectSource(
+            new WallpaperSourceDescriptor(
+                MediaSourceKind.WallpaperEngineWorkshopProject,
+                "123456",
+                "Web project",
+                WallpaperContentKind.Web,
+                WallpaperDeliveryKind.WallpaperEngineWindow,
+                WallpaperDeliveryCapabilities.DynamicFrames));
+        Assert.True(viewModel.CanSubmitApply);
+        var invalidated = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        viewModel.PropertyChanged += (_, eventArgs) =>
+        {
+            if (eventArgs.PropertyName == nameof(viewModel.CanSubmitApply) &&
+                !viewModel.CanSubmitApply)
+            {
+                invalidated.TrySetResult();
+            }
+        };
+
+        wallpaper.Capability = DynamicWallpaperCapability.Unavailable(
+            DynamicWallpaperCapabilityReasonCode.WallpaperEngineAudioIsolationUnavailable);
+        wallpaper.RaiseCapabilitiesChanged();
+        await invalidated.Task.WaitAsync(TimeSpan.FromSeconds(2));
+
+        Assert.Equal(2, wallpaper.ProbeCount);
+        Assert.False(viewModel.CanSubmitApply);
+    }
+
+    [Theory]
+    [InlineData(WallpaperContentKind.Scene)]
+    [InlineData(WallpaperContentKind.Web)]
+    public async Task PersistedDynamicReferenceCanBeReselectedAndReprojected(
+        WallpaperContentKind contentKind)
+    {
+        var media = CreateWorkshopDynamicMedia("123456", contentKind);
+        var settings = AddRecent(
+            SettingsV3.CreateDefault() with { AcceptedCdpRisk = true },
+            media);
+        var wallpaper = new FakeDynamicWallpaperApplicationService(
+            settings,
+            DynamicWallpaperCapability.Available());
+        using var preferencesStore = new FakeAppPreferencesStore();
+        var registry = new WallpaperSourceProviderRegistry(
+            [
+                new MutableWorkshopDiscoveryProvider(
+                    [CreateDynamicDescriptor("123456", contentKind)]),
+            ]);
+        using var viewModel = CreateViewModel(
+            wallpaper,
+            preferencesStore,
+            previewMedia: new ReferenceOnlyPreviewService(),
+            sourceRegistry: registry);
+        await viewModel.InitializeAsync();
+
+        var recent = Assert.Single(viewModel.Recents);
+        Assert.Equal(contentKind, recent.ContentKind);
+        viewModel.SelectSource(recent.Reference);
+
+        Assert.Equal(contentKind, viewModel.Editor.SelectedMediaReference?.LastKnownContentKind);
+        Assert.Equal(media.LastKnownDisplayName, viewModel.Editor.SelectedMediaName);
+        Assert.False(viewModel.Editor.IsMediaMissing);
+        Assert.True(viewModel.CanSubmitApply);
+        var projected = SelectedMedia(viewModel.ConfigurationState.Draft);
+        Assert.NotNull(projected);
+        Assert.Equal(media.SourceKind, projected.SourceKind);
+        Assert.Equal(media.SourceIdentifier, projected.SourceIdentifier);
+        Assert.Equal(contentKind, projected.LastKnownContentKind);
+        Assert.Equal(media.LastKnownDisplayName, projected.LastKnownDisplayName);
     }
 
     [Fact]
@@ -144,7 +649,7 @@ public sealed class MainWindowViewModelTests
             CodexVersion = new Version(26, 805, 14, 3),
         };
         var wallpaper = new FakeCapabilityWallpaperApplicationService(
-            SettingsV2.CreateDefault(),
+            SettingsV3.CreateDefault(),
             compatibility);
         using var viewModel = CreateViewModel(
             wallpaper,
@@ -305,7 +810,7 @@ public sealed class MainWindowViewModelTests
         try
         {
             var wallpaper = new FakeWallpaperApplicationService(
-                SettingsV2.CreateDefault());
+                SettingsV3.CreateDefault());
             using var preferencesStore = new FakeAppPreferencesStore();
             using var viewModel = CreateViewModel(wallpaper, preferencesStore);
             await viewModel.InitializeAsync();
@@ -395,7 +900,7 @@ public sealed class MainWindowViewModelTests
     public async Task PreflightFailureWithoutCommitIsNotReportedAsSaved()
     {
         var wallpaper = new FakeWallpaperApplicationService(
-            SettingsV2.CreateDefault())
+            SettingsV3.CreateDefault())
         {
             ApplyFailure = new IOException("Simulated preflight failure."),
         };
@@ -416,7 +921,7 @@ public sealed class MainWindowViewModelTests
     public async Task AcceptRiskAsyncPersistsAcknowledgementImmediately()
     {
         var wallpaper = new FakeWallpaperApplicationService(
-            SettingsV2.CreateDefault());
+            SettingsV3.CreateDefault());
         using var preferencesStore = new FakeAppPreferencesStore();
         using var viewModel = CreateViewModel(wallpaper, preferencesStore);
 
@@ -438,7 +943,7 @@ public sealed class MainWindowViewModelTests
         try
         {
             var wallpaper = new FakeWallpaperApplicationService(
-                SettingsV2.CreateDefault())
+                SettingsV3.CreateDefault())
             {
                 BlockFirstApply = true,
             };
@@ -469,7 +974,7 @@ public sealed class MainWindowViewModelTests
     public async Task BeginningOperationHidesPreviousStatusSoProgressAndCancelCanSurface()
     {
         var wallpaper = new FakeWallpaperApplicationService(
-            SettingsV2.CreateDefault())
+            SettingsV3.CreateDefault())
         {
             BlockFirstApply = true,
         };
@@ -538,7 +1043,7 @@ public sealed class MainWindowViewModelTests
         try
         {
             var wallpaper = new FakeWallpaperApplicationService(
-                SettingsV2.CreateDefault());
+                SettingsV3.CreateDefault());
             using var preferencesStore = new FakeAppPreferencesStore();
             using var viewModel = CreateViewModel(wallpaper, preferencesStore);
             await viewModel.InitializeAsync();
@@ -598,6 +1103,32 @@ public sealed class MainWindowViewModelTests
         }
     }
 
+    [Theory]
+    [InlineData(WallpaperContentKind.Scene)]
+    [InlineData(WallpaperContentKind.Web)]
+    public async Task ActiveDynamicWallpaperCanBePaused(
+        WallpaperContentKind contentKind)
+    {
+        var settings = WithSelectedMedia(
+            SettingsV3.CreateDefault() with { AcceptedCdpRisk = true },
+            CreateWorkshopDynamicMedia("123456", contentKind));
+        var wallpaper = new FakeWallpaperApplicationService(settings);
+        wallpaper.SeedActive(settings);
+        using var preferencesStore = new FakeAppPreferencesStore();
+        using var viewModel = CreateViewModel(
+            wallpaper,
+            preferencesStore,
+            sourceRegistry: new WallpaperSourceProviderRegistry(
+                [new RegisteredWorkshopProvider()]));
+        await viewModel.InitializeAsync();
+
+        Assert.True(viewModel.TogglePauseCommand.CanExecute(null));
+        await viewModel.TogglePauseCommand.ExecuteAsync(null);
+
+        Assert.True(wallpaper.IsPaused);
+        Assert.True(viewModel.IsPaused);
+    }
+
     [Fact]
     public async Task RestoreFailureKeepsTheRuntimeActive()
     {
@@ -622,6 +1153,10 @@ public sealed class MainWindowViewModelTests
 
             Assert.True(viewModel.IsActive);
             Assert.Equal(UiStatusTone.Error, viewModel.StatusTone);
+            Assert.DoesNotContain(
+                "Simulated restore failure",
+                viewModel.StatusMessage,
+                StringComparison.Ordinal);
             Assert.True(viewModel.DisableCommand.CanExecute(null));
         }
         finally
@@ -658,6 +1193,15 @@ public sealed class MainWindowViewModelTests
             Assert.Equal(
                 "Official background could not be restored",
                 viewModel.StatusTitle);
+            Assert.DoesNotContain(
+                "Simulated typed restore failure",
+                viewModel.StatusMessage,
+                StringComparison.Ordinal);
+            Assert.Contains(
+                "Retry after resolving the runtime issue",
+                viewModel.StatusMessage,
+                StringComparison.Ordinal);
+            Assert.True(viewModel.HasStatusDetails);
         }
         finally
         {
@@ -669,7 +1213,7 @@ public sealed class MainWindowViewModelTests
     public async Task ConcurrentPreferenceUpdatesPreserveThemeAndTrayTip()
     {
         var wallpaper = new FakeWallpaperApplicationService(
-            SettingsV2.CreateDefault());
+            SettingsV3.CreateDefault());
         using var preferencesStore = new FakeAppPreferencesStore
         {
             BlockFirstSave = true,
@@ -702,7 +1246,7 @@ public sealed class MainWindowViewModelTests
                 MediaKind.Image,
                 acceptedCdpRisk: true);
             var wallpaper = new FakeWallpaperApplicationService(
-                SettingsV2.CreateDefault())
+                SettingsV3.CreateDefault())
             {
                 LoadFailure = new SettingsRecoveryRequiredException(
                     SettingsRecoveryReason.InvalidDocument,
@@ -739,43 +1283,10 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
-    public async Task ProjectionIncompatibleV2SettingsStayReadOnlyAndCannotBeSaved()
-    {
-        var mediaPath = CreateTemporaryMediaFile(".png");
-        try
-        {
-            var wallpaper = new FakeWallpaperApplicationService(
-                SettingsV2.CreateDefault())
-            {
-                LoadFailure = new SettingsProjectionException(
-                    "A non-local Global selection cannot be represented."),
-            };
-            using var preferencesStore = new FakeAppPreferencesStore();
-            using var viewModel = CreateViewModel(wallpaper, preferencesStore);
-
-            await viewModel.InitializeAsync();
-
-            Assert.True(viewModel.HasProtectedSettings);
-            Assert.False(viewModel.CanEdit);
-            Assert.False(viewModel.CanRestoreVersion1Backup);
-            viewModel.SelectMedia(mediaPath);
-            await viewModel.AcceptRiskAsync();
-            Assert.False(await viewModel.ApplyAsync());
-            Assert.Null(viewModel.Editor.SelectedMediaPath);
-            Assert.Equal(0, wallpaper.SaveCallCount);
-            Assert.Equal(0, wallpaper.ApplyCallCount);
-        }
-        finally
-        {
-            File.Delete(mediaPath);
-        }
-    }
-
-    [Fact]
     public async Task LaterReloadFailureTransitionsEditorIntoProtectedRecoveryState()
     {
         var wallpaper = new FakeWallpaperApplicationService(
-            SettingsV2.CreateDefault());
+            SettingsV3.CreateDefault());
         using var preferencesStore = new FakeAppPreferencesStore();
         using var viewModel = CreateViewModel(wallpaper, preferencesStore);
         await viewModel.InitializeAsync();
@@ -799,7 +1310,7 @@ public sealed class MainWindowViewModelTests
     public async Task EmptyProfileAppliesOfficialWithoutRiskAcceptance()
     {
         var wallpaper = new FakeWallpaperApplicationService(
-            SettingsV2.CreateDefault());
+            SettingsV3.CreateDefault());
         using var preferencesStore = new FakeAppPreferencesStore();
         using var viewModel = CreateViewModel(wallpaper, preferencesStore);
         await viewModel.InitializeAsync();
@@ -814,6 +1325,8 @@ public sealed class MainWindowViewModelTests
             wallpaper.Workspace.RuntimeSurface.Kind);
         Assert.NotNull(viewModel.ActiveSnapshot);
         Assert.Null(Global(viewModel.ActiveSnapshot!).MediaId);
+        Assert.False(viewModel.ShortcutNeedsRetry);
+        Assert.False(viewModel.RetryShortcutCommand.CanExecute(null));
     }
 
     [Fact]
@@ -896,6 +1409,8 @@ public sealed class MainWindowViewModelTests
             Assert.Equal(UiStatusTone.Warning, viewModel.StatusTone);
             Assert.True(viewModel.CanRetryStatusApply);
             Assert.True(viewModel.HasStatusDetails);
+            Assert.False(viewModel.ShortcutNeedsRetry);
+            Assert.False(viewModel.RetryShortcutCommand.CanExecute(null));
         }
         finally
         {
@@ -908,7 +1423,7 @@ public sealed class MainWindowViewModelTests
     public async Task ProfileCrudRequestsFocusForTheSelectedCard()
     {
         var wallpaper = new FakeWallpaperApplicationService(
-            SettingsV2.CreateDefault());
+            SettingsV3.CreateDefault());
         using var preferencesStore = new FakeAppPreferencesStore();
         using var viewModel = CreateViewModel(wallpaper, preferencesStore);
         await viewModel.InitializeAsync();
@@ -937,7 +1452,7 @@ public sealed class MainWindowViewModelTests
     public async Task OlderRevisionStatusCannotOverwriteLatestUiState()
     {
         var wallpaper = new FakeWallpaperApplicationService(
-            SettingsV2.CreateDefault());
+            SettingsV3.CreateDefault());
         using var preferencesStore = new FakeAppPreferencesStore();
         using var viewModel = CreateViewModel(wallpaper, preferencesStore);
         await viewModel.InitializeAsync();
@@ -961,7 +1476,7 @@ public sealed class MainWindowViewModelTests
     public async Task QueuedOlderRevisionStatusIsRecheckedOnUiDispatch()
     {
         var wallpaper = new FakeWallpaperApplicationService(
-            SettingsV2.CreateDefault());
+            SettingsV3.CreateDefault());
         using var preferencesStore = new FakeAppPreferencesStore();
         var uiContext = new QueuedSynchronizationContext();
         var previousContext = SynchronizationContext.Current;
@@ -969,7 +1484,10 @@ public sealed class MainWindowViewModelTests
         try
         {
             SynchronizationContext.SetSynchronizationContext(uiContext);
-            viewModel = CreateViewModel(wallpaper, preferencesStore);
+            viewModel = CreateViewModel(
+                wallpaper,
+                preferencesStore,
+                captureCurrentSynchronizationContext: true);
             await viewModel.InitializeAsync();
         }
         finally
@@ -1005,7 +1523,7 @@ public sealed class MainWindowViewModelTests
     public async Task QueuedOlderWorkspaceIsRecheckedOnUiDispatch()
     {
         var wallpaper = new FakeWallpaperApplicationService(
-            SettingsV2.CreateDefault());
+            SettingsV3.CreateDefault());
         using var preferencesStore = new FakeAppPreferencesStore();
         var uiContext = new QueuedSynchronizationContext();
         var previousContext = SynchronizationContext.Current;
@@ -1013,7 +1531,10 @@ public sealed class MainWindowViewModelTests
         try
         {
             SynchronizationContext.SetSynchronizationContext(uiContext);
-            viewModel = CreateViewModel(wallpaper, preferencesStore);
+            viewModel = CreateViewModel(
+                wallpaper,
+                preferencesStore,
+                captureCurrentSynchronizationContext: true);
             await viewModel.InitializeAsync();
         }
         finally
@@ -1098,33 +1619,54 @@ public sealed class MainWindowViewModelTests
 
     private static MainWindowViewModel CreateViewModel(
         IWallpaperApplicationService wallpaper,
-        IAppPreferencesStore preferencesStore) =>
-        new(
-            wallpaper,
-            preferencesStore,
-            new StubErrorMapper(),
-            new FallbackTextProvider());
+        IAppPreferencesStore preferencesStore,
+        bool captureCurrentSynchronizationContext = false,
+        ISafeMediaPreviewService? previewMedia = null,
+        IWallpaperSourceProviderRegistry? sourceRegistry = null)
+    {
+        var previousContext = SynchronizationContext.Current;
+        try
+        {
+            if (!captureCurrentSynchronizationContext)
+            {
+                SynchronizationContext.SetSynchronizationContext(null);
+            }
+
+            return new MainWindowViewModel(
+                wallpaper,
+                preferencesStore,
+                new StubErrorMapper(),
+                new FallbackTextProvider(),
+                previewMedia ?? new FileExistencePreviewService(),
+                sourceRegistry ?? new WallpaperSourceProviderRegistry(
+                    [new LocalFileWallpaperSourceProvider()]));
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(previousContext);
+        }
+    }
 
     internal static (MainWindowViewModel ViewModel, IAppTextProvider Text)
         CreateLayoutFixture()
     {
         var text = new FallbackTextProvider();
         var viewModel = new MainWindowViewModel(
-            new FakeWallpaperApplicationService(SettingsV2.CreateDefault()),
+            new FakeWallpaperApplicationService(SettingsV3.CreateDefault()),
             new FakeAppPreferencesStore(),
             new StubErrorMapper(),
             text);
         return (viewModel, text);
     }
 
-    private static SettingsV2 CreateSettings(
+    private static SettingsV3 CreateSettings(
         string? selectedMediaPath = null,
         MediaKind selectedMediaKind = MediaKind.None,
         Func<WallpaperProfile, WallpaperProfile>? updateProfile = null,
         bool acceptedCdpRisk = false,
         IReadOnlyList<(string Path, MediaKind Kind)>? recentMedia = null)
     {
-        var baseline = SettingsV2.CreateDefault();
+        var baseline = SettingsV3.CreateDefault();
         var catalog = new List<MediaReference>();
         var byPath = new Dictionary<string, MediaReference>(
             StringComparer.OrdinalIgnoreCase);
@@ -1179,8 +1721,62 @@ public sealed class MainWindowViewModelTests
             LastKnownKind = MediaKind.Video,
         };
 
-    private static SettingsV2 AddRecent(
-        SettingsV2 baseline,
+    private static MediaReference CreateWorkshopDynamicMedia(
+        string publishedFileId,
+        WallpaperContentKind contentKind) =>
+        new()
+        {
+            MediaId = Guid.CreateVersion7(),
+            SourceKind = MediaSourceKind.WallpaperEngineWorkshopProject,
+            SourceIdentifier = publishedFileId,
+            LastKnownKind = MediaKind.None,
+            LastKnownContentKind = contentKind,
+            LastKnownDisplayName = $"{contentKind} project",
+        };
+
+    private static WallpaperSourceDescriptor CreateDynamicDescriptor(
+        string publishedFileId,
+        WallpaperContentKind contentKind) =>
+        new(
+            MediaSourceKind.WallpaperEngineWorkshopProject,
+            publishedFileId,
+            $"{contentKind} project",
+            contentKind,
+            WallpaperDeliveryKind.WallpaperEngineWindow,
+            WallpaperDeliveryCapabilities.DynamicFrames);
+
+    private static WallpaperCompatibilitySnapshot CreateCompatibilitySnapshot(
+        PresentationEvidence evidence)
+    {
+        var decision = PresentationContractCatalog.Match(
+            evidence,
+            finalizeBaselineFallback: true);
+        return WallpaperCompatibilitySnapshot.NotEvaluated with
+        {
+            Presentation = decision.Snapshot,
+            Capabilities = decision.Capabilities,
+        };
+    }
+
+    private static SettingsV3 WithSelectedMedia(
+        SettingsV3 baseline,
+        MediaReference media)
+    {
+        var global = baseline.ResolveProfile(SemanticRegion.Global);
+        return (baseline with
+        {
+            MediaCatalog = [.. baseline.MediaCatalog, media],
+            Profiles = baseline.Profiles
+                .Select(
+                    profile => profile.ProfileId == global.ProfileId
+                        ? profile with { MediaId = media.MediaId }
+                        : profile)
+                .ToArray(),
+        }).CreateSnapshot();
+    }
+
+    private static SettingsV3 AddRecent(
+        SettingsV3 baseline,
         MediaReference media) =>
         (baseline with
         {
@@ -1188,10 +1784,10 @@ public sealed class MainWindowViewModelTests
             RecentMediaIds = [media.MediaId],
         }).CreateSnapshot();
 
-    private static WallpaperProfile Global(SettingsV2 settings) =>
+    private static WallpaperProfile Global(SettingsV3 settings) =>
         settings.ResolveProfile(SemanticRegion.Global);
 
-    private static MediaReference? SelectedMedia(SettingsV2 settings)
+    private static MediaReference? SelectedMedia(SettingsV3 settings)
     {
         var mediaId = Global(settings).MediaId;
         return mediaId is { } actualMediaId
@@ -1228,11 +1824,11 @@ public sealed class MainWindowViewModelTests
     private class FakeWallpaperApplicationService : IWallpaperApplicationService
     {
         private WallpaperWorkspace _workspace;
-        private SettingsV2 _persistedSettings;
+        private SettingsV3 _persistedSettings;
         private long _nextRevision;
         private int _applyCallCount;
 
-        public FakeWallpaperApplicationService(SettingsV2 persistedSettings)
+        public FakeWallpaperApplicationService(SettingsV3 persistedSettings)
         {
             _persistedSettings = persistedSettings.CreateSnapshot();
             _workspace = new WallpaperWorkspace(
@@ -1263,10 +1859,6 @@ public sealed class MainWindowViewModelTests
             LoadFailure is FutureSettingsVersionException
             {
                 HasVersion1Backup: true,
-            } ||
-            LoadFailure is SettingsProjectionException
-            {
-                HasVersion1Backup: true,
             };
 
         public Exception? ApplyFailure { get; set; }
@@ -1277,7 +1869,7 @@ public sealed class MainWindowViewModelTests
 
         public Exception? LoadFailure { get; set; }
 
-        public SettingsV2? BackupSettings { get; set; }
+        public SettingsV3? BackupSettings { get; set; }
 
         public bool PersistApplyRequestBeforeFailure { get; set; }
 
@@ -1295,9 +1887,20 @@ public sealed class MainWindowViewModelTests
 
         public int ApplyCallCount => Volatile.Read(ref _applyCallCount);
 
+        public WallpaperSourceResolution? LastExpectedSourceResolution
+        {
+            get;
+            private set;
+        }
+
+        public ConcurrentQueue<WallpaperSourceResolution?> ExpectedSourceResolutions
+        {
+            get;
+        } = new();
+
         public int RestoreBackupCallCount { get; private set; }
 
-        public SettingsV2? LastSavedSettings { get; private set; }
+        public SettingsV3? LastSavedSettings { get; private set; }
 
         public Task<WallpaperWorkspaceState> InitializeAsync(
             CancellationToken cancellationToken = default)
@@ -1312,7 +1915,7 @@ public sealed class MainWindowViewModelTests
             return Task.FromResult(Workspace);
         }
 
-        public void ReplaceDraft(SettingsV2 draft)
+        public void ReplaceDraft(SettingsV3 draft)
         {
             _workspace.ReplaceDraft(draft);
             PublishWorkspace();
@@ -1371,10 +1974,18 @@ public sealed class MainWindowViewModelTests
             PublishWorkspace();
         }
 
-        public async Task<WallpaperApplyResult> ApplyAsync(
+        public Task<WallpaperApplyResult> ApplyAsync(
             RuntimeLaunchMode launchMode = RuntimeLaunchMode.ManualApply,
+            CancellationToken cancellationToken = default) =>
+            ApplyAsync(launchMode, expectedSourceResolution: null, cancellationToken);
+
+        public async Task<WallpaperApplyResult> ApplyAsync(
+            RuntimeLaunchMode launchMode,
+            WallpaperSourceResolution? expectedSourceResolution,
             CancellationToken cancellationToken = default)
         {
+            LastExpectedSourceResolution = expectedSourceResolution;
+            ExpectedSourceResolutions.Enqueue(expectedSourceResolution);
             _ = launchMode;
             cancellationToken.ThrowIfCancellationRequested();
             var call = Interlocked.Increment(ref _applyCallCount);
@@ -1501,12 +2112,13 @@ public sealed class MainWindowViewModelTests
             return new WallpaperApplyResult(
                 activation,
                 Workspace.SavedDesired,
-                ShortcutReady: true);
+                ShortcutReady:
+                    activation.Outcome == RuntimeActivationOutcome.MediaActive);
         }
 
         public void CancelLatestApply() => ReleaseFirstApply.TrySetResult();
 
-        public Task<SettingsV2> SetRiskAcceptanceAsync(
+        public Task<SettingsV3> SetRiskAcceptanceAsync(
             bool accepted,
             CancellationToken cancellationToken = default)
         {
@@ -1527,7 +2139,7 @@ public sealed class MainWindowViewModelTests
             return Task.FromResult(saved);
         }
 
-        public Task<SettingsV2> RemoveRecentMediaAsync(
+        public Task<SettingsV3> RemoveRecentMediaAsync(
             Guid mediaId,
             CancellationToken cancellationToken = default)
         {
@@ -1538,7 +2150,7 @@ public sealed class MainWindowViewModelTests
                     .ToArray());
         }
 
-        public Task<SettingsV2> ClearRecentMediaAsync(
+        public Task<SettingsV3> ClearRecentMediaAsync(
             CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -1605,13 +2217,13 @@ public sealed class MainWindowViewModelTests
                     activeSnapshot: null));
         }
 
-        public Task<SettingsV2> RestoreVersion1BackupAsync(
+        public Task<SettingsV3> RestoreVersion1BackupAsync(
             CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
             RestoreBackupCallCount++;
             _persistedSettings =
-                (BackupSettings ?? SettingsV2.CreateDefault()).CreateSnapshot();
+                (BackupSettings ?? SettingsV3.CreateDefault()).CreateSnapshot();
             _workspace = new WallpaperWorkspace(
                 _persistedSettings,
                 WallpaperRuntimeSurface.Official());
@@ -1620,11 +2232,11 @@ public sealed class MainWindowViewModelTests
             return Task.FromResult(_persistedSettings);
         }
 
-        public Task<SettingsV2> ResetWallpaperSettingsAsync(
+        public Task<SettingsV3> ResetWallpaperSettingsAsync(
             CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            _persistedSettings = SettingsV2.CreateDefault();
+            _persistedSettings = SettingsV3.CreateDefault();
             _workspace = new WallpaperWorkspace(
                 _persistedSettings,
                 WallpaperRuntimeSurface.Official(),
@@ -1642,7 +2254,7 @@ public sealed class MainWindowViewModelTests
 
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 
-        public void SeedActive(SettingsV2 settings)
+        public void SeedActive(SettingsV3 settings)
         {
             var selected = SelectedMedia(settings) ??
                 throw new InvalidOperationException(
@@ -1672,15 +2284,15 @@ public sealed class MainWindowViewModelTests
                 new WallpaperWorkspaceStateChangedEventArgs(workspace));
 
         private void CommitSaved(
-            SettingsV2 saved,
-            SettingsV2 requested,
+            SettingsV3 saved,
+            SettingsV3 requested,
             long revision)
         {
             SaveCallCount++;
             _persistedSettings = saved.CreateSnapshot();
             LastSavedSettings = _persistedSettings;
             _ = _workspace.CommitSavedDesired(_persistedSettings, revision);
-            if (SettingsV2Comparer.UiDirtyEquals(
+            if (SettingsV3Comparer.UiDirtyEquals(
                     Workspace.Draft,
                     requested))
             {
@@ -1690,7 +2302,7 @@ public sealed class MainWindowViewModelTests
             PublishWorkspace();
         }
 
-        private Task<SettingsV2> SaveRecentsAsync(IReadOnlyList<Guid> recents)
+        private Task<SettingsV3> SaveRecentsAsync(IReadOnlyList<Guid> recents)
         {
             SaveCallCount++;
             var saved = (_persistedSettings with
@@ -1708,7 +2320,7 @@ public sealed class MainWindowViewModelTests
             return Task.FromResult(saved);
         }
 
-        private static SettingsV2 PromoteSelectedRecent(SettingsV2 settings)
+        private static SettingsV3 PromoteSelectedRecent(SettingsV3 settings)
         {
             var mediaId = Global(settings).MediaId;
             if (mediaId is null)
@@ -1721,7 +2333,7 @@ public sealed class MainWindowViewModelTests
                 RecentMediaIds = new[] { mediaId.Value }
                     .Concat(
                         settings.RecentMediaIds.Where(id => id != mediaId.Value))
-                    .Take(SettingsV2.MaximumRecentMediaIds)
+                    .Take(SettingsV3.MaximumRecentMediaIds)
                     .ToArray(),
             }).CreateSnapshot();
         }
@@ -1737,7 +2349,7 @@ public sealed class MainWindowViewModelTests
         IWallpaperApplicationCapabilitySource
     {
         public FakeCapabilityWallpaperApplicationService(
-            SettingsV2 persistedSettings,
+            SettingsV3 persistedSettings,
             WallpaperCompatibilitySnapshot compatibility)
             : base(persistedSettings)
         {
@@ -1755,6 +2367,53 @@ public sealed class MainWindowViewModelTests
             Compatibility.Capabilities;
 
         public WallpaperCompatibilitySnapshot Compatibility { get; }
+    }
+
+    private sealed class FakeDynamicWallpaperApplicationService :
+        FakeWallpaperApplicationService,
+        IDynamicWallpaperCapabilitySource,
+        IWallpaperApplicationCapabilitySource
+    {
+        private int _probeCount;
+
+        public FakeDynamicWallpaperApplicationService(
+            SettingsV3 persistedSettings,
+            DynamicWallpaperCapability capability,
+            WallpaperCompatibilitySnapshot? compatibility = null)
+            : base(persistedSettings)
+        {
+            Capability = capability;
+            Compatibility = compatibility ?? WallpaperCompatibilitySnapshot.NotEvaluated;
+        }
+
+        public DynamicWallpaperCapability Capability { get; set; }
+
+        public int ProbeCount => Volatile.Read(ref _probeCount);
+
+        public event EventHandler<WallpaperInjectionCapabilitiesChangedEventArgs>?
+            CapabilitiesChanged;
+
+        public CompatibilityCapabilities Capabilities =>
+            Compatibility.Capabilities;
+
+        public WallpaperCompatibilitySnapshot Compatibility { get; }
+
+        public ValueTask<DynamicWallpaperCapability> ProbeDynamicWallpaperAsync(
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            _ = Interlocked.Increment(ref _probeCount);
+            return ValueTask.FromResult(Capability);
+        }
+
+        public void RaiseCapabilitiesChanged() =>
+            CapabilitiesChanged?.Invoke(
+                this,
+                new WallpaperInjectionCapabilitiesChangedEventArgs(
+                    generation: 1,
+                    Capabilities,
+                    Capabilities,
+                    Compatibility.Presentation));
     }
 
     private sealed class FakeAppPreferencesStore : IAppPreferencesStore
@@ -1848,17 +2507,112 @@ public sealed class MainWindowViewModelTests
         }
     }
 
-    private sealed class RecoveringDiscoveryProvider : IWallpaperSourceProvider
+    private sealed class CountingWorkshopProvider(WallpaperSourceDescriptor descriptor)
+        : IWallpaperSourceProvider
     {
-        public MediaSourceKind SourceKind =>
-            MediaSourceKind.WallpaperEngineWorkshopProject;
+        private int _discoveryCount;
+        private int _resolveCount;
 
-        public bool ShouldFail { get; set; } = true;
+        public MediaSourceKind SourceKind => descriptor.SourceKind;
+
+        public int DiscoveryCount => Volatile.Read(ref _discoveryCount);
+
+        public int ResolveCount => Volatile.Read(ref _resolveCount);
 
         public ValueTask<IReadOnlyList<WallpaperSourceDescriptor>> DiscoverAsync(
             CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            _ = Interlocked.Increment(ref _discoveryCount);
+            return ValueTask.FromResult<IReadOnlyList<WallpaperSourceDescriptor>>([descriptor]);
+        }
+
+        public ValueTask<WallpaperSourceResolution> ResolveAsync(
+            MediaReference reference,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            _ = Interlocked.Increment(ref _resolveCount);
+            return ValueTask.FromResult(
+                new WallpaperSourceResolution(
+                    reference,
+                    descriptor,
+                    new MediaFileMetadata(
+                        MediaFormat.Mp4,
+                        MediaKind.Video,
+                        "video/mp4",
+                        128)));
+        }
+    }
+
+    private sealed class MutableWorkshopDiscoveryProvider(
+        IReadOnlyList<WallpaperSourceDescriptor> sources) : IWallpaperSourceProvider
+    {
+        public MediaSourceKind SourceKind =>
+            MediaSourceKind.WallpaperEngineWorkshopProject;
+
+        public IReadOnlyList<WallpaperSourceDescriptor> Sources { get; set; } =
+            sources;
+
+        public ValueTask<IReadOnlyList<WallpaperSourceDescriptor>> DiscoverAsync(
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return ValueTask.FromResult(Sources);
+        }
+
+        public ValueTask<WallpaperSourceResolution> ResolveAsync(
+            MediaReference reference,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var descriptor = Sources.FirstOrDefault(
+                source => string.Equals(
+                    source.SourceIdentifier,
+                    reference.SourceIdentifier,
+                    StringComparison.Ordinal));
+            if (descriptor is null)
+            {
+                throw new WallpaperEngineProjectUnavailableException(
+                    SourceKind,
+                    WallpaperEngineProjectUnavailableReason.NotFound);
+            }
+
+            var metadata = descriptor.ContentKind switch
+            {
+                WallpaperContentKind.Image => new MediaFileMetadata(
+                    MediaFormat.Png,
+                    MediaKind.Image,
+                    "image/png",
+                    128),
+                WallpaperContentKind.Video => new MediaFileMetadata(
+                    MediaFormat.Mp4,
+                    MediaKind.Video,
+                    "video/mp4",
+                    128),
+                _ => null,
+            };
+            return ValueTask.FromResult(
+                new WallpaperSourceResolution(reference, descriptor, metadata));
+        }
+    }
+
+    private sealed class RecoveringDiscoveryProvider : IWallpaperSourceProvider
+    {
+        private int _discoveryCount;
+
+        public MediaSourceKind SourceKind =>
+            MediaSourceKind.WallpaperEngineWorkshopProject;
+
+        public bool ShouldFail { get; set; } = true;
+
+        public int DiscoveryCount => Volatile.Read(ref _discoveryCount);
+
+        public ValueTask<IReadOnlyList<WallpaperSourceDescriptor>> DiscoverAsync(
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            _ = Interlocked.Increment(ref _discoveryCount);
             if (ShouldFail)
             {
                 throw new IOException("Wallpaper Engine library is unavailable.");
@@ -1897,6 +2651,21 @@ public sealed class MainWindowViewModelTests
             PathProbeCount++;
             return false;
         }
+    }
+
+    private sealed class FileExistencePreviewService : ISafeMediaPreviewService
+    {
+        public ISafeMediaPreviewLease Acquire(MediaReference reference) =>
+            throw new NotSupportedException(reference.SourceIdentifier);
+
+        public ISafeMediaPreviewLease Acquire(string mediaPath) =>
+            throw new NotSupportedException(mediaPath);
+
+        public bool IsAvailable(MediaReference reference) =>
+            reference.SourceKind != MediaSourceKind.LocalFile ||
+            File.Exists(reference.SourceIdentifier);
+
+        public bool IsAvailable(string mediaPath) => File.Exists(mediaPath);
     }
 
     private sealed class QueuedSynchronizationContext : SynchronizationContext

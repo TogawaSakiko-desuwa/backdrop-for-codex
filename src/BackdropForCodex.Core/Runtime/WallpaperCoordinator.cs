@@ -1,4 +1,5 @@
 using BackdropForCodex.Core.Codex;
+using BackdropForCodex.Core.Dynamic;
 using BackdropForCodex.Core.Injection;
 using BackdropForCodex.Core.Media;
 using BackdropForCodex.Core.Settings;
@@ -106,7 +107,7 @@ public interface IWallpaperRuntime : IAsyncDisposable
 
     WallpaperRuntimeSurface Surface { get; }
 
-    SettingsV2? ActiveSnapshot { get; }
+    SettingsV3? ActiveSnapshot { get; }
 
     /// <summary>
     /// Attempts to activate one canonical request. A pre-mutation rejection may return
@@ -165,7 +166,8 @@ public interface IWallpaperRuntimeCapabilitySource
 /// </summary>
 public sealed class WallpaperCoordinator :
     IWallpaperRuntime,
-    IWallpaperRuntimeCapabilitySource
+    IWallpaperRuntimeCapabilitySource,
+    IDynamicWallpaperCapabilitySource
 {
     private enum ActivationTerminationKind
     {
@@ -186,8 +188,10 @@ public sealed class WallpaperCoordinator :
     private readonly IApplicationActivationManager _activationManager;
     private readonly ICdpEndpointDiscoveryService _endpointDiscovery;
     private readonly IWallpaperSourceProviderRegistry _sourceRegistry;
-    private readonly IPlaybackPool _playbackPool;
+    private readonly IActiveWallpaperPool _playbackPool;
     private readonly IWallpaperInjectionSession _injectionSession;
+    private readonly IDynamicWallpaperActivationFactory? _dynamicActivationFactory;
+    private readonly IAsyncDisposable? _ownedDynamicActivationFactory;
     private readonly WallpaperInjectionGenerationMonitor _injectionMonitor;
     private readonly WallpaperCoordinatorOptions _options;
     private readonly IDisposable? _ownedTransport;
@@ -195,14 +199,26 @@ public sealed class WallpaperCoordinator :
     private VerifiedCdpEndpoint? _endpoint;
     private uint _activationProcessId;
     private DateTimeOffset? _activationProcessStartTimeUtc;
-    private SettingsV2? _activeSnapshot;
+    private SettingsV3? _activeSnapshot;
     private WallpaperRuntimeSurface _surface = WallpaperRuntimeSurface.Disconnected();
     private PlaybackOwnershipToken? _activePlaybackOwnership;
+    private IWallpaperInjectionCapabilitySource? _activeDynamicCapabilitySource;
+    private PendingActivationResourceOwner? _retainedAttemptCleanup;
+    private readonly object _disposeSync = new();
+    private Task? _disposeAttemptTask;
+    private Task? _disposeInjectionFaultTask;
     private long _activeRevision;
     private long _generation;
     private bool _launchedByThisCoordinator;
     private bool _paused;
+    private bool _disposeInjectionObservationStopped;
+    private bool _disposeRuntimeCleanupCompleted;
+    private bool _disposeInjectionSessionCompleted;
+    private bool _disposePlaybackPoolCompleted;
+    private bool _disposeDynamicFactoryCompleted;
+    private bool _disposeTransportCompleted;
     private int _disposed;
+    private int _disposeCompleted;
 
     public WallpaperCoordinator(
         IInstalledCodexPackageLocator packageLocator,
@@ -210,9 +226,10 @@ public sealed class WallpaperCoordinator :
         IApplicationActivationManager activationManager,
         ICdpEndpointDiscoveryService endpointDiscovery,
         IWallpaperSourceProviderRegistry sourceRegistry,
-        IPlaybackPool playbackPool,
+        IActiveWallpaperPool playbackPool,
         IWallpaperInjectionSession injectionSession,
-        WallpaperCoordinatorOptions? options = null)
+        WallpaperCoordinatorOptions? options = null,
+        IDynamicWallpaperActivationFactory? dynamicActivationFactory = null)
         : this(
             packageLocator,
             processSource,
@@ -222,6 +239,8 @@ public sealed class WallpaperCoordinator :
             playbackPool,
             injectionSession,
             options,
+            dynamicActivationFactory,
+            ownedDynamicActivationFactory: null,
             ownedTransport: null)
     {
     }
@@ -232,9 +251,11 @@ public sealed class WallpaperCoordinator :
         IApplicationActivationManager activationManager,
         ICdpEndpointDiscoveryService endpointDiscovery,
         IWallpaperSourceProviderRegistry sourceRegistry,
-        IPlaybackPool playbackPool,
+        IActiveWallpaperPool playbackPool,
         IWallpaperInjectionSession injectionSession,
         WallpaperCoordinatorOptions? options,
+        IDynamicWallpaperActivationFactory? dynamicActivationFactory,
+        IAsyncDisposable? ownedDynamicActivationFactory,
         IDisposable? ownedTransport)
     {
         _packageLocator = packageLocator ?? throw new ArgumentNullException(nameof(packageLocator));
@@ -245,6 +266,8 @@ public sealed class WallpaperCoordinator :
             throw new ArgumentNullException(nameof(sourceRegistry));
         _playbackPool = playbackPool ?? throw new ArgumentNullException(nameof(playbackPool));
         _injectionSession = injectionSession ?? throw new ArgumentNullException(nameof(injectionSession));
+        _dynamicActivationFactory = dynamicActivationFactory;
+        _ownedDynamicActivationFactory = ownedDynamicActivationFactory;
         _options = options ?? WallpaperCoordinatorOptions.Default;
         _options.Validate();
         _ownedTransport = ownedTransport;
@@ -269,20 +292,33 @@ public sealed class WallpaperCoordinator :
 
     public WallpaperRuntimeStatusChangedEventArgs Status { get; private set; }
 
-    public bool IsActive =>
-        _injectionSession.IsActive &&
-        _playbackPool.ActiveLease is not null;
+    public bool IsActive => _playbackPool.ActiveLease switch
+    {
+        DirectMediaActiveWallpaperLease => _injectionSession.IsActive,
+        { DeliveryKind: ActiveWallpaperDeliveryKind.DynamicStream } => true,
+        _ => false,
+    };
 
     public bool IsPaused => _paused;
 
     public WallpaperRuntimeSurface Surface => Volatile.Read(ref _surface);
 
-    public SettingsV2? ActiveSnapshot => Volatile.Read(ref _activeSnapshot);
+    public SettingsV3? ActiveSnapshot => Volatile.Read(ref _activeSnapshot);
 
     public CompatibilityCapabilities Capabilities => _injectionMonitor.Capabilities;
 
     public WallpaperCompatibilitySnapshot Compatibility =>
         _injectionMonitor.Compatibility;
+
+    public ValueTask<DynamicWallpaperCapability> ProbeDynamicWallpaperAsync(
+        CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        return _dynamicActivationFactory is null
+            ? ValueTask.FromResult(DynamicWallpaperCapability.Unavailable(
+                DynamicWallpaperCapabilityReasonCode.WallpaperEngineUnavailable))
+            : _dynamicActivationFactory.ProbeAsync(cancellationToken);
+    }
 
     public static WallpaperCoordinator CreateDefault() =>
         CreateDefault(
@@ -291,8 +327,14 @@ public sealed class WallpaperCoordinator :
 
     public static WallpaperCoordinator CreateDefault(
         IWallpaperSourceProviderRegistry sourceRegistry)
+        => CreateDefault(sourceRegistry, new WallpaperEngineInstallationLocator());
+
+    public static WallpaperCoordinator CreateDefault(
+        IWallpaperSourceProviderRegistry sourceRegistry,
+        IWallpaperEngineInstallationLocator wallpaperEngineInstallationLocator)
     {
         ArgumentNullException.ThrowIfNull(sourceRegistry);
+        ArgumentNullException.ThrowIfNull(wallpaperEngineInstallationLocator);
         if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000))
         {
             throw new PlatformNotSupportedException("Backdrop for Codex requires Windows 11.");
@@ -306,6 +348,8 @@ public sealed class WallpaperCoordinator :
             requestTimeout: TimeSpan.FromMilliseconds(750));
         var discovery = new CdpEndpointDiscoveryService(
             new CdpEndpointDiscovery(candidateSource, transport));
+        var dynamicRuntime = WallpaperEngineDynamicRuntime.CreateDefault(
+            wallpaperEngineInstallationLocator);
 
         return new WallpaperCoordinator(
             new InstalledCodexPackageLocator(),
@@ -313,9 +357,11 @@ public sealed class WallpaperCoordinator :
             new WindowsApplicationActivationManager(),
             discovery,
             sourceRegistry,
-            new SingleSlotPlaybackPool(),
+            new SingleSlotActiveWallpaperPool(),
             new PuppeteerWallpaperSession(),
             WallpaperCoordinatorOptions.Default,
+            dynamicRuntime,
+            dynamicRuntime,
             transport);
     }
 
@@ -334,6 +380,7 @@ public sealed class WallpaperCoordinator :
         try
         {
             ThrowIfDisposed();
+            await ReleaseRetainedAttemptCleanupAsync().ConfigureAwait(false);
             _activeRevision = request.Revision;
 
             if (request.Media is null)
@@ -400,24 +447,42 @@ public sealed class WallpaperCoordinator :
             "Validating the Codex package and media file.",
             request.Revision);
 
-        IDirectMediaSourceProvider directMediaProvider;
+        IDirectMediaSourceProvider? directMediaProvider = null;
+        IWallpaperEngineProjectSourceProvider? projectProvider = null;
         WallpaperSourceResolution resolution;
         try
         {
             resolution = await _sourceRegistry
                 .ResolveRequiredAsync(media, attempt.CallerCancellation)
                 .ConfigureAwait(false);
-            directMediaProvider = resolution.Descriptor.DeliveryKind switch
+            switch (resolution.Descriptor.DeliveryKind)
             {
-                WallpaperDeliveryKind.DirectMedia =>
-                    _sourceRegistry.GetRequiredDirectMediaProvider(resolution),
-                WallpaperDeliveryKind.WallpaperEngineWindow =>
-                    throw new WallpaperRendererUnavailableException(resolution.Descriptor),
-                WallpaperDeliveryKind.Unsupported =>
-                    throw new WallpaperContentNotSupportedException(resolution.Descriptor),
-                _ => throw new WallpaperSourceCapabilityException(
-                    "The wallpaper source declared an unknown delivery path."),
-            };
+                case WallpaperDeliveryKind.DirectMedia:
+                    directMediaProvider =
+                        _sourceRegistry.GetRequiredDirectMediaProvider(resolution);
+                    break;
+                case WallpaperDeliveryKind.WallpaperEngineWindow:
+                    if (_dynamicActivationFactory is null)
+                    {
+                        throw new WallpaperRendererUnavailableException(resolution.Descriptor);
+                    }
+
+                    var capability = await _dynamicActivationFactory
+                        .ProbeAsync(attempt.CallerCancellation)
+                        .ConfigureAwait(false);
+                    if (!capability.IsAvailable)
+                    {
+                        throw new DynamicWallpaperUnavailableException(capability.ReasonCode);
+                    }
+
+                    projectProvider = _sourceRegistry.GetRequiredProjectProvider(resolution);
+                    break;
+                case WallpaperDeliveryKind.Unsupported:
+                    throw new WallpaperContentNotSupportedException(resolution.Descriptor);
+                default:
+                    throw new WallpaperSourceCapabilityException(
+                        "The wallpaper source declared an unknown delivery path.");
+            }
         }
         catch (OperationCanceledException) when (attempt.CallerCancellation.IsCancellationRequested)
         {
@@ -432,7 +497,29 @@ public sealed class WallpaperCoordinator :
         attempt.SetIdentity(security.Identity!);
         try
         {
-            var lease = await directMediaProvider
+            if (projectProvider is not null)
+            {
+                var projectLease = await projectProvider
+                    .AcquireProjectLeaseAsync(
+                        resolution.CanonicalReference,
+                        attempt.CallerCancellation)
+                    .ConfigureAwait(false);
+                try
+                {
+                    attempt.AcceptPendingProjectLease(resolution, projectLease);
+                }
+                catch
+                {
+                    await projectLease.DisposeAsync().ConfigureAwait(false);
+                    throw;
+                }
+
+                return null;
+            }
+
+            var lease = await (directMediaProvider ??
+                    throw new WallpaperSourceCapabilityException(
+                        "The direct wallpaper provider capability was not selected."))
                 .AcquireDirectMediaLeaseAsync(
                     resolution.CanonicalReference,
                     attempt.CallerCancellation)
@@ -594,12 +681,23 @@ public sealed class WallpaperCoordinator :
             WallpaperRuntimePhase.Applying,
             "Applying the wallpaper to the reviewed Codex page.",
             request.Revision);
-        var leaseToActivate = attempt.RequirePendingLease();
+        if (attempt.DynamicResolution is { } dynamicResolution)
+        {
+            return await ApplyAndCommitDynamicMediaAsync(
+                    attempt,
+                    identity,
+                    endpoint,
+                    dynamicResolution,
+                    media)
+                .ConfigureAwait(false);
+        }
+
+        var mediaLease = attempt.RequirePendingLease();
         var generation = checked(++_generation);
         attempt.SetGeneration(generation);
         var injectionOptions = CreateInjectionOptions(
             generation,
-            leaseToActivate,
+            mediaLease,
             request.GlobalProfile);
         _injectionMonitor.BeginCapabilityObservation(injectionOptions.Generation);
         attempt.MarkRuntimeMutationStarted();
@@ -611,8 +709,10 @@ public sealed class WallpaperCoordinator :
             CodexSecurityStage.TargetValidation,
             "The package, process, endpoint and unique Codex target passed security validation."));
 
+        var leaseToActivate = attempt.PromotePendingDirectLease(generation);
         var ownership = await TransferPlaybackOwnershipAsync(attempt, leaseToActivate)
             .ConfigureAwait(false);
+        StopObservingActiveDynamicCompatibility();
 
         // Pause belongs to one injected media generation. A replacement starts from its
         // own default playback state and must not inherit a stale pause from the prior video.
@@ -635,9 +735,93 @@ public sealed class WallpaperCoordinator :
             surface);
     }
 
+    private async Task<RuntimeActivationResult> ApplyAndCommitDynamicMediaAsync(
+        ActivationAttemptContext attempt,
+        VerifiedCodexIdentity identity,
+        VerifiedCdpEndpoint endpoint,
+        WallpaperSourceResolution resolution,
+        MediaReference media)
+    {
+        var factory = _dynamicActivationFactory ??
+            throw new WallpaperRendererUnavailableException(resolution.Descriptor);
+        var generation = checked(++_generation);
+        attempt.SetGeneration(generation);
+        _injectionMonitor.BeginCapabilityObservation(generation);
+        var activationRequest = new DynamicWallpaperActivationRequest(
+            generation,
+            endpoint,
+            resolution,
+            attempt.Request.GlobalProfile,
+            attempt.MutationSignal);
+        DynamicWallpaperActivationResult activation;
+        try
+        {
+            activation = await factory
+                .ActivateAsync(
+                    activationRequest,
+                    attempt.RequirePendingProjectLease(),
+                    attempt.CallerCancellation)
+                .ConfigureAwait(false);
+        }
+        catch (DynamicWallpaperUnavailableException exception)
+            when (!attempt.RuntimeMutationStarted)
+        {
+            var disposalFailure = await attempt
+                .TryDisposePendingLeaseAsync()
+                .ConfigureAwait(false);
+            if (disposalFailure is not null)
+            {
+                throw new AggregateException(
+                    "Dynamic wallpaper startup and project lease cleanup both failed.",
+                    exception,
+                    disposalFailure);
+            }
+
+            return CompleteMediaPreparationFailure(attempt, exception);
+        }
+
+        var prepared = activation.Lease;
+        attempt.MarkRuntimeMutationStarted();
+        try
+        {
+            _ = attempt.AcceptPreparedDynamicLease(prepared, generation);
+        }
+        catch
+        {
+            await prepared.DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
+
+        _injectionMonitor.CaptureSecurity(CodexSecurityResult.Verified(
+            identity,
+            CodexSecurityStage.TargetValidation,
+            "The package, process, endpoint and unique Codex target passed security validation."));
+        var ownership = await TransferPlaybackOwnershipAsync(attempt, prepared)
+            .ConfigureAwait(false);
+        ObserveActiveDynamicCompatibility(prepared, activation, generation);
+        _injectionMonitor.MarkActive(generation);
+        _paused = false;
+        var activeSnapshot = attempt.Request.SettingsSnapshot.CreateSnapshot();
+        var surface = WallpaperRuntimeSurface.MediaActive(
+            generation,
+            media.MediaId,
+            ownership);
+        Volatile.Write(ref _activeSnapshot, activeSnapshot);
+        Volatile.Write(ref _surface, surface);
+        ObserveActiveWallpaperHealth(prepared, ownership);
+        Publish(
+            WallpaperRuntimePhase.Active,
+            "Dynamic wallpaper is active.",
+            attempt.Request.Revision);
+        return RuntimeActivationResult.MediaActive(
+            attempt.Request.Revision,
+            activeSnapshot,
+            surface);
+    }
+
     private async Task<PlaybackOwnershipToken> TransferPlaybackOwnershipAsync(
         ActivationAttemptContext attempt,
-        IDirectMediaLease leaseToActivate)
+        IActiveWallpaperLease leaseToActivate)
     {
         var ownership = attempt.BeginPlaybackTransfer();
         var transferConfirmed = false;
@@ -708,6 +892,19 @@ public sealed class WallpaperCoordinator :
         var pendingLeaseDisposalFailure = await attempt
             .TryDisposePendingLeaseAsync()
             .ConfigureAwait(false);
+        if (pendingLeaseDisposalFailure is not null)
+        {
+            if (_retainedAttemptCleanup is not null)
+            {
+                throw new InvalidOperationException(
+                    "A prior pending wallpaper cleanup must finish before another owner can be retained.");
+            }
+
+            _retainedAttemptCleanup = attempt.TakePendingCleanupOwner() ??
+                throw new InvalidOperationException(
+                    "Pending wallpaper cleanup failed without retaining its resource ownership.");
+        }
+
         return new ActivationCleanupResult(
             runtimeCleanupCompleted,
             safetyCleanupFailure,
@@ -801,11 +998,12 @@ public sealed class WallpaperCoordinator :
         try
         {
             ThrowIfDisposed();
+            await ReleaseRetainedAttemptCleanupAsync().ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
             var currentSnapshot = ActiveSnapshot;
             var currentSurface = Surface;
             if (currentSnapshot is null ||
-                !SettingsV2Comparer.RuntimeEquivalent(
+                !SettingsV3Comparer.RuntimeEquivalent(
                     currentSnapshot,
                     request.SettingsSnapshot))
             {
@@ -948,12 +1146,30 @@ public sealed class WallpaperCoordinator :
         await _operationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            ThrowIfDisposed();
+            await ReleaseRetainedAttemptCleanupAsync().ConfigureAwait(false);
             if (!IsActive)
             {
                 throw new WallpaperNotActiveException();
             }
 
-            await _injectionSession.SetPausedAsync(paused, cancellationToken).ConfigureAwait(false);
+            var activeLease = _playbackPool.ActiveLease;
+            if (activeLease is IPausableActiveWallpaperLease pausable)
+            {
+                await pausable.SetPausedAsync(paused, cancellationToken).ConfigureAwait(false);
+            }
+            else if (activeLease is DirectMediaActiveWallpaperLease)
+            {
+                await _injectionSession
+                    .SetPausedAsync(paused, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            else
+            {
+                throw new WallpaperSourceCapabilityException(
+                    "The active wallpaper lifetime does not expose a pause contract.");
+            }
+
             _paused = paused;
             Publish(
                 paused ? WallpaperRuntimePhase.Paused : WallpaperRuntimePhase.Active,
@@ -980,6 +1196,8 @@ public sealed class WallpaperCoordinator :
         await _operationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            ThrowIfDisposed();
+            await ReleaseRetainedAttemptCleanupAsync().ConfigureAwait(false);
             Publish(
                 WallpaperRuntimePhase.Stopping,
                 "Removing owned wallpaper content.",
@@ -1016,23 +1234,43 @@ public sealed class WallpaperCoordinator :
         }
     }
 
-    public async ValueTask DisposeAsync()
+    public ValueTask DisposeAsync()
     {
-        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+        lock (_disposeSync)
         {
-            return;
+            if (Volatile.Read(ref _disposeCompleted) != 0)
+            {
+                return ValueTask.CompletedTask;
+            }
+
+            if (_disposeAttemptTask is null || _disposeAttemptTask.IsCompleted)
+            {
+                _disposeAttemptTask = DisposeAttemptAsync();
+            }
+
+            return new ValueTask(_disposeAttemptTask);
         }
+    }
 
-        var injectionFaultTask = _injectionMonitor.StopObserving();
-
+    private async Task DisposeAttemptAsync()
+    {
+        Volatile.Write(ref _disposed, 1);
         var failures = new List<Exception>();
-        try
+        if (!_disposeInjectionObservationStopped)
         {
-            await injectionFaultTask.ConfigureAwait(false);
-        }
-        catch (Exception exception)
-        {
-            failures.Add(exception);
+            _disposeInjectionFaultTask ??= _injectionMonitor.StopObserving();
+            try
+            {
+                await _disposeInjectionFaultTask.ConfigureAwait(false);
+            }
+            catch (Exception exception)
+            {
+                failures.Add(exception);
+            }
+            finally
+            {
+                _disposeInjectionObservationStopped = true;
+            }
         }
 
         await _operationGate.WaitAsync().ConfigureAwait(false);
@@ -1041,63 +1279,159 @@ public sealed class WallpaperCoordinator :
             Publish(WallpaperRuntimePhase.Stopping, "Removing owned wallpaper content.");
             try
             {
-                await StopInjectedContentAndMediaAsync(CancellationToken.None).ConfigureAwait(false);
+                await ReleaseRetainedAttemptCleanupAsync().ConfigureAwait(false);
             }
             catch (Exception exception)
             {
                 failures.Add(exception);
             }
 
-            try
+            if (!_disposeRuntimeCleanupCompleted &&
+                !_disposeInjectionSessionCompleted &&
+                !_disposePlaybackPoolCompleted)
             {
-                await _injectionSession.DisposeAsync().ConfigureAwait(false);
-            }
-            catch (Exception exception)
-            {
-                failures.Add(exception);
-            }
-
-            try
-            {
-                await _playbackPool.DisposeAsync().ConfigureAwait(false);
-            }
-            catch (Exception exception)
-            {
-                failures.Add(exception);
+                try
+                {
+                    await StopInjectedContentAndMediaAsync(CancellationToken.None)
+                        .ConfigureAwait(false);
+                    _disposeRuntimeCleanupCompleted = true;
+                }
+                catch (Exception exception)
+                {
+                    failures.Add(exception);
+                }
             }
 
-            try
+            if (!_disposeInjectionSessionCompleted)
             {
-                _ownedTransport?.Dispose();
-            }
-            catch (Exception exception)
-            {
-                failures.Add(exception);
+                try
+                {
+                    await _injectionSession.DisposeAsync().ConfigureAwait(false);
+                    _disposeInjectionSessionCompleted = true;
+                }
+                catch (Exception exception)
+                {
+                    failures.Add(exception);
+                }
             }
 
-            _launchedByThisCoordinator = false;
-            _activationProcessId = 0;
-            _activationProcessStartTimeUtc = null;
-            _endpoint = null;
-            _paused = false;
-            _activePlaybackOwnership = null;
-            Volatile.Write(ref _activeSnapshot, null);
-            Volatile.Write(
-                ref _surface,
-                WallpaperRuntimeSurface.Disconnected(
-                    new WallpaperRuntimeError(
-                        "runtime-disposed",
-                        "Wallpaper runtime is disposed.")));
-            Publish(WallpaperRuntimePhase.Disposed, "Wallpaper runtime is disposed.");
+            if (!_disposePlaybackPoolCompleted)
+            {
+                try
+                {
+                    await _playbackPool.DisposeAsync().ConfigureAwait(false);
+                    _disposePlaybackPoolCompleted = true;
+                }
+                catch (Exception exception)
+                {
+                    failures.Add(exception);
+                }
+            }
+
+            if (_disposeInjectionSessionCompleted && _disposePlaybackPoolCompleted)
+            {
+                _disposeRuntimeCleanupCompleted = true;
+            }
+
+            if (!_disposeDynamicFactoryCompleted &&
+                _retainedAttemptCleanup is null &&
+                _disposeRuntimeCleanupCompleted)
+            {
+                try
+                {
+                    if (_ownedDynamicActivationFactory is not null)
+                    {
+                        await _ownedDynamicActivationFactory.DisposeAsync().ConfigureAwait(false);
+                    }
+
+                    _disposeDynamicFactoryCompleted = true;
+                }
+                catch (Exception exception)
+                {
+                    failures.Add(exception);
+                }
+            }
+
+            if (!_disposeTransportCompleted &&
+                _disposeDynamicFactoryCompleted &&
+                _retainedAttemptCleanup is null)
+            {
+                try
+                {
+                    _ownedTransport?.Dispose();
+                    _disposeTransportCompleted = true;
+                }
+                catch (Exception exception)
+                {
+                    failures.Add(exception);
+                }
+            }
+
+            var cleanupCompleted =
+                _retainedAttemptCleanup is null &&
+                _disposeRuntimeCleanupCompleted &&
+                _disposeInjectionSessionCompleted &&
+                _disposePlaybackPoolCompleted &&
+                _disposeDynamicFactoryCompleted &&
+                _disposeTransportCompleted;
+            if (failures.Count == 0 && !cleanupCompleted)
+            {
+                failures.Add(new InvalidOperationException(
+                    "Wallpaper runtime disposal did not complete every ownership boundary."));
+            }
+
+            if (failures.Count == 0)
+            {
+                _launchedByThisCoordinator = false;
+                _activationProcessId = 0;
+                _activationProcessStartTimeUtc = null;
+                _endpoint = null;
+                _paused = false;
+                _activePlaybackOwnership = null;
+                Volatile.Write(ref _activeSnapshot, null);
+                Volatile.Write(
+                    ref _surface,
+                    WallpaperRuntimeSurface.Disconnected(
+                        new WallpaperRuntimeError(
+                            "runtime-disposed",
+                            "Wallpaper runtime is disposed.")));
+                Volatile.Write(ref _disposeCompleted, 1);
+                Publish(WallpaperRuntimePhase.Disposed, "Wallpaper runtime is disposed.");
+            }
+            else
+            {
+                Publish(
+                    WallpaperRuntimePhase.Faulted,
+                    "Wallpaper runtime disposal is incomplete and retained resources will be retried.");
+            }
         }
         finally
         {
             _operationGate.Release();
-            _operationGate.Dispose();
         }
 
-        GC.SuppressFinalize(this);
         ThrowCollectedExceptions("One or more wallpaper resources could not be disposed.", failures);
+    }
+
+    private async ValueTask ReleaseRetainedAttemptCleanupAsync()
+    {
+        var retainedCleanup = _retainedAttemptCleanup;
+        if (retainedCleanup is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await retainedCleanup.DisposeAsync().ConfigureAwait(false);
+            _retainedAttemptCleanup = null;
+        }
+        catch (Exception exception)
+        {
+            throw new InvalidOperationException(
+                "A retained wallpaper resource could not be released before the next operation.",
+                exception);
+        }
     }
 
     private async Task<VerifiedCdpEndpoint> DiscoverSingleEndpointAsync(
@@ -1210,6 +1544,7 @@ public sealed class WallpaperCoordinator :
     private async Task StopInjectedContentAndMediaAsync(CancellationToken cancellationToken)
     {
         var failures = new List<Exception>();
+        StopObservingActiveDynamicCompatibility();
         _injectionMonitor.ClearActive();
         _endpoint = null;
         try
@@ -1435,6 +1770,152 @@ public sealed class WallpaperCoordinator :
         _injectionMonitor.CaptureSecurity(result);
     }
 
+    private void ObserveActiveWallpaperHealth(
+        IActiveWallpaperLease lease,
+        PlaybackOwnershipToken ownership)
+    {
+        if (lease is IActiveWallpaperHealthSource healthSource)
+        {
+            _ = HandleActiveWallpaperHealthAsync(lease, ownership, healthSource.Completion);
+        }
+    }
+
+    private void ObserveActiveDynamicCompatibility(
+        IActiveWallpaperLease lease,
+        DynamicWallpaperActivationResult activation,
+        long generation)
+    {
+        StopObservingActiveDynamicCompatibility();
+        var capabilitySource = lease as IWallpaperInjectionCapabilitySource;
+        if (capabilitySource is not null)
+        {
+            Interlocked.Exchange(ref _activeDynamicCapabilitySource, capabilitySource);
+            capabilitySource.CapabilitiesChanged += ActiveDynamicWallpaper_CapabilitiesChanged;
+        }
+
+        if (!_injectionMonitor.TryCaptureCompatibility(
+                generation,
+                activation.Presentation,
+                activation.Capabilities))
+        {
+            StopObservingActiveDynamicCompatibility();
+            throw new InvalidOperationException(
+                "The dynamic wallpaper compatibility observation was superseded before publication.");
+        }
+
+        if (capabilitySource is not null &&
+            !_injectionMonitor.TryCaptureCompatibility(
+                generation,
+                capabilitySource.PresentationContract,
+                capabilitySource.Capabilities))
+        {
+            StopObservingActiveDynamicCompatibility();
+            throw new InvalidOperationException(
+                "The active dynamic compatibility observation was superseded before publication.");
+        }
+    }
+
+    private void StopObservingActiveDynamicCompatibility()
+    {
+        var capabilitySource = Interlocked.Exchange(
+            ref _activeDynamicCapabilitySource,
+            null);
+        if (capabilitySource is not null)
+        {
+            capabilitySource.CapabilitiesChanged -= ActiveDynamicWallpaper_CapabilitiesChanged;
+        }
+    }
+
+    private void ActiveDynamicWallpaper_CapabilitiesChanged(
+        object? sender,
+        WallpaperInjectionCapabilitiesChangedEventArgs eventArgs)
+    {
+        if (!ReferenceEquals(sender, Volatile.Read(ref _activeDynamicCapabilitySource)))
+        {
+            return;
+        }
+
+        _ = _injectionMonitor.TryCaptureCompatibility(
+            eventArgs.Generation,
+            eventArgs.PresentationContract,
+            eventArgs.Current);
+    }
+
+    private async Task HandleActiveWallpaperHealthAsync(
+        IActiveWallpaperLease lease,
+        PlaybackOwnershipToken ownership,
+        Task completion)
+    {
+        Exception failure;
+        try
+        {
+            await completion.ConfigureAwait(false);
+            failure = new EndOfStreamException(
+                "The active dynamic wallpaper stream ended unexpectedly.");
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        catch (Exception exception)
+        {
+            failure = exception;
+        }
+
+        var gateAcquired = false;
+        try
+        {
+            await _operationGate.WaitAsync(CancellationToken.None).ConfigureAwait(false);
+            gateAcquired = true;
+            if (Volatile.Read(ref _disposed) != 0 ||
+                _playbackPool.ActiveOwnership != ownership ||
+                !ReferenceEquals(_playbackPool.ActiveLease, lease))
+            {
+                return;
+            }
+
+            try
+            {
+                await StopInjectedContentAndMediaAsync(CancellationToken.None)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception cleanupFailure)
+            {
+                failure = new AggregateException(
+                    "The dynamic wallpaper failed and cleanup could not be confirmed.",
+                    failure,
+                    cleanupFailure);
+            }
+
+            var error = RuntimeError("dynamic-wallpaper-health-failed", failure);
+            var surface = CreateFaultedSurface(error);
+            Volatile.Write(ref _activeSnapshot, null);
+            Volatile.Write(ref _surface, surface);
+            _activePlaybackOwnership = surface.PlaybackOwnership;
+            _paused = false;
+            Publish(
+                WallpaperRuntimePhase.Faulted,
+                "The dynamic wallpaper stream stopped and its owned resources were removed.",
+                _activeRevision);
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+        finally
+        {
+            if (gateAcquired)
+            {
+                try
+                {
+                    _operationGate.Release();
+                }
+                catch (ObjectDisposedException)
+                {
+                }
+            }
+        }
+    }
+
     private CodexSecurityResult RejectAtCurrentSecurityStage(
         VerifiedCodexIdentity identity)
     {
@@ -1471,7 +1952,13 @@ public sealed class WallpaperCoordinator :
         ArgumentNullException.ThrowIfNull(error);
         var activeLease = _playbackPool.ActiveLease;
         var ownership = _playbackPool.ActiveOwnership;
-        var mediaId = activeLease?.Reference.MediaId;
+        var mediaId = activeLease switch
+        {
+            DirectMediaActiveWallpaperLease direct =>
+                direct.MediaLease.Reference.MediaId,
+            IActiveWallpaperMediaIdentity dynamic => dynamic.MediaId,
+            _ => null,
+        };
         if (activeLease is null)
         {
             ownership = null;

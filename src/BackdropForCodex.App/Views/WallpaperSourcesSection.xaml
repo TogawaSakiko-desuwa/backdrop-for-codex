@@ -25,8 +25,10 @@
         <Setter Property="BorderThickness" Value="0" />
         <Setter Property="FocusVisualStyle" Value="{DynamicResource WorkbenchFocusVisualStyle}" />
         <Setter Property="AutomationProperties.Name" Value="{Binding DisplayName}" />
-        <Setter Property="AutomationProperties.HelpText" Value="{Binding DeliveryKind}" />
-        <Setter Property="AutomationProperties.ItemStatus" Value="{Binding ContentKind}" />
+        <Setter Property="AutomationProperties.HelpText"
+                Value="{localization:Loc Delivery_Unsupported, Fallback=Unavailable}" />
+        <Setter Property="AutomationProperties.ItemStatus"
+                Value="{localization:Loc Media_Source, Fallback='Wallpaper source'}" />
         <Setter Property="Template">
           <Setter.Value>
             <ControlTemplate TargetType="ListBoxItem">
@@ -72,12 +74,32 @@
           <DataTrigger Binding="{Binding IsCompact, ElementName=Root}" Value="True">
             <Setter Property="Padding" Value="4" />
           </DataTrigger>
+          <DataTrigger Binding="{Binding ContentKind}" Value="Image">
+            <Setter Property="AutomationProperties.ItemStatus"
+                    Value="{localization:Loc Media_Image, Fallback=Image}" />
+          </DataTrigger>
+          <DataTrigger Binding="{Binding ContentKind}" Value="Video">
+            <Setter Property="AutomationProperties.ItemStatus"
+                    Value="{localization:Loc Media_Video, Fallback=Video}" />
+          </DataTrigger>
+          <DataTrigger Binding="{Binding ContentKind}" Value="Scene">
+            <Setter Property="AutomationProperties.ItemStatus"
+                    Value="{localization:Loc Media_Scene, Fallback=Scene}" />
+          </DataTrigger>
+          <DataTrigger Binding="{Binding ContentKind}" Value="Web">
+            <Setter Property="AutomationProperties.ItemStatus"
+                    Value="{localization:Loc Media_Web, Fallback=Web}" />
+          </DataTrigger>
+          <DataTrigger Binding="{Binding DeliveryKind}" Value="DirectMedia">
+            <Setter Property="AutomationProperties.HelpText"
+                    Value="{localization:Loc Delivery_DirectMedia, Fallback='Ready to use'}" />
+          </DataTrigger>
           <DataTrigger Binding="{Binding DeliveryKind}" Value="WallpaperEngineWindow">
             <Setter Property="IsEnabled" Value="False" />
             <Setter Property="AutomationProperties.HelpText"
-                    Value="{localization:Loc Source_RendererUnavailable, Fallback='Renderer not connected'}" />
+                    Value="{localization:Loc Source_RendererUnavailable, Fallback='Live playback unavailable'}" />
             <Setter Property="AutomationProperties.ItemStatus"
-                    Value="{localization:Loc Source_RendererUnavailable, Fallback='Renderer not connected'}" />
+                    Value="{localization:Loc Source_RendererUnavailable, Fallback='Live playback unavailable'}" />
           </DataTrigger>
         </Style.Triggers>
       </Style>
@@ -109,17 +131,17 @@
              TargetType="TextBlock"
              BasedOn="{StaticResource WorkbenchCaptionTextStyle}">
         <Setter Property="Text"
-                Value="{localization:Loc Delivery_Unsupported, Fallback='Delivery unavailable'}" />
+                Value="{localization:Loc Delivery_Unsupported, Fallback=Unavailable}" />
         <Setter Property="TextTrimming" Value="CharacterEllipsis" />
         <Setter Property="TextWrapping" Value="NoWrap" />
         <Style.Triggers>
           <DataTrigger Binding="{Binding DeliveryKind}" Value="DirectMedia">
             <Setter Property="Text"
-                    Value="{localization:Loc Delivery_DirectMedia, Fallback='Direct media'}" />
+                    Value="{localization:Loc Delivery_DirectMedia, Fallback='Ready to use'}" />
           </DataTrigger>
           <DataTrigger Binding="{Binding DeliveryKind}" Value="WallpaperEngineWindow">
             <Setter Property="Text"
-                    Value="{localization:Loc Source_RendererUnavailable, Fallback='Renderer not connected'}" />
+                    Value="{localization:Loc Source_RendererUnavailable, Fallback='Live playback unavailable'}" />
           </DataTrigger>
         </Style.Triggers>
       </Style>
@@ -366,7 +388,7 @@
              VirtualizingPanel.IsVirtualizing="True"
              VirtualizingPanel.VirtualizationMode="Recycling"
              AutomationProperties.Name="{localization:Loc Section_Sources, Fallback=Sources}"
-             AutomationProperties.HelpText="{localization:Loc Hint_SourceLibrary, Fallback='Choose a source discovered by an installed provider.'}"
+                 AutomationProperties.HelpText="{localization:Loc Hint_SourceLibrary, Fallback='Choose a wallpaper from an installed source.'}"
              SelectionChanged="SourceList_SelectionChanged"
              MouseDoubleClick="SourceList_MouseDoubleClick"
              PreviewKeyDown="SourceList_PreviewKeyDown">

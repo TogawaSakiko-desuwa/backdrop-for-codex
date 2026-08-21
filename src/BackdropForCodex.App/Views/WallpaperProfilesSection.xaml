@@ -209,7 +209,7 @@
                       Margin="8,0,4,0"
                       VerticalAlignment="Center"
                       ToolTip="{Binding MediaDisplayName}">
-            <TextBlock Text="{Binding Name}"
+              <TextBlock Text="{Binding DisplayName}"
                        FontSize="{DynamicResource WorkbenchTypeBody}"
                        FontWeight="SemiBold"
                        TextTrimming="CharacterEllipsis" />

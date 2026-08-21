@@ -20,7 +20,7 @@
                  TextTrimming="CharacterEllipsis"
                  AutomationProperties.HeadingLevel="Level1">
         <Run Text="{localization:Loc Inspector_EditPrefix, Fallback='Edit '}" />
-        <Run Text="{Binding DataContext.SelectedProfileCard.Name, RelativeSource={RelativeSource AncestorType={x:Type ui:FluentWindow}}, Mode=OneWay, FallbackValue=Global}" />
+        <Run Text="{Binding DataContext.SelectedProfileCard.DisplayName, RelativeSource={RelativeSource AncestorType={x:Type ui:FluentWindow}}, Mode=OneWay, FallbackValue=Default}" />
       </TextBlock>
 
       <Grid Margin="0,0,0,8">

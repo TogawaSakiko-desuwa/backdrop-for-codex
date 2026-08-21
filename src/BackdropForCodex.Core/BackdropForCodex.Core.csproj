@@ -9,6 +9,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
     <PackageReference Include="PuppeteerSharp" />
+    <PackageReference Include="Vortice.MediaFoundation" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Injection/Templates/Install.js"

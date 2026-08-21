@@ -1,29 +1,25 @@
 # 威胁模型
 
-状态：1.4.1 Stable 基线（2026-07-27）
+版本：Backdrop for Codex `v1.5.0`（2026-08-21）
 
-本文描述 Backdrop for Codex 的安全边界、主要威胁和剩余风险。它是工程决策基线，不是安全认证，也不能替代代码审计和运行时防护。
+本文描述 Backdrop for Codex 的安全边界、主要威胁和用户需要了解的剩余风险。
 
 ## 范围与安全目标
 
-范围内组件包括 Windows 伴侣进程、托盘/设置、schema 2 多方案 Workspace 与单 owner latest-wins actor、schema 1 → 2 迁移与恢复状态、本地媒体来源提供器和只读 lease、所有权感知的单槽播放池、Store/MSIX Codex 发现与启动、回环 CDP 客户端、版本无关表现契约与结构证据探针、文件输入绑定与模块化注入层、generation/租约清理、用户主动诊断导出、手工基准工具、发布流水线和分发物。
+范围包括 Windows 伴侣进程、设置与本地数据、媒体与 Wallpaper Engine 来源、Store/MSIX Codex 发现与启动、回环 CDP 连接、页面表现层、诊断导出以及 GitHub 发布物。
 
 安全目标：
 
 - 只连接当前用户的官方 Store/MSIX Codex 主工作窗口；
 - CDP 只经严格 IPv4 回环地址通信，不为媒体创建 HTTP 或其他网络监听器；
-- 只把用户明确选择、经已打开句柄解析为最终本地普通文件、核验文件身份/扩展名/文件头或容器签名/大小以及图片尺寸预算，并由同一只读 lease 固定的单个媒体暴露给 Codex 渲染进程；
-- 把官方包安全身份验证与可降级的 DOM/表现能力探针分开；安全失败或持续多目标歧义始终完全拒绝且不运行结构探针，版本号和结构证据都不能绕过安全层；
-- 只按实际页面证据匹配程序内置的 `global-baseline-v1` 与 `codex-shell-v1`，相同证据不因 Codex 版本号变化而改变能力；Global baseline 独立，shell 只审查没有 `main` 祖先的顶层候选，并以候选自身的 typed shell-main、`closest(main)` 为该候选的受审 header、`closest(main)` 为该候选的受审 viewport 三族 direct-owned 信号执行 2-of-3 quorum，且必须恰好只有一个顶层合格候选；嵌套 `main` 不得参与候选或向外借出信号，同族重复只计一次，多候选、单一信号或跨 `main` 散落只允许 Global baseline，baseline 失败不注入；
-- 只在一个唯一合格 Codex 工作页上注入；持续多目标歧义、无目标或加载失败均清理并拒绝；
-- 不修改、放宽或绕过 Codex CSP，媒体只使用页面 CSP 原生允许的 `blob:` URL；
-- 不读取或持久化聊天，不上传本地媒体、设置或使用数据；
-- 设置迁移先保存并核验原始 V1 字节；损坏、冲突、迁移失败和未来 schema 不被隐式覆盖；
-- 正常设置、Application 与 runtime 链路只接受经验证和深复制的 canonical `SettingsV2` 快照；`Draft`、`SavedDesired` 和 `ActiveSnapshot` 不得互相冒充，schema 继续为 2；
-- 所有设置写入、Codex 会话和单槽播放操作由一个 actor 按 revision 排序；旧 revision 不能覆盖新状态、释放新 lease 或清理新 generation；
-- 诊断只在用户主动导出时生成，采用固定字段白名单且不自动上传；
-- 不修改 Codex 包，不提升权限，不在伴侣失联后遗留注入资源；
-- 让用户能够验证发行物来源、散列和依赖清单。
+- 只处理用户选择的本地媒体和经过验证的已安装 Wallpaper Engine 项目；校验最终文件、项目范围、格式和大小，拒绝 Application / Unknown；
+- Scene / Web 只在 Wallpaper Engine 已经运行且独立项目窗口通过验证时捕获像素；不捕获桌面，不使用全局 Wallpaper Engine 命令，不传递脚本、输入、音频或 Codex 内容。项目可能通过 Wallpaper Engine 播放声音，Backdrop 不枚举、静音或改变其音频会话；
+- 官方包、进程、当前会话、监听器和唯一工作页的安全验证先于页面兼容判断；安全失败或目标歧义时停止激活；
+- 不修改或绕过 Codex CSP，不读取聊天，不上传本地媒体、设置或使用数据；
+- 旧设置迁移前保留原始备份；损坏、冲突和未来版本设置不会被隐式覆盖；
+- 诊断只在用户主动导出时生成，使用固定字段白名单且不自动上传；
+- 不修改 Codex 包，不提升权限；更换、恢复或退出时只清理本项目创建的资源；
+- 发行物提供可核对的散列、依赖清单和构建来源。
 
 非目标：抵御已控制当前用户、管理员或内核的攻击者；修复 Codex、Windows、浏览器媒体解码器或 .NET 自身漏洞；支持非 Store/MSIX Codex、非 x64 或非 Windows 11 环境。
 
@@ -31,7 +27,8 @@
 
 - Codex 会话的机密性和完整性，包括页面中可见但本项目不需要的聊天与账号状态；
 - 当前 Windows 用户的文件、媒体路径、设置和进程信息；
-- V1 原始设置备份、恢复状态和用户导出的诊断报告；
+- V1/V2 原始设置备份、恢复状态、Wallpaper Engine owned-window 恢复日志和用户导出的诊断报告；
+- Steam 库和 Wallpaper Engine 项目路径、Workshop PublishedFileId、用户项目内容与第三方 Web wallpaper 的网络行为；
 - Codex 与 Backdrop for Codex 进程的可用性；
 - 注入层和选择媒体的完整性；
 - 源码、依赖、CI 凭据、发布标签、发布物、SBOM 和 attestations 的完整性；
@@ -39,20 +36,16 @@
 
 ## 信任边界与数据流
 
-1. **用户 → V2 Workspace**：用户编辑 schema 2 多方案文档；`Draft`、`SavedDesired` 与 `ActiveSnapshot` 是独立深快照。媒体目录保存来源标识（本地文件为绝对路径）、多个方案/区域绑定与最多 8 个最近引用。首次迁移先把 schema 1 原始字节保存为同目录只读备份，再原子发布 V2；废弃的 `LastCompatibilityProfileId` 只为旧设置原样透传，不参与运行时控制。
-2. **Workspace → latest-wins actor → 设置文件/runtime**：一个 actor 按单调 revision 排序保存、Codex 会话和播放池操作；Apply 只有一个运行项和最多一个待处理项。原子保存成功返回是持久化提交点，之后即使 revision 被替代也更新 `SavedDesired`，但旧请求不得继续进入 runtime。reset、备份恢复、临时 Official 和 Dispose 是排他 barrier。
-3. **伴侣 → 本地媒体 lease**：提供器打开用户路径，从该句柄解析最终路径和文件身份，拒绝网络/设备/目录/不受支持卷，校验格式与大小；图片还从同一固定流解析宽高并执行单边与总像素预算。预检把规范路径和真实媒体类型保存回同一 `MediaReference`；runtime 只能从该已保存快照重新获取固定 lease，不能创建临时媒体 ID。
-4. **actor ↔ 所有权感知单槽播放池**：每次准备和活动 lease 绑定进程内所有权 token。pending lease 直接释放；旧 revision 只能条件释放自己的 token。activation revision 与 injection generation 独立，过期状态/健康事件按 revision 或 generation 过滤。
-5. **伴侣 → Codex 发现**：伴侣验证官方 MSIX 包和应用身份、架构、进程、当前会话、PID、启动时间及监听器所有权。错误识别可能把控制发往非预期目标。
-6. **伴侣 ↔ CDP 回环端点**：伴侣只作为客户端连接由 Codex 持有、经验证的严格 IPv4 回环 CDP WebSocket。CDP 可注入和清理表现层，也具备观察、执行和控制页面的更广泛能力。
-7. **伴侣 → 结构证据探针与表现契约**：安全目标复验成功后，探针只返回 baseline、受审 shell 锚点和 CSS 平台支持的布尔证据，不持久化原始 DOM、URL 或选择器。`global-baseline-v1` 独立声明 Global；`codex-shell-v1` 只把没有 `main` 祖先的顶层 `main` 作为候选，对候选自身的 typed shell-main，以及 `closest(main)` 恰好为该候选的受审 header、受审 viewport 分别记为三个布尔信号族，以至少两族成立且只有一个顶层合格候选作为命中条件。嵌套路由 `main` 不参与候选，也不能向外层候选借出锚点；同族重复不增加分数。多候选、单一信号或跨 `main` 散落只使用 Global baseline，baseline 失败不注入。版本不进入候选、排序或决胜；选定契约在 generation 内锁定，能力只可降级。该策略容忍一族结构标记漂移，但任意上游 DOM 重写仍可能需要更新受审规则。Global 可用而 Glass 不可用时，owned 高可读性对比回退维持内容可辨认，同时不重新启用不可用的 optional effects。
-8. **伴侣 → CDP 文件输入 → Codex 渲染器**：准备脚本直接返回它创建的隐藏文件输入元素句柄；伴侣重新核验目标页面后，只把 lease 解析后的文件绑定到该句柄，中途导航会使旧句柄失效。页面只看到 `File` 内容和浏览器提供的文件名、大小、MIME type、修改时间，看不到完整绝对路径，并从该 `File` 创建 `blob:` URL。没有媒体 HTTP endpoint 或令牌。
-9. **伴侣 ↔ 注入层租约**：owner/generation 与心跳用于限定所有权和检测失联；清理移除媒体 `src`、撤销 `blob:` URL，并只删除本项目拥有的注入节点和样式。
-10. **用户 → 诊断导出文件**：只有用户从设置页主动确认并选择目标路径时，程序才写入 `schemaVersion: 2` 的 Environment、Runtime、Compatibility 类型化白名单 JSON；不打包日志、设置、页面数据或转储，也不上传。
-11. **开发者 → 手工基准报告**：开发者显式提供本地媒体路径；工具执行 lease/单槽激活并输出不含路径的采集时间、OS/.NET/进程架构、媒体来源种类/格式/长度、迭代数、计时分位数和私有字节变化，不连接 Codex、不判断发布通过。
-12. **GitHub/NuGet → CI → 用户**：第三方源码、Actions 和依赖进入构建；发行版输出 ZIP、SHA-256、SPDX SBOM 与 GitHub attestations。
+1. **用户 → 本地设置**：保存背景方案、稳定来源标识、显示偏好和最近使用记录。本地文件与 Local Project 可能保存绝对路径；Workshop 使用 PublishedFileId。旧设置迁移前会保留原始备份。
+2. **伴侣 → 本地媒体与 Wallpaper Engine 项目**：只读取用户选择的文件及已安装项目的必要元数据。Image / Video 经本地文件校验后直接加载；Application / Unknown 不执行。
+3. **已运行的 Wallpaper Engine → Scene / Web 像素流**：Backdrop 验证独立项目窗口并捕获其像素，不捕获桌面，不传递第三方脚本、输入、音频或 Codex 内容。Backdrop 不枚举、静音或改变 Wallpaper Engine 音频会话，项目可能直接播放声音；第三方 Web 项目仍可能自行联网。
+4. **伴侣 ↔ Codex 回环 CDP**：验证官方 Store/MSIX 包、进程、当前会话、监听器和唯一工作页后，伴侣才添加或清理表现层。媒体不使用额外 HTTP 服务。
+5. **用户 → 诊断导出**：只有用户主动选择保存位置时才生成白名单字段的本地 JSON；不包含聊天、媒体路径、页面内容或原始异常，也不自动上传。
+6. **GitHub/NuGet → 发布物**：第三方源码、Actions 和依赖进入构建。发行版提供 ZIP、SHA-256、SPDX SBOM 与 GitHub attestations，不包含 Wallpaper Engine 二进制、Workshop 内容或用户项目。
 
 回环套接字不是 Windows 用户或进程隔离边界。同一用户下的任何进程通常都能尝试连接本地端口。CDP endpoint 一旦从命令行、日志、内存或进程检查接口泄露，就可能被使用直到 Codex 退出。移除媒体监听器消除了一个额外端口和能力令牌，但没有降低 Codex 自有 CDP 的权限。
+
+第三方 Wallpaper Engine Web wallpaper 可能自行联网，其请求由 Wallpaper Engine/项目代码发起，不经 Backdrop 代理。Backdrop 只捕获像素并且不转发 Codex 内容或输入，但这不能阻止项目本身访问网络；用户仍需信任所安装项目及 Wallpaper Engine。
 
 ## 攻击者假设
 
@@ -71,54 +64,35 @@
 | 威胁 | 影响 | 主要控制 | 剩余风险 |
 | --- | --- | --- | --- |
 | 同一用户进程抢占/连接 CDP | 读取聊天、执行页面代码、操纵 Codex | 仅 `127.0.0.1`、验证端点/进程/包身份、日志不记录端点、向用户明确提示端口寿命 | **高**：回环无进程级身份验证；端口由 Codex 持有并持续到 Codex 完全退出 |
-| CDP 意外远程暴露或媒体监听器被重新引入 | 远程控制 Codex 或增加本地媒体读取面 | 禁止 `0.0.0.0`/局域网绑定和端口转发；拒绝非严格 IPv4 回环 WebSocket URL；媒体路径无监听器、endpoint 或令牌 | **高**（CDP 暴露时）：Codex 端口由外部应用持有，用户或其他软件仍可能错误转发；审查必须防止媒体服务回归 |
+| CDP 意外远程暴露或媒体监听器被重新引入 | 远程控制 Codex 或增加本地媒体读取面 | 禁止 `0.0.0.0`/局域网绑定和端口转发；拒绝非严格 IPv4 回环 WebSocket URL；媒体路径无监听器、endpoint 或令牌 | **高**（CDP 暴露时）：Codex 端口由外部应用持有，用户或其他软件仍可能错误转发；仍需防止媒体服务被重新引入 |
 | 连接错误进程或错误窗口 | 操纵非目标应用，泄露数据 | 校验 Store/MSIX 包名/系列/完整包名一致性、应用 ID、x64、PID、进程启动时间、当前 Windows 会话、监听器所有权、目标元数据；MSIX `file:` 页面精确匹配实际包根入口，远程页面按主机和完整工作区路径段白名单并拒绝认证/穿越/反斜杠歧义，任意回环内容页不因标题而获准；失败时关闭 | **中**：Codex 更新可能改变进程模型 |
 | 页面在授权与上传之间导航或替换输入 | 用户媒体被发送给同 URL 的非预期 document | 准备求值直接返回其元素句柄；捕获后实时复核页面身份；只向该句柄上传，导航会使旧 handle detached；不重新查询可预测选择器 | **低/中**：受信页面或浏览器实现自身被攻陷不在该绑定能完全防御的范围内 |
 | 把“版本无关匹配”误当成安全放宽 | 非官方/伪造包借结构探针获得 CDP 控制 | 先完成不可降级的包、进程、回环端点、CDP target 与唯一页面安全核验；失败或持续多目标时不调用结构探针；版本只用于身份自洽和诊断，探针结果不能覆盖安全失败 | **中**：官方包自身或分发信任根受损不在 DOM 探针能力范围内 |
 | 路径穿越、reparse/symlink 逃逸、校验后替换或任意文件读取 | 读取用户未选择的文件、向解码器提供未校验内容 | 只接受用户明确选择的本地绝对路径；在已打开句柄上解析最终路径并核验普通磁盘文件、卷类型和文件身份；扩展名与文件头/容器签名一致；同一只读 lease 持续到停用；页面不接收完整路径 | **低/中**：已持有兼容共享句柄或可操纵底层存储的同用户进程仍属剩余风险 |
+| 恶意或损坏的 Steam/Wallpaper Engine 元数据与项目 | 路径逃逸、身份混淆、执行不受支持 Application、解析/资源耗尽 | 受限 VDF/ACF 与 `project.json` 解析；验证 AppID、安装 EXE、签名、普通文件和根目录包含关系；Workshop PublishedFileId 唯一定位；Local Project 只接受 `myprojects`/`backup` 直接子项；过滤 Application/Unknown；数量、大小、深度、字符串与缩略图有界 | **中**：用户安装内容仍由第三方作者控制，文件格式校验不能证明内容无恶意 |
+| pop-out 所有权或位置误判 | 捕获错误窗口、在桌面出现干扰窗口或改变用户现有 Wallpaper Engine 壁纸 | 只用唯一名称的窗口级控制；核验窗口进程、启动时间、可执行路径和签名；Wallpaper Engine 返回项目路径时比对其与所选项目的一致性，未返回时不以该字段证明项目身份；置底、不激活并复验；禁止全局命令、隐藏/最小化技巧、透明度修改和桌面捕获；不修改任何音频会话 | **中/高**：Wallpaper Engine 的窗口行为是外部契约，更新后能力可能停止；Scene / Web 项目声音仍可能播放 |
+| CLI helper 超时或关闭返回成功但窗口晚到/未消失 | 孤立且可能有声的 pop-out，或恢复日志丢失 | timeout/cancel 精确 kill + await helper；以单调时限执行高熵名称窗口的有界缺席证明；同名多候选、closing identity 替换或消失后重现立即失败，已有 HWND 时必须证明精确窗口消失；失败保留非干扰放置和仅含窗口名的恢复日志 | **中**：进程硬终止、同步系统信任验证停滞或外部 CLI 缺陷仍可能要求用户手动关闭 Wallpaper Engine |
+| WGC/MF/MSE 捕获或背压失控 | 捕获非目标像素、内存增长、设备丢失或 Codex 崩溃 | 捕获目标绑定经过验证的项目窗口；不调用桌面捕获；队列和缓冲区有界，持续过载时降档或停止动态背景 | **中**：GPU 驱动、WGC、硬件编码器、Edge MSE 与媒体栈仍是外部攻击面，真实设备能力因机器而异 |
+| 第三方 Web wallpaper 自行联网 | 向项目作者或第三方服务发送其自身数据、下载远程内容 | 公开隐私说明；Backdrop 仅捕获像素，不传脚本、输入或 Codex 内容，不代理请求；手动 Apply 与增强快捷启动在本机首次使用 Web 项目时都要求一次性 UI 确认，没有提示界面或拒绝确认即失败关闭 | **中/高**：Backdrop 无法审计或阻止 Wallpaper Engine 中第三方项目自己的网络逻辑 |
 | CSP 放宽或绕过 | 扩大任意页面资源加载/脚本执行面，破坏 Codex 安全策略 | 不修改 CSP，不使用或建议 CSP bypass；媒体经受审页面原生允许的 `blob:` URL 加载；加载失败即清理并报错 | **低/中**：Codex 更新可能改变 CSP；实现必须继续失败关闭而不能自动放宽策略 |
 | HTML/JS/CSS 注入 | 在 Codex 页面执行攻击者内容 | 注入脚本固定化；数据经结构化序列化；不拼接路径/文件名为代码；只操作带 owner/generation 的 DOM；媒体文件通过 CDP 文件输入绑定 | **中**：CDP 本身允许脚本执行，审查缺陷仍可能扩大能力 |
 | 畸形或超大图片/视频利用解码器或耗尽资源 | Codex/Chromium 崩溃、过度磁盘/内存占用或代码执行 | 限定格式；图片 512 MiB、单边 32,768 像素、总计 33,554,432 像素上限；预览同时限制解码宽高；视频 8 GiB 上限；用户明确选择；依赖受支持系统/Chromium 解码器；及时更新 Codex/Windows | **中/高**：文件头、画布和大小检查不能证明媒体安全；动画帧数、视频尺寸/码率/编解码复杂度和解码器漏洞仍不在本项目完全控制内 |
-| 设置文件篡改、迁移失败或未来版本覆盖 | 路径泄露、配置丢失、错误路径或资源耗尽 | schema 2 严格未知字段/枚举/数值/UUIDv7/引用完整性校验；1 MiB 文档上限；最近引用有界；原子写入；保存前再次逐字节核对预期原文；V1 原始字节只读备份；恢复与未来 schema 禁止隐式写回；V2 原生快照不改写未编辑档案 | **中**：同用户可修改或删除设置与备份；Windows 文件替换不提供原子 compare-and-swap，同用户写入仍可能在最终核对后抢占竞态；只读属性不是恶意篡改防护 |
+| 设置文件篡改、迁移失败或未来版本覆盖 | 路径泄露、配置丢失、错误来源身份或资源耗尽 | schema 3 严格未知字段/枚举/数值/UUIDv7/引用完整性和 last-known 元数据校验；1 MiB 文档上限；最近引用有界；原子写入；保存前再次逐字节核对预期原文；V1/V2 原始字节只读备份；恢复与未来 schema 禁止隐式写回；迁移不访问 provider | **中**：同用户可修改或删除设置与备份；Windows 文件替换不提供原子 compare-and-swap，同用户写入仍可能在最终核对后抢占竞态；只读属性不是恶意篡改防护 |
 | 并发 Apply、取消或旧事件越权 | 旧请求晚到并覆盖新设置、误报成功、释放新媒体或清理新注入 | 单 owner actor 串行所有设置/runtime 操作；一 running/一 pending latest-wins；每个外部 await 后复核 revision；保存成功为明确提交点；进度和完成事件携带 revision；健康与能力事件按 generation 过滤 | **低/中**：进程硬终止仍可能中断主动清理；actor 与外部 Codex/文件系统之间不能提供跨进程事务 |
-| 播放 lease 所有权混淆 | stale revision 释放当前背景的文件句柄或槽位，导致错误背景、文件锁或资源泄漏 | 每次 lease/单槽激活使用不可伪造的进程内所有权 token；pending lease 直接 Dispose；旧 revision 只执行条件释放；无条件清空仅用于显式 Official、重置或 Dispose；压力测试验证最多一个活动 lease | **低/中**：底层句柄、页面或进程异常终止仍可能使观察到的清理结果滞后 |
-| 租约清理失效 | 背景残留、blob/文件句柄泄漏、意外持续控制 | 幂等清理、超时租约、导航/重连处理、移除 `src`、撤销 blob、只删除自有节点、退出清理、生命周期审查 | **中**：进程硬终止或 Codex 行为变化可能跳过部分主动清理；页面 lease 是最终恢复路径 |
+| 播放 lease 所有权混淆 | stale revision 释放当前背景的文件句柄、动态 graph 或槽位，导致错误背景、文件锁、孤立 pop-out 或资源泄漏 | Direct/Dynamic 统一 active lease；每次 lease/单槽激活使用不可伪造的进程内所有权 token；pending lease 直接 Dispose；旧 revision 只执行条件释放；无条件清空仅用于显式 Official、重置或 Dispose | **低/中**：底层句柄、页面、GPU 或进程异常终止仍可能使观察到的清理结果滞后 |
+| 租约清理失效 | 背景残留、blob/MSE/文件句柄泄漏、孤立 pop-out、持续捕获或声音 | 先停止页面与捕获资源，再精确关闭 pop-out；关闭失败时保留 1px 非干扰放置和恢复日志，等待重试 | **中**：进程硬终止、设备丢失或外部程序行为变化可能跳过部分主动清理；残留 pop-out 可能继续播放声音，用户可能需要手动关闭 Wallpaper Engine |
 | 权限提升或持久化误用 | 扩大系统影响 | 标准用户运行；不写 Codex 包/系统目录；不安装驱动/服务；自动启动需透明可撤销 | **低/中**：Windows 启动项和用户目录仍可被同用户修改 |
 | 日志、诊断、截图或 Issue 泄露隐私 | 路径、聊天、设置、标识符或账号信息公开 | 不记录聊天/媒体路径；诊断必须由用户主动导出且使用无路径、无页面数据、无标识符/散列的固定类型白名单；报告模板要求脱敏 | **中**：截图、设置、转储、第三方异常以及用户选择的同步目录可能绕过约束 |
-| 依赖或 CI 供应链受损 | 恶意发行物获得 CDP 权限 | Actions 固定完整 SHA、Dependabot、CodeQL、最小权限、评审、SHA-256、SPDX SBOM、GitHub attestation | **中**：NuGet/维护者账号/构建平台仍是信任根；当前发布物可能无 Authenticode 签名 |
-| 更新后 DOM/协议/CSP 漂移 | 错误注入、崩溃、表现能力失效或透明表面造成低对比 | 安全层严格先行；独立的 `global-baseline-v1`；`codex-shell-v1` 仅对顶层 `main` 的 typed shell-main/direct-owned header/direct-owned viewport 使用唯一候选 2-of-3 quorum，嵌套 `main` 不参与或借出信号，同族重复不计分、多候选/单信号/跨 `main` 散落 Global-only；baseline 与媒体加载失败关闭；Glass 不可用时使用 owned 高可读性对比回退且 optional effects 仍禁用；五项能力独立降级且活动契约在 generation 内锁定；审核并更新内置证据规则 | **中**：quorum 可容忍一族标记漂移，但受审最小结构仍可能产生假阳性/假阴性，不能保证兼容任意 DOM 重写；Codex 是独立更新的外部产品 |
+| 依赖或 CI 供应链受损 | 恶意发行物获得 CDP 权限 | Actions 固定完整 SHA、Dependabot、CodeQL、最小权限、SHA-256、SPDX SBOM、GitHub attestation | **中**：NuGet/维护者账号/构建平台仍是信任根；`v1.5.0` 便携版未进行 Authenticode 签名 |
+| Codex 更新改变页面、协议或 CSP | 背景或可选视觉效果失效 | 安全核验与页面兼容判断分离；无法安全确认时停止注入，只有可选效果失效时使用高可读性回退 | **中**：Codex 是独立更新的外部产品，重大变化可能需要新的 Backdrop 版本 |
 | 首次启动主页面尚未挂载或存在多个合格页面 | 误报成功、注入错误窗口、遗留半注入资源 | 最长 10 秒结构就绪轮询；发现与注入前复验均排除 `initialRoute=/avatar-overlay` 辅助页面；只接受恰好一个合格工作页；持续多目标歧义拒绝且结构探针零调用；窗口结束后的单次 Global fallback 复验与安装另受 10 秒 operation deadline；只在验证页面完成媒体加载后报告成功；失败清理准备态节点 | **低/中**：极慢设备或短暂多窗口状态可能需要用户重试 |
-
-## 必须保持的实现约束
-
-- 伴侣不得为媒体创建网络监听器；对发现到的 Codex 调试 URL 解析后只接受严格 IPv4 `127.0.0.1`，拒绝非回环、用户信息、异常 scheme、重定向和自动回退。
-- 用户媒体必须来自明确文件选择；先打开本地绝对路径，再通过同一句柄解析最终路径并验证普通磁盘文件、本地卷和文件身份，同时校验扩展名、文件头/容器签名和长度；图片不得超过 512 MiB、单边 32,768 像素或总计 33,554,432 像素，视频不得超过 8 GiB；图片预览只使用该固定流返回的尺寸元数据并同时限制解码宽高；同一只读 lease 保持到停用或替换。
-- 设置写入、Codex session 和 playback pool 必须只有一个排序 owner。Apply 必须保持“一项 running + 最多一项 pending”的 latest-wins 模型；替代 pending 时完成其 `Superseded` 结果，取消 running 后必须等待旧任务安全退出再开始新任务。risk、recents 等独立保存与 Apply 同序列，reset、恢复备份、临时 Official 和 Dispose 必须是排他 barrier。
-- `SaveAsync` 成功返回即是持久化提交点，必须更新 `SavedDesired`；旧 revision 随后不得进入 runtime。每个外部 await 后必须复核 revision，旧完成/进度事件不得发布较新的 UI 状态、改变 `ActiveSnapshot`、释放新 lease 或清理新 generation。activation revision 与 injection generation 必须使用独立计数器。
-- runtime 只能从已保存 canonical `SettingsV2` 快照里的同一 `MediaReference` 重新获取固定 lease。播放槽必须使用所有权 token：pending lease 直接 Dispose，旧 revision 只能条件释放自己的 token；只有显式 Official、重置或 Dispose 可无条件清空本应用槽位。
-- 不得修改或绕过 Codex CSP。页面媒体必须由 CDP 文件输入绑定并经 CSP 原生允许的 `blob:` URL 加载；不得重新引入媒体 HTTP endpoint、访问令牌或网络传输。
-- 页面可见数据限于文件内容以及浏览器提供的文件名、大小、MIME type、修改时间；不得主动把完整绝对路径写入脚本、DOM、URL 或日志。
-- 清理必须移除媒体 `src`、停止视频、撤销 `blob:` URL，并按 owner/generation 只移除本项目拥有的节点和样式。
-- 安全准入必须独立验证 Windows 11 x64、官方 Store/MSIX 包名与包系列、Publisher、由已验证身份字段构造的完整包名、x64、应用 ID、可执行文件、当前 Windows 会话、PID、启动时间、监听器所有权、严格 IPv4 回环端点、CDP browser/socket/target 元数据和唯一页面；版本号和结构探针不能覆盖任何失败。安全失败或持续多目标歧义时不得调用结构证据探针。
-- 表现契约必须程序内置、只读且版本无关。`global-baseline-v1` 独立声明 Global；`codex-shell-v1` 必须只把没有 `main` 祖先的顶层 `main` 作为候选，并对候选自身的 typed shell-main、`closest(main)` 恰好为该候选的受审 header、`closest(main)` 恰好为该候选的受审 viewport 三族信号分别取布尔值。至少两族成立且全页恰好只有一个顶层合格候选时才声明 Glass/Advanced。嵌套 `main` 不得参与候选或把锚点借给外层；同族任意数量的重复锚点只计一次；多个合格候选、只有一族成立或信号跨 `main` 散落都不得命中 shell。Regions/Audio 继续标记未实现。baseline 不计入高级匹配数；高级契约零匹配或多重匹配只使用 Global baseline，不得用版本、注册顺序或隐藏优先级决胜。该 quorum 只承诺容忍一族漂移，不承诺任意上游 DOM 重写。活动契约在 generation 内锁定，五项能力独立且只能降级，证据恢复不得重新升级或切换契约。
-- 注入前的结构就绪轮询最多等待 10 秒，且只允许一个合格工作页；窗口结束后的单次 Global fallback 复验与安装使用独立的 10 秒 operation deadline。持续多目标歧义、无目标、Global baseline 失败、operation deadline 到期或媒体加载失败必须清理并拒绝。高级契约零匹配或多重匹配只关闭非 Global 能力；Glass 不可用时必须由 owner/generation 管理的主题感知高可读性对比回退保护内容可辨认，同时 Glass 与其他已判定不可用的 optional effects 保持禁用。
-- MSIX `file:` 页面只按系统实际报告的包根目录与精确入口路径授权；本地 `file:`、`app:` 和 `codex:` 壳层的 `initialRoute=/avatar-overlay` 辅助页面必须在端点发现及同 target 导航复验时拒绝；远程页面只接受受审主机及完整工作区路径段边界，认证路由、路径穿越和反斜杠歧义必须拒绝。不得以标题、包路径片段或任意 `127.0.0.1` 内容页作为充分证据。文件输入必须由准备求值直接返回元素句柄，捕获后重新核验页面，再只向该句柄上传。
-- 注入数据使用 JSON/DOM API 传递；不得把用户字符串插入可执行 JavaScript、HTML 或 CSS 源码。
-- schema 2 设置输入按未知字段、枚举、数值范围、UUIDv7、集合上限和引用完整性严格验证，写入使用同目录原子替换，并在发布前再次逐字节核对原文。1.4.0 不得新增序列化字段或引入 Settings V3；正常 Workspace、Application 和 runtime 接口只使用深复制的 `SettingsV2`，`SettingsV1` 只可出现在迁移、V1 原始备份恢复、降级兼容和对应测试中。V2 原生快照不得通过 V1 界面限制改写未编辑档案。V1 迁移必须先创建、逐字节核验并设为只读的原始备份；损坏、超大、不可读取、备份冲突或迁移失败进入恢复状态，未来 schema 进入只读状态，二者都不得被默认值或自动保存覆盖。废弃的 `LastCompatibilityProfileId` 只可原样透传；运行时不得生成、更新或读取它作控制，脏状态比较也必须忽略它。
-- UI/runtime 状态必须来自显式 `Draft`、`SavedDesired`、`ActiveSnapshot` 和 `Official`/`MediaActive`/`Faulted`/`Disconnected` surface，不得从异常或单一 `IsActive` 猜测。Apply 必须返回 `MediaActive`、`Official`、`SavedButNotActivated`、`Superseded`、`Canceled` 或 `Failed` 类型化终态并携带 revision。
-- 诊断报告只在用户主动确认并选择保存位置后生成；`schemaVersion: 2` 可序列化字段必须限制为 Environment、Runtime、Compatibility 中的应用/系统环境、运行阶段、Codex 版本、类型化安全状态、活动契约、匹配状态和五类能力的枚举状态/原因。不得加入路径、文件名、包完整名、Publisher、PID/进程/会话/端口、标题、完整 URL、DOM、选择器、聊天、设置、CDP Detail、用户/设备标识符、散列或任意原始错误文本，不得自动上传。
-- 手工基准报告不得包含输入媒体路径，不得连接 Codex 或把测量值解释为自动发布门槛。
-- 不请求管理员权限，不修改/重签 Codex 包，不禁用 Windows 安全控制。
-- CI 默认只读；发布 job 才获取 `contents: write`、`id-token: write` 和 `attestations: write`。
-
-## 公开安全审查清单
-
-安全相关变更的设计与代码评审至少应核对：严格 IPv4 回环拒绝、无媒体监听器、错误包/进程/会话/监听器/browser/socket/target/页面拒绝、安全失败零结构探针、版本只用于身份自洽与诊断、相同证据跨版本结果相同、baseline 失败与唯一/零/多高级契约匹配、Global-only 回退、五项能力独立且活动契约锁定/单 generation 只降级、唯一目标和 10 秒歧义拒绝、最终路径/本地普通文件/文件身份、文件头或容器签名、文件大小与图片尺寸/像素预算及同句柄 lease 校验、预览解码宽高限制、CDP 文件输入只绑定明确选择的解析路径、页面不暴露完整路径、`blob:` 加载成功判定、不使用 CSP bypass、媒体失败/导航/崩溃/硬退出后的 `src`/blob/自有节点清理、V1 原始备份/原子迁移/恢复与未来只读状态、废弃兼容标识透传、保存前原文复核和未编辑 V2 档案保留、诊断 schema 2 精确字段白名单和手工触发、日志脱敏以及尚未实现的能力边界。PR 必须记录审查结论、实际执行的构建/发布命令和未验证项；GitHub CI 执行 Release 构建、单文件发布形态检查与 CodeQL 分析。发布前还应验证 ZIP 的 SHA-256、SBOM 与实际输出一致，并使用 `gh attestation verify` 验证来源。
-
-1.4.0 并发评审还必须使用可控 await checkpoint 覆盖预检、保存前后、lease、CDP、注入、pool 转移和清理，验证 pending 覆盖、提交点语义、Cancel、旧 health/capability 事件过滤和旧清理不影响新 generation。100 次快速提交压力场景结束时，最终 `SavedDesired`/`ActiveSnapshot` 必须对应最后快照，最多一个 lease 可处于活动状态，其他 pending lease 均已释放。环境相关 Edge/CDP、当前机器 Codex 身份、托盘和可访问性 smoke 若未实际运行，必须逐项记录为“未验证”，不得计为通过。
 
 ## 已知剩余风险与用户建议
 
 最重要的剩余风险是 **CDP 对同一用户进程缺少强隔离**。即使本项目实现完全符合设计，其他本地软件也可能探测调试端口；来源不明的 Backdrop for Codex 构建则可能直接滥用 CDP。关闭壁纸或退出伴侣不能撤销 Codex 的启动参数。只在可信设备和普通用户会话中运行，保持 Windows 与 Codex 更新，不暴露/转发端口，验证发行物，使用完毕后完全退出 Codex。
+
+Scene / Web 还引入 Wallpaper Engine、用户安装项目、GPU/WGC、硬件编码器与 Edge MSE 的外部攻击面。能力探测和失败关闭可以避免在证据不足时继续运行，但不能证明第三方项目安全，也不能阻止 Web wallpaper 自身联网。只使用可信项目；Wallpaper Engine 未运行时不要通过非官方参数或脚本强制启用 Scene / Web。
+
+少数驱动、编码器或 Windows 信任验证故障可能使原生系统调用长时间无响应。遇到持续卡住时，请退出 Backdrop for Codex，并关闭相关的 Codex 或 Wallpaper Engine 进程后重试。
 
 如果使用环境要求对本地同用户恶意进程提供强防护，当前架构不能满足该要求，应避免使用。

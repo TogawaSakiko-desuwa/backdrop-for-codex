@@ -24,6 +24,16 @@ dotnet format .\BackdropForCodex.slnx --verify-no-changes --no-restore
 
 不要把真实聊天、令牌、用户绝对路径或受版权限制的媒体加入仓库、构建材料或 Issue/PR 附件。需要展示路径场景时使用临时目录和虚构名称。
 
+## 代码结构
+
+- `src/BackdropForCodex.App`：WPF 工作台、来源库、预览、设置、通知区域和用户可见错误映射。
+- `src/BackdropForCodex.Core/Media`：本地媒体与 Wallpaper Engine 来源发现、项目解析、窗口渲染和活动媒体 lease。
+- `src/BackdropForCodex.Core/Dynamic`：Scene / Web 的窗口捕获、帧调度、Media Foundation 编码、画质档位和页面流传输。
+- `src/BackdropForCodex.Core/Runtime`：应用事务、latest-wins 调度、活动 lease、运行状态和恢复/清理边界。
+- `src/BackdropForCodex.Core/Injection`：CDP 会话以及安装、样式、媒体和生命周期脚本模块。
+- `src/BackdropForCodex.Core/Settings`：schema 3 设置、V1/V2 迁移、原子存储和工作区快照。
+- `tests/BackdropForCodex.Core.Tests`：按 AppSupport、Dynamic、Injection、Media、Runtime 和 Settings 划分的自动化测试。
+
 ## 分支、提交与 DCO
 
 从最新默认分支创建范围单一的分支。提交应保持可审查、说明动机，并由实际作者签署：
@@ -40,43 +50,35 @@ Signed-off-by: Your Name <you@example.com>
 
 签署名称和邮箱必须是你愿意永久出现在公开 Git 历史中的身份。修正最近一次遗漏可使用 `git commit --amend -s`；批量改写公开历史前先与维护者沟通。合并他人提交时不得替对方伪造签署。
 
-## 实现约束
+## 实现与安全约束
 
-- 保持 nullable、分析器和警告策略通过；公开 API 和并发状态应有清晰的不变量。
-- 异步 I/O 支持取消与超时，重连使用有上限退避，清理操作保持幂等。
-- 媒体路径保持 lease-only，不得重新加入 Kestrel、临时 HTTP 监听器、媒体 endpoint/token 或其他网络传输；发现到的 CDP URL 必须解析并只接受严格 IPv4 `127.0.0.1`。
-- 本地媒体必须通过已打开句柄解析最终路径，验证本地普通文件、文件身份、扩展名、文件头/容器签名和大小，并让校验与使用共享同一个只读 lease。当前上限为图片 512 MiB、单边 32,768 像素、总计 33,554,432 像素，视频 8 GiB；界面图片预览必须只使用这条校验链返回的元数据，并同时限制解码宽高。
-- 不把媒体路径、文件名或设置值拼接成 JavaScript、HTML、CSS、命令行或任意 URL。
-- Codex 版本号只可用于已验证包身份的自洽检查和脱敏诊断，不得作为安全准入、结构契约候选、排序、决胜或表现能力的输入。安全身份/进程/会话/监听器/端点/browser/socket/target/唯一页面验证必须先行且失败关闭；安全失败或持续多目标歧义时，结构证据探针必须保持零调用。
-- 内置表现契约保持版本无关和只读：`global-baseline-v1` 独立声明 Global 所需的最小结构；`codex-shell-v1` 只把没有 `main` 祖先的顶层 `main` 作为候选，并分别检查候选自身的 typed shell-main，以及 `closest(main)` 恰好为该候选的受审 header 和受审 viewport 三族布尔信号。至少两族成立且全页恰好只有一个顶层合格候选时才声明 Glass/Advanced。同族重复锚点只计一次；嵌套路由 `main` 不得成为候选或向外层借出信号；多个合格候选、只有一族成立或信号跨 `main` 散落都必须失败关闭到 Global baseline，不得以版本、注册顺序或隐藏优先级决胜；baseline 失败不得注入。该 quorum 允许一族上游标记漂移，但不承诺兼容任意 DOM 重写。
-- Global 可用但 Glass 不可用时，注入层必须启用本项目拥有、随主题变化的高可读性对比回退；该回退不得冒充 Glass，也不得重新启用已判定不可用的 optional effects，且清理仍受 owner/generation 约束。
-- 五项能力保持独立：全局背景、功能区域识别、玻璃样式、音频和高级内容表面。1.3.3 不得误报区域识别或音频已实现；活动契约在一次 generation 内锁定，能力只允许降级且证据恢复不得重新启用。
-- 初始结构就绪轮询窗口最多 10 秒且只接受一个合格工作页；持续多目标歧义必须拒绝并清理，不能任意挑选或同时注入。窗口结束后的单次 Global fallback 复验与安装使用独立的 10 秒 operation deadline，不得退回无界 caller token。
-- schema 2 更改必须保持严格未知字段/引用/范围校验、同目录原子保存、V1 原始字节只读备份、恢复状态和未来 schema 只读语义；不得用默认设置静默覆盖异常文档。废弃的 `LastCompatibilityProfileId` 只为旧设置原样透传，运行时、V1 编辑门面和脏状态比较都不得让它重新参与控制。
-- 不读取聊天，不修改/重签 Codex 包，不要求管理员权限，不静默添加自动启动。
-- 不加入遥测、崩溃上传、更新检查或项目自有远程服务，除非治理文档、隐私说明、威胁模型和明确用户同意机制已先行评审。
-- 日志不得包含聊天或媒体绝对路径；异常对象和 DTO 同样需要脱敏。诊断导出必须由用户主动触发并使用 `schemaVersion: 2` 的 Environment、Runtime、Compatibility 固定白名单，且不自动上传；只允许脱敏版本、类型化安全结果、活动契约、匹配状态和逐项能力原因，禁止加入路径、文件名、包完整名、Publisher、进程/会话/端口、页面标题/URL/DOM/选择器、聊天、设置、标识符、散列、CDP Detail 或原始异常文本。
-- 手工基准工具只报告本机 lease/单槽测量，不连接 Codex、不输出输入路径，也不自动执行发布阈值判定。
-- 新增或扩大的上游敏感能力必须先发 Preview 并通过真实 Codex 验证后再进入 Stable。1.3.3 仅因重构既有能力而直接进入 Stable，不得把这次例外推广为常规发布策略。
-- 新增 NuGet 依赖前说明必要性、许可证、维护状态和攻击面；版本在 `Directory.Packages.props` 集中管理，并更新 `THIRD_PARTY_NOTICES.md`。
+- 保持 Windows 11 x64 与官方 Microsoft Store/MSIX Codex 的支持边界；新增平台或客户端范围应先讨论。
+- 不读取聊天，不修改或重新签名 Codex 包，不要求管理员权限，不绕过 Codex 内容安全策略。
+- CDP 只接受经过包、进程、会话和监听器核验的严格 IPv4 `127.0.0.1` 端点；安全验证必须先于页面兼容判断。
+- 本地媒体必须验证最终路径、普通本地文件、格式和大小，并在使用期间保持只读句柄。不得把路径或文件名拼接进脚本、HTML、CSS、命令行或 URL。
+- Wallpaper Engine 来源只读取已安装 Workshop 与 `projects/myprojects`、`projects/backup`。Application / Unknown 不执行；Scene / Web 只处理经过验证的项目窗口像素，不捕获桌面或转发脚本、输入、音频和 Codex 内容，也不枚举、静音或改变 Wallpaper Engine 音频会话。
+- 异步 I/O 应支持取消和有界超时；并发应用、更换和清理不得让旧请求覆盖或释放较新的背景资源。
+- 设置写入保持严格校验和原子替换；旧 schema 迁移前保留原始只读备份，损坏或未来版本设置不得被默认值静默覆盖。
+- 日志不得包含聊天或媒体绝对路径。诊断导出只能由用户主动触发，使用固定字段白名单且不自动上传。
+- 不加入遥测、崩溃上传、更新检查或项目自有远程服务，除非相应的产品、安全和隐私设计已经公开讨论。
+- 新增 NuGet 依赖前说明必要性、许可证、维护状态和攻击面；版本集中维护在 `Directory.Packages.props`，并更新 `THIRD_PARTY_NOTICES.md`。
 
-安全边界变更必须同步更新 [THREAT_MODEL.md](THREAT_MODEL.md)、实现中的失败关闭约束和 PR 验证说明。文档本身不是安全控制。
+安全边界变化必须同步更新 [THREAT_MODEL.md](THREAT_MODEL.md)、[PRIVACY.md](PRIVACY.md) 和用户文档。
 
-## 验证与安全审查
+## 验证
 
-每个行为变更都应给出可由公开源码复核的验证说明，列明实际执行的构建/发布命令、适用的手工场景和未验证项。涉及媒体、设置、诊断或 CDP 时，设计与评审至少考虑：
+提交 PR 前，请按改动范围运行适用的格式、构建、测试和发布命令。至少应执行：
 
-- 严格 IPv4 回环与非回环地址，以及是否意外引入媒体监听器；
-- 取消、超时、断线、导航、重连和硬退出；
-- 错误包、进程、会话、监听器、窗口和端点，以及安全拒绝不能被结构探针覆盖；
-- 相同结构证据在任意官方版本下得到相同结果、baseline 失败、顶层 shell 三族 direct-owned 信号的 2-of-3 quorum、首个 decoy `main`、嵌套路由 `main`、单族漂移、同族重复、跨 `main` 散落、唯一/零/多合格候选、Global-only 与高可读性对比回退、活动契约锁定、五项能力独立降级及同 generation 不重新启用；
-- 无目标、唯一目标、持续多目标和 10 秒截止；
-- reparse/symbolic-link 最终路径、文件身份、网络/设备路径拒绝、格式签名、媒体大小上限与图片尺寸/像素预算；
-- V1 原始备份、重复迁移、备份冲突、损坏/超大设置、严格未知字段、未来 schema 只读、保存前原文复核、未编辑 V2 档案保留和原子写入；
-- 诊断 schema 2 的明确用户操作、精确字段白名单、目标文件覆盖，以及路径、目标元数据、DOM/选择器和异常内容脱敏；
-- 重复清理、并发切换和媒体文件消失。
+```powershell
+dotnet restore .\BackdropForCodex.slnx --locked-mode
+dotnet format .\BackdropForCodex.slnx --verify-no-changes --no-restore
+dotnet build .\BackdropForCodex.slnx --configuration Release --no-restore
+dotnet test .\BackdropForCodex.slnx `
+  --configuration Release `
+  --filter "Category!=Integration&Category!=BrowserContract"
+```
 
-手工验证只使用专用账号或虚构聊天，不在 Issue/PR 上传含真实数据的页面截图。说明 Windows build、Codex 来源/版本和已验证场景。Pull Request 还会接受 Windows Release 构建、单文件发布形态检查与 CodeQL 分析。
+涉及真实 Codex、Edge/CDP、Wallpaper Engine、WGC/MF/MSE、托盘或可访问性的环境测试，应在专用账号或虚构内容下进行。PR 中只列出实际运行的命令与场景；没有运行的项目明确写为“未验证”。
 
 ## Pull Request
 

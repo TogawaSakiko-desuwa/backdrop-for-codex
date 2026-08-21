@@ -12,6 +12,7 @@ public enum AutoLaunchOutcome
 {
     Applied = 0,
     NeedsMedia,
+    NeedsPrivacyAcknowledgement,
     NeedsRiskAcknowledgement,
     Failed,
 }

@@ -81,25 +81,6 @@ public sealed class UserFacingErrorMapperTests
     }
 
     [Fact]
-    public void ProjectionIncompatibleSettingsMapToNonRetryableReadOnlyState()
-    {
-        var mapper = new UserFacingErrorMapper(
-            new AppTextProvider(CultureInfo.GetCultureInfo("en")));
-
-        var result = mapper.Map(
-            new BackdropForCodex.Core.Settings.SettingsProjectionException(
-                "sensitive source details"),
-            UserFacingOperation.LoadWallpaperSettings);
-
-        Assert.Equal(UserFacingErrorCode.WallpaperSettingsUnsupportedFeatures, result.Code);
-        Assert.False(result.CanRetry);
-        Assert.DoesNotContain(
-            "sensitive source details",
-            $"{result.Message} {result.Recovery}",
-            StringComparison.Ordinal);
-    }
-
-    [Fact]
     public void SecurityValidationFailureMapsToNonRetryableSafeContent()
     {
         const string privateDetail =

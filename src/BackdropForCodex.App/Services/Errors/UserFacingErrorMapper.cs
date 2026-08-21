@@ -208,11 +208,6 @@ public sealed class UserFacingErrorMapper : IUserFacingErrorMapper
             return UserFacingErrorCode.WallpaperSettingsFutureVersion;
         }
 
-        if (exception is SettingsProjectionException)
-        {
-            return UserFacingErrorCode.WallpaperSettingsUnsupportedFeatures;
-        }
-
         if (exception is MediaValidationException)
         {
             return UserFacingErrorCode.MediaInvalid;

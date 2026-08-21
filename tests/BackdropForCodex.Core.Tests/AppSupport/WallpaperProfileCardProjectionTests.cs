@@ -162,6 +162,31 @@ public sealed class WallpaperProfileCardProjectionTests
     }
 
     [Fact]
+    public void CreateItemsLocalizesTheDefaultProfileWithoutChangingItsStoredName()
+    {
+        var profile = WallpaperProfile.CreateDefault();
+        var text = new DictionaryTextProvider(
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["Profile_DefaultName"] = "默认方案",
+                ["Profile_Official"] = "官方背景",
+                ["Profile_AutomationName"] = "{0}，{1}",
+                ["Profile_ActionsAutomationName"] = "{0} 的更多操作",
+            });
+        var projection = new WallpaperProfileCardProjection(
+            text,
+            new RecordingPreviewService(isAvailable: true));
+
+        var item = Assert.Single(
+            projection.CreateItems(
+                CreateSettings([profile], [], profile.ProfileId)));
+
+        Assert.Equal("Global", item.Name);
+        Assert.Equal("默认方案", item.DisplayName);
+        Assert.Equal("默认方案，官方背景", item.AutomationName);
+    }
+
+    [Fact]
     public void CreateItemsProbesSharedMediaOnceAndSkipsOrphanedCatalogEntries()
     {
         var sharedMediaId = Guid.CreateVersion7();
@@ -211,13 +236,13 @@ public sealed class WallpaperProfileCardProjectionTests
         var projection = new WallpaperProfileCardProjection(
             new DictionaryTextProvider(),
             new RecordingPreviewService(isAvailable: true));
-        var invalid = new SettingsV2();
+        var invalid = new SettingsV3();
 
         Assert.Throws<SettingsValidationException>(
             () => projection.CreateItems(invalid));
     }
 
-    private static SettingsV2 CreateSettings(
+    private static SettingsV3 CreateSettings(
         IReadOnlyList<WallpaperProfile> profiles,
         IReadOnlyList<MediaReference> media,
         Guid globalProfileId) =>
@@ -238,6 +263,7 @@ public sealed class WallpaperProfileCardProjectionTests
             values ?? new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 ["Profile_Official"] = "Official background",
+                ["Profile_DefaultName"] = "Default",
                 ["Profile_Media"] = "Media",
                 ["Profile_MediaMissing"] = "Media missing",
                 ["Profile_AutomationName"] = "{0}, {1}",

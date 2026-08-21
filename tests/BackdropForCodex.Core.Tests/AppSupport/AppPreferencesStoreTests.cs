@@ -7,6 +7,16 @@ namespace BackdropForCodex.Core.Tests.AppSupport;
 public sealed class AppPreferencesStoreTests
 {
     [Fact]
+    public void PreferencesContractDoesNotExposeMachineLocalWallpaperEnginePaths()
+    {
+        Assert.DoesNotContain(
+            typeof(AppPreferencesV1).GetProperties(),
+            property => property.Name.Contains(
+                "WallpaperEngineInstallRootPath",
+                StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task LoadAsyncReturnsSystemDefaultsWhenDocumentDoesNotExist()
     {
         Assert.Equal("CodexWallpaper", AppPreferencesStore.SettingsDirectoryName);
@@ -22,6 +32,7 @@ public sealed class AppPreferencesStoreTests
             Assert.Equal(AppPreferencesV1.CurrentSchemaVersion, preferences.SchemaVersion);
             Assert.Equal(ThemeMode.System, preferences.ThemeMode);
             Assert.False(preferences.HasShownTrayTip);
+            Assert.False(preferences.HasAcknowledgedWebWallpaperPrivacyNotice);
         }
         finally
         {
@@ -44,6 +55,7 @@ public sealed class AppPreferencesStoreTests
             {
                 ThemeMode = ThemeMode.Dark,
                 HasShownTrayTip = true,
+                HasAcknowledgedWebWallpaperPrivacyNotice = true,
             };
 
             await store.SaveAsync(expected);
@@ -52,6 +64,7 @@ public sealed class AppPreferencesStoreTests
 
             Assert.Equal(ThemeMode.Light, actual.ThemeMode);
             Assert.True(actual.HasShownTrayTip);
+            Assert.True(actual.HasAcknowledgedWebWallpaperPrivacyNotice);
             Assert.Empty(
                 Directory.GetFiles(
                     Path.GetDirectoryName(preferencesPath)!,
@@ -66,6 +79,92 @@ public sealed class AppPreferencesStoreTests
                 "Light",
                 document.RootElement.GetProperty("themeMode").GetString());
             Assert.False(document.RootElement.TryGetProperty("mediaPath", out _));
+            Assert.False(
+                document.RootElement.TryGetProperty(
+                    "wallpaperEngineInstallRootPath",
+                    out _));
+        }
+        finally
+        {
+            DeleteTemporaryDirectory(directoryPath);
+        }
+    }
+
+    [Fact]
+    public async Task LoadAsyncTreatsTheMissingWebPrivacyAcknowledgementAsNotAcknowledged()
+    {
+        var directoryPath = CreateTemporaryDirectory();
+        try
+        {
+            var preferencesPath = Path.Combine(
+                directoryPath,
+                AppPreferencesStore.SettingsFileName);
+            await File.WriteAllTextAsync(
+                preferencesPath,
+                "{\"schemaVersion\":1,\"themeMode\":\"Dark\",\"hasShownTrayTip\":true}");
+            using var store = new AppPreferencesStore(preferencesPath);
+
+            var preferences = await store.LoadAsync();
+
+            Assert.Equal(ThemeMode.Dark, preferences.ThemeMode);
+            Assert.True(preferences.HasShownTrayTip);
+            Assert.False(preferences.HasAcknowledgedWebWallpaperPrivacyNotice);
+        }
+        finally
+        {
+            DeleteTemporaryDirectory(directoryPath);
+        }
+    }
+
+    [Theory]
+    [InlineData("wallpaperEngineInstallRootPath")]
+    [InlineData("WallpaperEngineInstallRootPath")]
+    public async Task LoadAsyncAtomicallyRemovesTheDeprecatedWallpaperEngineRoot(
+        string deprecatedPropertyName)
+    {
+        var directoryPath = CreateTemporaryDirectory();
+        try
+        {
+            var preferencesPath = Path.Combine(
+                directoryPath,
+                AppPreferencesStore.SettingsFileName);
+            var privateInstallRoot = Path.Combine(
+                directoryPath,
+                "private-steam-library",
+                "wallpaper_engine");
+            await File.WriteAllTextAsync(
+                preferencesPath,
+                $$"""
+                {
+                  "schemaVersion": 1,
+                  "themeMode": "Dark",
+                  "hasShownTrayTip": true,
+                  "hasAcknowledgedWebWallpaperPrivacyNotice": true,
+                  {{JsonSerializer.Serialize(deprecatedPropertyName)}}: {{JsonSerializer.Serialize(privateInstallRoot)}}
+                }
+                """);
+            using var store = new AppPreferencesStore(preferencesPath);
+
+            var preferences = await store.LoadAsync();
+
+            Assert.Equal(ThemeMode.Dark, preferences.ThemeMode);
+            Assert.True(preferences.HasShownTrayTip);
+            Assert.True(preferences.HasAcknowledgedWebWallpaperPrivacyNotice);
+            var sanitized = await File.ReadAllTextAsync(preferencesPath);
+            Assert.DoesNotContain(
+                privateInstallRoot,
+                sanitized,
+                StringComparison.OrdinalIgnoreCase);
+            using var document = JsonDocument.Parse(sanitized);
+            Assert.False(
+                document.RootElement.TryGetProperty(
+                    "wallpaperEngineInstallRootPath",
+                    out _));
+            Assert.Empty(
+                Directory.GetFiles(
+                    directoryPath,
+                    "*.tmp",
+                    SearchOption.TopDirectoryOnly));
         }
         finally
         {

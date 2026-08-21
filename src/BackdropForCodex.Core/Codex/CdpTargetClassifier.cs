@@ -1,5 +1,9 @@
 namespace BackdropForCodex.Core.Codex;
 
+/// <summary>
+/// Classifies untrusted CDP target descriptors against the routes and titles allowed by a verified
+/// Codex package identity.
+/// </summary>
 public static class CdpTargetClassifier
 {
     public static CdpTargetClassification Classify(
@@ -121,6 +125,9 @@ public static class CdpTargetClassifier
 
         try
         {
+            // Route checks must see through nested escaping so encoded authentication or traversal
+            // segments cannot masquerade as workspace paths. The hard pass limit also bounds work
+            // on attacker-controlled CDP metadata; a path still changing afterward is rejected.
             for (var pass = 0; pass < 4; pass++)
             {
                 var decodedPath = Uri.UnescapeDataString(normalizedPath);
@@ -177,6 +184,8 @@ public static class CdpTargetClassifier
 
         try
         {
+            // Compare canonical absolute paths instead of URL text so alternate separators and
+            // dot segments cannot turn an unreviewed packaged file into a lookalike entry point.
             var candidatePath = Path.GetFullPath(uri.LocalPath);
             var expectedPath = Path.GetFullPath(
                 Path.Combine(identity.PackageRoot, "app", "index.html"));

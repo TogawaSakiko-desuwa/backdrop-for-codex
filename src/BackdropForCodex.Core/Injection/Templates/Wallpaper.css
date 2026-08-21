@@ -379,6 +379,10 @@
       __BFC_ADVANCED_BODY_SELECTOR__ main [data-content-search-unit-key]
         > h4[class~="sr-only"][class~="select-none"]
         + div[class~="group"][class~="flex"][class~="min-w-0"][class~="flex-col"]:not([data-response-annotation-target]):has(> [data-selected-text-overlay-target]),
+      __BFC_ADVANCED_BODY_SELECTOR__ main [data-content-search-unit-key]
+        > div[class~="group"][class~="flex"][class~="min-w-0"][class~="flex-col"]:not([data-response-annotation-target]):has(
+          > [data-selected-text-overlay-target][data-markdown-text-style="assistant-message"]
+        ),
       __BFC_ADVANCED_BODY_SELECTOR__ main [data-user-message-bubble="true"] {
         background-color: var(--codex-wallpaper-glass) !important;
         -webkit-backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
@@ -391,7 +395,11 @@
       __BFC_ADVANCED_BODY_SELECTOR__ main [data-response-annotation-conversation][data-response-annotation-target],
       __BFC_ADVANCED_BODY_SELECTOR__ main [data-content-search-unit-key]
         > h4[class~="sr-only"][class~="select-none"]
-        + div[class~="group"][class~="flex"][class~="min-w-0"][class~="flex-col"]:not([data-response-annotation-target]):has(> [data-selected-text-overlay-target]) {
+        + div[class~="group"][class~="flex"][class~="min-w-0"][class~="flex-col"]:not([data-response-annotation-target]):has(> [data-selected-text-overlay-target]),
+      __BFC_ADVANCED_BODY_SELECTOR__ main [data-content-search-unit-key]
+        > div[class~="group"][class~="flex"][class~="min-w-0"][class~="flex-col"]:not([data-response-annotation-target]):has(
+          > [data-selected-text-overlay-target][data-markdown-text-style="assistant-message"]
+        ) {
         padding: 12px var(--codex-wallpaper-conversation-inline-padding);
       }
       /*
@@ -403,12 +411,22 @@
         [data-response-annotation-conversation][data-response-annotation-target],
         [data-content-search-unit-key]
           > h4[class~="sr-only"][class~="select-none"]
-          + div[class~="group"][class~="flex"][class~="min-w-0"][class~="flex-col"]:not([data-response-annotation-target]):has(> [data-selected-text-overlay-target])
+          + div[class~="group"][class~="flex"][class~="min-w-0"][class~="flex-col"]:not([data-response-annotation-target]):has(> [data-selected-text-overlay-target]),
+        [data-content-search-unit-key]
+          > div[class~="group"][class~="flex"][class~="min-w-0"][class~="flex-col"]:not([data-response-annotation-target]):has(
+            > [data-selected-text-overlay-target][data-markdown-text-style="assistant-message"]
+          )
       ):has(
-        :is([class^="_tableContainer_"], [class*=" _tableContainer_"]):is([class^="_tableWideBlock_"], [class*=" _tableWideBlock_"])
-          > :is([class^="_tableScroller_"], [class*=" _tableScroller_"])
-          > :is([class^="_tableWrapper_"], [class*=" _tableWrapper_"])
-          > table:is([class^="_table_"], [class*=" _table_"])
+        :is(
+          :is([class^="_tableContainer_"], [class*=" _tableContainer_"]):is([class^="_tableWideBlock_"], [class*=" _tableWideBlock_"])
+            > :is([class^="_tableScroller_"], [class*=" _tableScroller_"])
+            > :is([class^="_tableWrapper_"], [class*=" _tableWrapper_"])
+            > table:is([class^="_table_"], [class*=" _table_"]),
+          [data-markdown-table="true"][data-wide-block]
+            > :is([class^="_TableScroller_"], [class*=" _TableScroller_"])
+            > :is([class^="_TableWrapper_"], [class*=" _TableWrapper_"])
+            > table:is([class^="_Table_"], [class*=" _Table_"])
+        )
       ) {
         --codex-wallpaper-wide-table-glass-width: min(
           calc(
@@ -439,12 +457,22 @@
         [data-response-annotation-conversation][data-response-annotation-target],
         [data-content-search-unit-key]
           > h4[class~="sr-only"][class~="select-none"]
-          + div[class~="group"][class~="flex"][class~="min-w-0"][class~="flex-col"]:not([data-response-annotation-target]):has(> [data-selected-text-overlay-target])
+          + div[class~="group"][class~="flex"][class~="min-w-0"][class~="flex-col"]:not([data-response-annotation-target]):has(> [data-selected-text-overlay-target]),
+        [data-content-search-unit-key]
+          > div[class~="group"][class~="flex"][class~="min-w-0"][class~="flex-col"]:not([data-response-annotation-target]):has(
+            > [data-selected-text-overlay-target][data-markdown-text-style="assistant-message"]
+          )
       ):has(
-        :is([class^="_tableContainer_"], [class*=" _tableContainer_"]):is([class^="_tableWideBlock_"], [class*=" _tableWideBlock_"])
-          > :is([class^="_tableScroller_"], [class*=" _tableScroller_"])
-          > :is([class^="_tableWrapper_"], [class*=" _tableWrapper_"])
-          > table:is([class^="_table_"], [class*=" _table_"])
+        :is(
+          :is([class^="_tableContainer_"], [class*=" _tableContainer_"]):is([class^="_tableWideBlock_"], [class*=" _tableWideBlock_"])
+            > :is([class^="_tableScroller_"], [class*=" _tableScroller_"])
+            > :is([class^="_tableWrapper_"], [class*=" _tableWrapper_"])
+            > table:is([class^="_table_"], [class*=" _table_"]),
+          [data-markdown-table="true"][data-wide-block]
+            > :is([class^="_TableScroller_"], [class*=" _TableScroller_"])
+            > :is([class^="_TableWrapper_"], [class*=" _TableWrapper_"])
+            > table:is([class^="_Table_"], [class*=" _Table_"])
+        )
       )::before {
         content: "";
         position: absolute;
@@ -470,12 +498,22 @@
         [data-response-annotation-conversation][data-response-annotation-target],
         [data-content-search-unit-key]
           > h4[class~="sr-only"][class~="select-none"]
-          + div[class~="group"][class~="flex"][class~="min-w-0"][class~="flex-col"]:not([data-response-annotation-target]):has(> [data-selected-text-overlay-target])
+          + div[class~="group"][class~="flex"][class~="min-w-0"][class~="flex-col"]:not([data-response-annotation-target]):has(> [data-selected-text-overlay-target]),
+        [data-content-search-unit-key]
+          > div[class~="group"][class~="flex"][class~="min-w-0"][class~="flex-col"]:not([data-response-annotation-target]):has(
+            > [data-selected-text-overlay-target][data-markdown-text-style="assistant-message"]
+          )
       ):has(
-        :is([class^="_tableContainer_"], [class*=" _tableContainer_"]):is([class^="_tableWideBlock_"], [class*=" _tableWideBlock_"])
-          > :is([class^="_tableScroller_"], [class*=" _tableScroller_"])
-          > :is([class^="_tableWrapper_"], [class*=" _tableWrapper_"])
-          > table:is([class^="_table_"], [class*=" _table_"])
+        :is(
+          :is([class^="_tableContainer_"], [class*=" _tableContainer_"]):is([class^="_tableWideBlock_"], [class*=" _tableWideBlock_"])
+            > :is([class^="_tableScroller_"], [class*=" _tableScroller_"])
+            > :is([class^="_tableWrapper_"], [class*=" _tableWrapper_"])
+            > table:is([class^="_table_"], [class*=" _table_"]),
+          [data-markdown-table="true"][data-wide-block]
+            > :is([class^="_TableScroller_"], [class*=" _TableScroller_"])
+            > :is([class^="_TableWrapper_"], [class*=" _TableWrapper_"])
+            > table:is([class^="_Table_"], [class*=" _Table_"])
+        )
       ):dir(rtl)::before {
         left: auto;
         right: calc(

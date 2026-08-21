@@ -254,10 +254,14 @@ public sealed class ReviewedSelectorBrowserContractTests
             Assert.Equal("none", snapshots["changed-files-composer-fade"].BackgroundImage);
             AssertGlass(snapshots, "fallback-assistant-message");
             AssertGlass(snapshots, "annotated-assistant-message");
+            AssertGlass(snapshots, "codex-current-regular-assistant");
+            AssertGlass(snapshots, "codex-current-narrow-table-message");
             AssertGlass(snapshots, "user-message-bubble");
 
             AssertClear(snapshots, "wide-fallback-assistant");
             AssertPseudoGlass(snapshots, "wide-fallback-assistant");
+            AssertClear(snapshots, "codex-current-wide-table-message");
+            AssertPseudoGlass(snapshots, "codex-current-wide-table-message");
             AssertClear(snapshots, "wide-annotated-assistant-rtl");
             AssertPseudoGlass(snapshots, "wide-annotated-assistant-rtl");
             Assert.NotEqual("auto", snapshots["wide-annotated-assistant-rtl"].BeforeRight);
@@ -271,7 +275,9 @@ public sealed class ReviewedSelectorBrowserContractTests
                 "assistant-wrapper-without-required-classes",
                 "assistant-target-not-direct-child",
                 "assistant-message-outside-main",
+                "codex-current-non-assistant-markdown",
                 "wide-table-outside-assistant",
+                "codex-current-wide-table-outside-assistant",
                 "ordinary-table",
                 "composer-surface-chrome");
             Assert.NotEqual(
@@ -282,6 +288,8 @@ public sealed class ReviewedSelectorBrowserContractTests
             Assert.Empty(cssom.InvalidSelectors);
             Assert.Contains("fallback-assistant-message", cssom.MatchedFixtureIds);
             Assert.Contains("wide-fallback-assistant", cssom.MatchedFixtureIds);
+            Assert.Contains("codex-current-regular-assistant", cssom.MatchedFixtureIds);
+            Assert.Contains("codex-current-wide-table-message", cssom.MatchedFixtureIds);
             Assert.Contains("changed-files-composer-fade", cssom.MatchedFixtureIds);
         });
     }
@@ -848,6 +856,64 @@ public sealed class ReviewedSelectorBrowserContractTests
               <div data-user-message-bubble="true"
                    data-fixture-id="user-message-bubble"></div>
 
+              <div data-content-search-unit-key="assistant-current-regular">
+                <div class="group flex min-w-0 flex-col"
+                     data-fixture-id="codex-current-regular-assistant">
+                  <div class="_MarkdownRoot_fixture"
+                       data-selected-text-overlay-target=""
+                       data-markdown-text-style="assistant-message">
+                    Current Codex assistant response
+                  </div>
+                </div>
+              </div>
+
+              <div data-content-search-unit-key="assistant-current-wide-table">
+                <div class="group flex min-w-0 flex-col"
+                     data-fixture-id="codex-current-wide-table-message">
+                  <div class="_MarkdownRoot_fixture"
+                       data-selected-text-overlay-target=""
+                       data-markdown-text-style="assistant-message">
+                    <div class="_TableContainer_fixture"
+                         data-markdown-table="true"
+                         data-wide-block="">
+                      <div class="_TableScroller_fixture">
+                        <div class="_TableWrapper_fixture">
+                          <table class="_Table_fixture"></table>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div data-content-search-unit-key="assistant-current-narrow-table">
+                <div class="group flex min-w-0 flex-col"
+                     data-fixture-id="codex-current-narrow-table-message">
+                  <div class="_MarkdownRoot_fixture"
+                       data-selected-text-overlay-target=""
+                       data-markdown-text-style="assistant-message">
+                    <div class="_TableContainer_fixture" data-markdown-table="true">
+                      <div class="_TableScroller_fixture">
+                        <div class="_TableWrapper_fixture">
+                          <table class="_Table_fixture"></table>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div data-content-search-unit-key="non-assistant-current">
+                <div class="group flex min-w-0 flex-col"
+                     data-fixture-id="codex-current-non-assistant-markdown">
+                  <div class="_MarkdownRoot_fixture"
+                       data-selected-text-overlay-target=""
+                       data-markdown-text-style="user-message">
+                    Not an assistant message
+                  </div>
+                </div>
+              </div>
+
               <div data-content-search-unit-key="wide-fallback">
                 <h4 class="sr-only select-none"></h4>
                 <div class="group flex min-w-0 flex-col"
@@ -909,6 +975,15 @@ public sealed class ReviewedSelectorBrowserContractTests
                 <div class="_tableContainer_fixture _tableWideBlock_fixture">
                   <div class="_tableScroller_fixture"><div class="_tableWrapper_fixture">
                     <table class="_table_fixture"></table>
+                  </div></div>
+                </div>
+              </article>
+              <article data-fixture-id="codex-current-wide-table-outside-assistant">
+                <div class="_TableContainer_fixture"
+                     data-markdown-table="true"
+                     data-wide-block="">
+                  <div class="_TableScroller_fixture"><div class="_TableWrapper_fixture">
+                    <table class="_Table_fixture"></table>
                   </div></div>
                 </div>
               </article>

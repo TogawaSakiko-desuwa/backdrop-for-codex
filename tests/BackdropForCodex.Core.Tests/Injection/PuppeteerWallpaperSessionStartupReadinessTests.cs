@@ -3709,6 +3709,7 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
         startInfo.ArgumentList.Add("--disable-extensions");
         startInfo.ArgumentList.Add("--no-first-run");
         startInfo.ArgumentList.Add("--no-default-browser-check");
+        startInfo.ArgumentList.Add("--edge-skip-compat-layer-relaunch");
         startInfo.ArgumentList.Add("--remote-debugging-address=127.0.0.1");
         startInfo.ArgumentList.Add($"--remote-debugging-port={port}");
         startInfo.ArgumentList.Add($"--user-data-dir={userDataDirectory}");

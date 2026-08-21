@@ -1,6 +1,7 @@
 using System.Text.Json;
 using BackdropForCodex.App.Services.Diagnostics;
 using BackdropForCodex.Core.Codex;
+using BackdropForCodex.Core.Dynamic;
 using BackdropForCodex.Core.Runtime;
 using Xunit;
 
@@ -8,6 +9,46 @@ namespace BackdropForCodex.Core.Tests.AppSupport;
 
 public sealed class DiagnosticReportServiceTests
 {
+    [Fact]
+    public void CreateRuntimeSnapshot_CarriesOnlyAllowListedDynamicReasonCode()
+    {
+        const string sensitiveDetail = @"C:\private\wallpaper.mp4 failed at https://localhost:9222";
+        var service = new DiagnosticReportService();
+        var runtimeError = WallpaperRuntimeError.FromException(
+            "dynamic-failed",
+            new InvalidOperationException(
+                sensitiveDetail,
+                new DynamicWallpaperUnavailableException(
+                    DynamicWallpaperCapabilityReasonCode.SustainedStreamBackpressure,
+                    new IOException(sensitiveDetail))));
+
+        var runtime = service.CreateRuntimeSnapshot(
+            WallpaperRuntimePhase.Faulted,
+            isActive: false,
+            isPaused: false,
+            runtimeError);
+        var report = service.CreateReport(
+            runtime,
+            service.CreateCompatibilitySnapshot(
+                WallpaperCompatibilitySnapshot.NotEvaluated),
+            new DiagnosticEnvironmentSnapshot(
+                "1.3.3",
+                "10.0.26100.0",
+                "X64",
+                ".NET 10.0.0"));
+
+        var json = service.Serialize(report);
+        using var document = JsonDocument.Parse(json);
+        var runtimeElement = document.RootElement.GetProperty("runtime");
+
+        Assert.Equal(
+            "SustainedStreamBackpressure",
+            runtimeElement.GetProperty("dynamicReasonCode").GetString());
+        Assert.DoesNotContain(sensitiveDetail, json, StringComparison.Ordinal);
+        Assert.DoesNotContain("localhost", json, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("private", json, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public void CreateReport_UsesOnlyTypedAllowListedRuntimeAndCompatibilityData()
     {

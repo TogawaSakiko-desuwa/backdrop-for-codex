@@ -1,4 +1,5 @@
 using BackdropForCodex.Core.Codex;
+using BackdropForCodex.Core.Dynamic;
 using BackdropForCodex.Core.Injection;
 using BackdropForCodex.Core.Media;
 using BackdropForCodex.Core.Runtime;
@@ -10,6 +11,23 @@ namespace BackdropForCodex.Core.Tests.Runtime;
 public sealed class WallpaperCoordinatorTests
 {
     [Fact]
+    public async Task DefaultCompositionWiresTheWallpaperEnginePreflight()
+    {
+        var registry = new WallpaperSourceProviderRegistry(
+            [new LocalFileWallpaperSourceProvider()]);
+        await using var coordinator = WallpaperCoordinator.CreateDefault(
+            registry,
+            new RejectingInstallationLocator());
+
+        var capability = await coordinator.ProbeDynamicWallpaperAsync();
+
+        Assert.False(capability.IsAvailable);
+        Assert.Equal(
+            DynamicWallpaperCapabilityReasonCode.UnsupportedOperatingSystem,
+            capability.ReasonCode);
+    }
+
+    [Fact]
     public async Task ActivateAsync_ActivatesOnlyAfterValidationAndAppliesVerifiedEndpoint()
     {
         var fixture = new CoordinatorFixture();
@@ -19,10 +37,10 @@ public sealed class WallpaperCoordinatorTests
 
         Assert.Equal(RuntimeActivationOutcome.MediaActive, result.Outcome);
         Assert.True(coordinator.IsActive);
-        Assert.True(SettingsV2Comparer.DurableEquals(
+        Assert.True(SettingsV3Comparer.DurableEquals(
             fixture.ValidSettings,
             result.ActiveSnapshot));
-        Assert.True(SettingsV2Comparer.DurableEquals(
+        Assert.True(SettingsV3Comparer.DurableEquals(
             fixture.ValidSettings,
             coordinator.ActiveSnapshot));
         Assert.Equal(WallpaperRuntimeSurfaceKind.MediaActive, result.Surface.Kind);
@@ -108,6 +126,551 @@ public sealed class WallpaperCoordinatorTests
         Assert.Equal(0, fixture.ProcessSource.CallCount);
         Assert.Equal(0, fixture.Discovery.CallCount);
         Assert.Equal(0, fixture.Injection.ApplyCount);
+    }
+
+    [Theory]
+    [InlineData(WallpaperContentKind.Scene)]
+    [InlineData(WallpaperContentKind.Web)]
+    public async Task ActivateAsync_PublishesPreparedWindowContentAndRoutesPause(
+        WallpaperContentKind contentKind)
+    {
+        var fixture = new CoordinatorFixture();
+        var projectProvider = new FakeProjectSourceProvider(
+            contentKind,
+            allowAcquire: true);
+        var dynamicFactory = new FakeDynamicWallpaperActivationFactory();
+        var registry = new WallpaperSourceProviderRegistry(
+            [fixture.SourceProvider, projectProvider]);
+        var media = new MediaReference
+        {
+            MediaId = Guid.CreateVersion7(),
+            SourceKind = MediaSourceKind.WallpaperEngineLocalProject,
+            SourceIdentifier = @"C:\WallpaperEngine\projects\wallpaper\project.json",
+            LastKnownKind = MediaKind.None,
+            LastKnownContentKind = contentKind,
+            LastKnownDisplayName = "Dynamic project",
+        };
+        var settings = CoordinatorFixture.CreateSettings(media);
+        await using var coordinator = fixture.CreateCoordinator(
+            sourceRegistry: registry,
+            dynamicActivationFactory: dynamicFactory);
+
+        var result = await fixture.ActivateAsync(coordinator, settings);
+
+        Assert.Equal(RuntimeActivationOutcome.MediaActive, result.Outcome);
+        Assert.True(coordinator.IsActive);
+        Assert.Equal(1, dynamicFactory.ActivateCount);
+        Assert.Equal(1, projectProvider.AcquireCount);
+        Assert.Equal(0, fixture.Injection.ApplyCount);
+        Assert.Equal(ActiveWallpaperDeliveryKind.DynamicStream,
+            ((IActiveWallpaperPool)fixture.PlaybackPool).ActiveLease?.DeliveryKind);
+        Assert.Equal(media.MediaId, result.Surface.MediaId);
+        Assert.Equal(
+            dynamicFactory.Presentation,
+            coordinator.Compatibility.Presentation);
+        Assert.Equal(
+            dynamicFactory.Capabilities,
+            coordinator.Compatibility.Capabilities);
+
+        await coordinator.SetPausedAsync(paused: true);
+        await coordinator.SetPausedAsync(paused: false);
+
+        Assert.Equal([true, false], dynamicFactory.ActiveLease?.PauseStates);
+        Assert.Equal(0, fixture.Injection.SetPausedCount);
+    }
+
+    [Fact]
+    public async Task DynamicCapabilityDegradationUpdatesOnlyWhileGenerationIsActive()
+    {
+        var fixture = new CoordinatorFixture();
+        var projectProvider = new FakeProjectSourceProvider(
+            WallpaperContentKind.Web,
+            allowAcquire: true);
+        var dynamicFactory = new FakeDynamicWallpaperActivationFactory();
+        var registry = new WallpaperSourceProviderRegistry(
+            [fixture.SourceProvider, projectProvider]);
+        var media = new MediaReference
+        {
+            MediaId = Guid.CreateVersion7(),
+            SourceKind = MediaSourceKind.WallpaperEngineLocalProject,
+            SourceIdentifier = @"C:\WallpaperEngine\projects\wallpaper\project.json",
+            LastKnownKind = MediaKind.None,
+            LastKnownContentKind = WallpaperContentKind.Web,
+            LastKnownDisplayName = "Dynamic web project",
+        };
+        await using var coordinator = fixture.CreateCoordinator(
+            sourceRegistry: registry,
+            dynamicActivationFactory: dynamicFactory);
+        _ = await fixture.ActivateAsync(
+            coordinator,
+            CoordinatorFixture.CreateSettings(media));
+        var activeLease = Assert.IsType<FakeDynamicActiveLease>(dynamicFactory.ActiveLease);
+        var globalOnly = PresentationContractCatalog.Match(
+            new PresentationEvidence(
+                GlobalStructure: true,
+                ShellStructure: false,
+                BackdropFilterSupported: true,
+                SelectorHasSupported: true),
+            finalizeBaselineFallback: true);
+        var changed = new List<WallpaperInjectionCapabilitiesChangedEventArgs>();
+        coordinator.CapabilitiesChanged += (_, eventArgs) => changed.Add(eventArgs);
+
+        activeLease.RaiseCapabilitiesChanged(globalOnly.Capabilities);
+
+        var observed = Assert.Single(changed);
+        Assert.Equal(activeLease.Generation, observed.Generation);
+        Assert.Equal(dynamicFactory.Capabilities, observed.Previous);
+        Assert.Equal(globalOnly.Capabilities, observed.Current);
+        Assert.Equal(dynamicFactory.Presentation, observed.PresentationContract);
+        Assert.Equal(globalOnly.Capabilities, coordinator.Capabilities);
+        Assert.Equal(dynamicFactory.Presentation, coordinator.Compatibility.Presentation);
+
+        _ = await coordinator.RestoreOfficialAsync(revision: 2);
+        activeLease.RaiseCapabilitiesChanged(
+            PresentationContractCatalog.CreateFullySupportedCapabilities());
+
+        Assert.Equal(globalOnly.Capabilities, coordinator.Capabilities);
+        Assert.Equal(dynamicFactory.Presentation, coordinator.Compatibility.Presentation);
+        Assert.Single(changed);
+    }
+
+    [Fact]
+    public async Task DynamicToDirectTransferUnsubscribesThePreviousCapabilitySource()
+    {
+        var fixture = new CoordinatorFixture();
+        var projectProvider = new FakeProjectSourceProvider(
+            WallpaperContentKind.Scene,
+            allowAcquire: true);
+        var dynamicFactory = new FakeDynamicWallpaperActivationFactory();
+        var registry = new WallpaperSourceProviderRegistry(
+            [fixture.SourceProvider, projectProvider]);
+        var dynamicMedia = new MediaReference
+        {
+            MediaId = Guid.CreateVersion7(),
+            SourceKind = MediaSourceKind.WallpaperEngineLocalProject,
+            SourceIdentifier = @"C:\WallpaperEngine\projects\wallpaper\project.json",
+            LastKnownKind = MediaKind.None,
+            LastKnownContentKind = WallpaperContentKind.Scene,
+            LastKnownDisplayName = "Dynamic scene project",
+        };
+        await using var coordinator = fixture.CreateCoordinator(
+            sourceRegistry: registry,
+            dynamicActivationFactory: dynamicFactory);
+        _ = await fixture.ActivateAsync(
+            coordinator,
+            CoordinatorFixture.CreateSettings(dynamicMedia));
+        var previousSource = Assert.IsType<FakeDynamicActiveLease>(
+            dynamicFactory.ActiveLease);
+        Assert.Equal(1, previousSource.CapabilitySubscriberCount);
+        fixture.ProcessSource.Processes = [fixture.ReviewedProcess];
+        fixture.Discovery.Results.Enqueue(new CdpDiscoveryResult([fixture.Endpoint], []));
+
+        var directResult = await fixture.ActivateAsync(coordinator, fixture.ValidSettings);
+
+        Assert.Equal(RuntimeActivationOutcome.MediaActive, directResult.Outcome);
+        Assert.Equal(
+            ActiveWallpaperDeliveryKind.DirectMedia,
+            ((IActiveWallpaperPool)fixture.PlaybackPool).ActiveLease?.DeliveryKind);
+        Assert.Equal(0, previousSource.CapabilitySubscriberCount);
+        var beforeLateEvent = coordinator.Compatibility;
+        var forwarded = new List<WallpaperInjectionCapabilitiesChangedEventArgs>();
+        coordinator.CapabilitiesChanged += (_, eventArgs) => forwarded.Add(eventArgs);
+        var globalOnly = PresentationContractCatalog.Match(
+            new PresentationEvidence(
+                GlobalStructure: true,
+                ShellStructure: false,
+                BackdropFilterSupported: true,
+                SelectorHasSupported: true),
+            finalizeBaselineFallback: true);
+
+        previousSource.RaiseCapabilitiesChanged(globalOnly.Capabilities);
+
+        Assert.Equal(beforeLateEvent, coordinator.Compatibility);
+        Assert.Empty(forwarded);
+    }
+
+    [Fact]
+    public async Task ActivateAsync_DynamicStartupFailureBeforePagePublicationPreservesPreviousWallpaper()
+    {
+        var fixture = new CoordinatorFixture();
+        var projectProvider = new FakeProjectSourceProvider(
+            WallpaperContentKind.Scene,
+            allowAcquire: true);
+        var dynamicFactory = new FakeDynamicWallpaperActivationFactory
+        {
+            ActivateException = new DynamicWallpaperUnavailableException(
+                DynamicWallpaperCapabilityReasonCode.CaptureTargetUnavailable),
+        };
+        var registry = new WallpaperSourceProviderRegistry(
+            [fixture.SourceProvider, projectProvider]);
+        await using var coordinator = fixture.CreateCoordinator(
+            sourceRegistry: registry,
+            dynamicActivationFactory: dynamicFactory);
+        var previous = await fixture.ActivateAsync(coordinator);
+        var previousLease = ((IActiveWallpaperPool)fixture.PlaybackPool).ActiveLease;
+        fixture.ProcessSource.Processes = [fixture.ReviewedProcess];
+        fixture.Discovery.Results.Enqueue(new CdpDiscoveryResult([fixture.Endpoint], []));
+        var media = new MediaReference
+        {
+            MediaId = Guid.CreateVersion7(),
+            SourceKind = MediaSourceKind.WallpaperEngineLocalProject,
+            SourceIdentifier = @"C:\WallpaperEngine\projects\wallpaper\project.json",
+            LastKnownKind = MediaKind.None,
+            LastKnownContentKind = WallpaperContentKind.Scene,
+            LastKnownDisplayName = "Dynamic project",
+        };
+
+        var result = await fixture.ActivateAsync(
+            coordinator,
+            CoordinatorFixture.CreateSettings(media));
+
+        Assert.Equal(RuntimeActivationOutcome.SavedButNotActivated, result.Outcome);
+        Assert.Equal(previous.Surface, result.Surface);
+        Assert.True(SettingsV3Comparer.DurableEquals(
+            previous.ActiveSnapshot!,
+            result.ActiveSnapshot!));
+        Assert.Same(previousLease, ((IActiveWallpaperPool)fixture.PlaybackPool).ActiveLease);
+        Assert.Equal(0, fixture.Injection.StopCount);
+        Assert.Equal(1, fixture.PlaybackPool.ActivateCount);
+    }
+
+    [Fact]
+    public async Task ActivateAsync_DynamicFailureAfterPossiblePublicationCleansThePreviousWallpaper()
+    {
+        var fixture = new CoordinatorFixture();
+        var projectProvider = new FakeProjectSourceProvider(
+            WallpaperContentKind.Scene,
+            allowAcquire: true);
+        var dynamicFactory = new FakeDynamicWallpaperActivationFactory
+        {
+            ReportMutationBeforeThrow = true,
+            ActivateException = new DynamicWallpaperUnavailableException(
+                DynamicWallpaperCapabilityReasonCode.CaptureTargetUnavailable),
+        };
+        var registry = new WallpaperSourceProviderRegistry(
+            [fixture.SourceProvider, projectProvider]);
+        await using var coordinator = fixture.CreateCoordinator(
+            sourceRegistry: registry,
+            dynamicActivationFactory: dynamicFactory);
+        var previous = await fixture.ActivateAsync(coordinator);
+        fixture.ProcessSource.Processes = [fixture.ReviewedProcess];
+        fixture.Discovery.Results.Enqueue(new CdpDiscoveryResult([fixture.Endpoint], []));
+        var media = new MediaReference
+        {
+            MediaId = Guid.CreateVersion7(),
+            SourceKind = MediaSourceKind.WallpaperEngineLocalProject,
+            SourceIdentifier = @"C:\WallpaperEngine\projects\wallpaper\project.json",
+            LastKnownKind = MediaKind.None,
+            LastKnownContentKind = WallpaperContentKind.Scene,
+            LastKnownDisplayName = "Dynamic project",
+        };
+
+        var result = await fixture.ActivateAsync(
+            coordinator,
+            CoordinatorFixture.CreateSettings(media));
+
+        Assert.Equal(RuntimeActivationOutcome.Failed, result.Outcome);
+        Assert.NotEqual(previous.Surface, result.Surface);
+        Assert.Equal(WallpaperRuntimeSurfaceKind.Faulted, result.Surface.Kind);
+        Assert.Null(((IActiveWallpaperPool)fixture.PlaybackPool).ActiveLease);
+        Assert.Equal(1, fixture.SourceProvider.DisposeCount);
+        Assert.Equal(1, fixture.Injection.StopCount);
+    }
+
+    [Fact]
+    public async Task ActivateAsync_CancellationAfterPossiblePublicationDoesNotRestoreThePreviousWallpaper()
+    {
+        var fixture = new CoordinatorFixture();
+        using var cancellation = new CancellationTokenSource();
+        var projectProvider = new FakeProjectSourceProvider(
+            WallpaperContentKind.Scene,
+            allowAcquire: true);
+        var dynamicFactory = new FakeDynamicWallpaperActivationFactory
+        {
+            ReportMutationBeforeThrow = true,
+            AfterMutationReported = cancellation.Cancel,
+        };
+        var registry = new WallpaperSourceProviderRegistry(
+            [fixture.SourceProvider, projectProvider]);
+        await using var coordinator = fixture.CreateCoordinator(
+            sourceRegistry: registry,
+            dynamicActivationFactory: dynamicFactory);
+        var previous = await fixture.ActivateAsync(coordinator);
+        fixture.ProcessSource.Processes = [fixture.ReviewedProcess];
+        fixture.Discovery.Results.Enqueue(new CdpDiscoveryResult([fixture.Endpoint], []));
+        var media = new MediaReference
+        {
+            MediaId = Guid.CreateVersion7(),
+            SourceKind = MediaSourceKind.WallpaperEngineLocalProject,
+            SourceIdentifier = @"C:\WallpaperEngine\projects\wallpaper\project.json",
+            LastKnownKind = MediaKind.None,
+            LastKnownContentKind = WallpaperContentKind.Scene,
+            LastKnownDisplayName = "Dynamic project",
+        };
+
+        var result = await coordinator.ActivateAsync(
+            RuntimeActivationRequest.Create(
+                2,
+                CoordinatorFixture.CreateSettings(media)),
+            cancellation.Token);
+
+        Assert.Equal(RuntimeActivationOutcome.Canceled, result.Outcome);
+        Assert.NotEqual(previous.Surface, result.Surface);
+        Assert.Equal(WallpaperRuntimeSurfaceKind.Official, result.Surface.Kind);
+        Assert.Null(((IActiveWallpaperPool)fixture.PlaybackPool).ActiveLease);
+        Assert.Equal(1, fixture.SourceProvider.DisposeCount);
+        Assert.Equal(1, fixture.Injection.StopCount);
+    }
+
+    [Fact]
+    public async Task ActivateAsync_RetriesRetainedProjectCleanupBeforeTheNextOperation()
+    {
+        var fixture = new CoordinatorFixture();
+        var projectProvider = new FakeProjectSourceProvider(
+            WallpaperContentKind.Scene,
+            allowAcquire: true,
+            leaseDisposeFailures: 1);
+        var dynamicFactory = new FakeDynamicWallpaperActivationFactory
+        {
+            ActivateException = new InvalidOperationException("dynamic startup failed"),
+        };
+        var registry = new WallpaperSourceProviderRegistry(
+            [fixture.SourceProvider, projectProvider]);
+        var media = new MediaReference
+        {
+            MediaId = Guid.CreateVersion7(),
+            SourceKind = MediaSourceKind.WallpaperEngineLocalProject,
+            SourceIdentifier = @"C:\WallpaperEngine\projects\wallpaper\project.json",
+            LastKnownKind = MediaKind.None,
+            LastKnownContentKind = WallpaperContentKind.Scene,
+            LastKnownDisplayName = "Dynamic project",
+        };
+        await using var coordinator = fixture.CreateCoordinator(
+            sourceRegistry: registry,
+            dynamicActivationFactory: dynamicFactory);
+
+        var failed = await fixture.ActivateAsync(
+            coordinator,
+            CoordinatorFixture.CreateSettings(media));
+
+        Assert.Equal(RuntimeActivationOutcome.Failed, failed.Outcome);
+        Assert.Equal(1, projectProvider.LeaseDisposeAttempts);
+
+        var official = await coordinator.ActivateAsync(
+            RuntimeActivationRequest.Create(2, SettingsV3.CreateDefault()));
+
+        Assert.Equal(RuntimeActivationOutcome.Official, official.Outcome);
+        Assert.Equal(2, projectProvider.LeaseDisposeAttempts);
+    }
+
+    [Fact]
+    public async Task DisposeAsync_RetriesRetainedProjectCleanupAfterAnEarlierDisposeFailure()
+    {
+        var fixture = new CoordinatorFixture();
+        var projectProvider = new FakeProjectSourceProvider(
+            WallpaperContentKind.Scene,
+            allowAcquire: true,
+            leaseDisposeFailures: 3);
+        var dynamicFactory = new FakeDynamicWallpaperActivationFactory
+        {
+            ActivateException = new InvalidOperationException("dynamic startup failed"),
+        };
+        var registry = new WallpaperSourceProviderRegistry(
+            [fixture.SourceProvider, projectProvider]);
+        var media = new MediaReference
+        {
+            MediaId = Guid.CreateVersion7(),
+            SourceKind = MediaSourceKind.WallpaperEngineLocalProject,
+            SourceIdentifier = @"C:\WallpaperEngine\projects\wallpaper\project.json",
+            LastKnownKind = MediaKind.None,
+            LastKnownContentKind = WallpaperContentKind.Scene,
+            LastKnownDisplayName = "Dynamic project",
+        };
+        var coordinator = fixture.CreateCoordinator(
+            sourceRegistry: registry,
+            dynamicActivationFactory: dynamicFactory);
+        _ = await fixture.ActivateAsync(
+            coordinator,
+            CoordinatorFixture.CreateSettings(media));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => coordinator.DisposeAsync().AsTask());
+        Assert.Equal(2, projectProvider.LeaseDisposeAttempts);
+        Assert.NotEqual(WallpaperRuntimePhase.Disposed, coordinator.Status.Phase);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => coordinator.DisposeAsync().AsTask());
+        Assert.Equal(3, projectProvider.LeaseDisposeAttempts);
+        Assert.NotEqual(WallpaperRuntimePhase.Disposed, coordinator.Status.Phase);
+
+        await coordinator.DisposeAsync();
+
+        Assert.Equal(4, projectProvider.LeaseDisposeAttempts);
+        Assert.Equal(WallpaperRuntimePhase.Disposed, coordinator.Status.Phase);
+    }
+
+    [Fact]
+    public async Task DisposeAsync_ConcurrentCallersShareOneRetainedCleanupRetry()
+    {
+        var fixture = new CoordinatorFixture();
+        var retryCheckpoint = new AsyncCheckpoint();
+        var projectProvider = new FakeProjectSourceProvider(
+            WallpaperContentKind.Scene,
+            allowAcquire: true,
+            leaseDisposeFailures: 1,
+            beforeLeaseDisposeAsync: (attempt) => attempt == 2
+                ? retryCheckpoint.WaitAsync(CancellationToken.None)
+                : Task.CompletedTask);
+        var dynamicFactory = new FakeDynamicWallpaperActivationFactory
+        {
+            ActivateException = new InvalidOperationException("dynamic startup failed"),
+        };
+        var registry = new WallpaperSourceProviderRegistry(
+            [fixture.SourceProvider, projectProvider]);
+        var media = new MediaReference
+        {
+            MediaId = Guid.CreateVersion7(),
+            SourceKind = MediaSourceKind.WallpaperEngineLocalProject,
+            SourceIdentifier = @"C:\WallpaperEngine\projects\wallpaper\project.json",
+            LastKnownKind = MediaKind.None,
+            LastKnownContentKind = WallpaperContentKind.Scene,
+            LastKnownDisplayName = "Dynamic project",
+        };
+        var coordinator = fixture.CreateCoordinator(
+            sourceRegistry: registry,
+            dynamicActivationFactory: dynamicFactory);
+        _ = await fixture.ActivateAsync(
+            coordinator,
+            CoordinatorFixture.CreateSettings(media));
+
+        var first = coordinator.DisposeAsync().AsTask();
+        await retryCheckpoint.Entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        var second = coordinator.DisposeAsync().AsTask();
+        retryCheckpoint.Release.TrySetResult();
+
+        await Task.WhenAll(first, second);
+
+        Assert.Equal([2], projectProvider.LeaseDisposeAttemptsByLease);
+        Assert.Equal(1, fixture.Injection.DisposeCount);
+        Assert.Equal(1, fixture.PlaybackPool.DisposeCount);
+        Assert.Equal(WallpaperRuntimePhase.Disposed, coordinator.Status.Phase);
+    }
+
+    [Fact]
+    public async Task ActivateAsync_DoesNotAcquireAnotherLeaseWhileRetainedCleanupStillFails()
+    {
+        var fixture = new CoordinatorFixture();
+        var projectProvider = new FakeProjectSourceProvider(
+            WallpaperContentKind.Scene,
+            allowAcquire: true,
+            leaseDisposeFailures: 2);
+        var dynamicFactory = new FakeDynamicWallpaperActivationFactory
+        {
+            ActivateException = new InvalidOperationException("dynamic startup failed"),
+        };
+        var registry = new WallpaperSourceProviderRegistry(
+            [fixture.SourceProvider, projectProvider]);
+        var media = new MediaReference
+        {
+            MediaId = Guid.CreateVersion7(),
+            SourceKind = MediaSourceKind.WallpaperEngineLocalProject,
+            SourceIdentifier = @"C:\WallpaperEngine\projects\wallpaper\project.json",
+            LastKnownKind = MediaKind.None,
+            LastKnownContentKind = WallpaperContentKind.Scene,
+            LastKnownDisplayName = "Dynamic project",
+        };
+        await using var coordinator = fixture.CreateCoordinator(
+            sourceRegistry: registry,
+            dynamicActivationFactory: dynamicFactory);
+
+        _ = await fixture.ActivateAsync(
+            coordinator,
+            CoordinatorFixture.CreateSettings(media));
+        var blocked = await fixture.ActivateAsync(
+            coordinator,
+            CoordinatorFixture.CreateSettings(media));
+
+        Assert.Equal(RuntimeActivationOutcome.Failed, blocked.Outcome);
+        Assert.Equal(1, projectProvider.AcquireCount);
+        Assert.Equal(1, dynamicFactory.ActivateCount);
+        Assert.Equal([2], projectProvider.LeaseDisposeAttemptsByLease);
+    }
+
+    [Fact]
+    public async Task ActivateAsync_RetriesEachRetainedProjectLeaseByItsOwnIdentity()
+    {
+        var fixture = new CoordinatorFixture();
+        var projectProvider = new FakeProjectSourceProvider(
+            WallpaperContentKind.Scene,
+            allowAcquire: true,
+            leaseDisposeFailures: 1);
+        var dynamicFactory = new FakeDynamicWallpaperActivationFactory
+        {
+            ActivateException = new InvalidOperationException("dynamic startup failed"),
+        };
+        var registry = new WallpaperSourceProviderRegistry(
+            [fixture.SourceProvider, projectProvider]);
+        var media = new MediaReference
+        {
+            MediaId = Guid.CreateVersion7(),
+            SourceKind = MediaSourceKind.WallpaperEngineLocalProject,
+            SourceIdentifier = @"C:\WallpaperEngine\projects\wallpaper\project.json",
+            LastKnownKind = MediaKind.None,
+            LastKnownContentKind = WallpaperContentKind.Scene,
+            LastKnownDisplayName = "Dynamic project",
+        };
+        await using var coordinator = fixture.CreateCoordinator(
+            sourceRegistry: registry,
+            dynamicActivationFactory: dynamicFactory);
+
+        _ = await fixture.ActivateAsync(
+            coordinator,
+            CoordinatorFixture.CreateSettings(media));
+        _ = await fixture.ActivateAsync(
+            coordinator,
+            CoordinatorFixture.CreateSettings(media));
+        _ = await coordinator.ActivateAsync(
+            RuntimeActivationRequest.Create(3, SettingsV3.CreateDefault()));
+
+        Assert.Equal(2, projectProvider.AcquireCount);
+        Assert.Equal([2, 2], projectProvider.LeaseDisposeAttemptsByLease);
+    }
+
+    [Fact]
+    public async Task SetPausedAsync_DoesNotTouchPlaybackWhileRetainedCleanupStillFails()
+    {
+        var fixture = new CoordinatorFixture();
+        var projectProvider = new FakeProjectSourceProvider(
+            WallpaperContentKind.Scene,
+            allowAcquire: true,
+            leaseDisposeFailures: 2);
+        var dynamicFactory = new FakeDynamicWallpaperActivationFactory
+        {
+            ActivateException = new InvalidOperationException("dynamic startup failed"),
+        };
+        var registry = new WallpaperSourceProviderRegistry(
+            [fixture.SourceProvider, projectProvider]);
+        var media = new MediaReference
+        {
+            MediaId = Guid.CreateVersion7(),
+            SourceKind = MediaSourceKind.WallpaperEngineLocalProject,
+            SourceIdentifier = @"C:\WallpaperEngine\projects\wallpaper\project.json",
+            LastKnownKind = MediaKind.None,
+            LastKnownContentKind = WallpaperContentKind.Scene,
+            LastKnownDisplayName = "Dynamic project",
+        };
+        await using var coordinator = fixture.CreateCoordinator(
+            sourceRegistry: registry,
+            dynamicActivationFactory: dynamicFactory);
+        _ = await fixture.ActivateAsync(
+            coordinator,
+            CoordinatorFixture.CreateSettings(media));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => coordinator.SetPausedAsync(paused: true));
+
+        Assert.Equal([2], projectProvider.LeaseDisposeAttemptsByLease);
+        Assert.Equal(0, fixture.Injection.SetPausedCount);
     }
 
     [Theory]
@@ -257,7 +820,7 @@ public sealed class WallpaperCoordinatorTests
         Assert.Equal(
             WallpaperCompositionOptions.MaximumOverlayOpacity,
             options.Composition.LightOverlay);
-        var activeProfile = Assert.IsType<SettingsV2>(result.ActiveSnapshot)
+        var activeProfile = Assert.IsType<SettingsV3>(result.ActiveSnapshot)
             .ResolveProfile(SemanticRegion.Global);
         Assert.Equal(0.9, activeProfile.DarkOverlay);
         Assert.Equal(0.75, activeProfile.LightOverlay);
@@ -367,7 +930,7 @@ public sealed class WallpaperCoordinatorTests
             result.Outcome);
         Assert.Equal(active.Surface, result.Surface);
         Assert.True(
-            SettingsV2Comparer.DurableEquals(
+            SettingsV3Comparer.DurableEquals(
                 active.ActiveSnapshot!,
                 result.ActiveSnapshot!));
         Assert.Equal(1, fixture.Injection.ApplyCount);
@@ -440,10 +1003,10 @@ public sealed class WallpaperCoordinatorTests
         Assert.Equal(RuntimeActivationOutcome.Canceled, result.Outcome);
         Assert.Equal(previous.Surface, result.Surface);
         Assert.Equal(previous.Surface, coordinator.Surface);
-        Assert.True(SettingsV2Comparer.DurableEquals(
+        Assert.True(SettingsV3Comparer.DurableEquals(
             previous.ActiveSnapshot!,
             result.ActiveSnapshot!));
-        Assert.True(SettingsV2Comparer.DurableEquals(
+        Assert.True(SettingsV3Comparer.DurableEquals(
             previous.ActiveSnapshot!,
             coordinator.ActiveSnapshot!));
         Assert.Same(previousLease, fixture.PlaybackPool.ActiveLease);
@@ -947,7 +1510,7 @@ public sealed class WallpaperCoordinatorTests
         Assert.Equal(1, fixture.Injection.DisposeCount);
         Assert.Equal(1, fixture.PlaybackPool.ReleaseCount);
         Assert.Equal(1, fixture.PlaybackPool.DisposeCount);
-        Assert.Equal(WallpaperRuntimePhase.Disposed, coordinator.Status.Phase);
+        Assert.Equal(WallpaperRuntimePhase.Faulted, coordinator.Status.Phase);
     }
 
     [Fact]
@@ -1339,7 +1902,7 @@ public sealed class WallpaperCoordinatorTests
 
         public List<string> CleanupEvents { get; } = [];
 
-        public SettingsV2 ValidSettings { get; }
+        public SettingsV3 ValidSettings { get; }
 
         public MediaReference ValidMedia { get; }
 
@@ -1347,7 +1910,7 @@ public sealed class WallpaperCoordinatorTests
 
         public Task<RuntimeActivationResult> ActivateAsync(
             WallpaperCoordinator coordinator,
-            SettingsV2? settings = null,
+            SettingsV3? settings = null,
             RuntimeLaunchMode launchMode = RuntimeLaunchMode.ManualApply) =>
             coordinator.ActivateAsync(
                 RuntimeActivationRequest.Create(
@@ -1355,7 +1918,7 @@ public sealed class WallpaperCoordinatorTests
                     settings ?? ValidSettings,
                     launchMode));
 
-        public static SettingsV2 CreateSettings(string mediaPath, MediaKind mediaKind)
+        public static SettingsV3 CreateSettings(string mediaPath, MediaKind mediaKind)
         {
             var media = new MediaReference
             {
@@ -1367,14 +1930,14 @@ public sealed class WallpaperCoordinatorTests
             return CreateSettings(media);
         }
 
-        public static SettingsV2 CreateSettings(MediaReference media)
+        public static SettingsV3 CreateSettings(MediaReference media)
         {
             ArgumentNullException.ThrowIfNull(media);
             var profile = WallpaperProfile.CreateDefault() with
             {
                 MediaId = media.MediaId,
             };
-            return new SettingsV2
+            return new SettingsV3
             {
                 Profiles = [profile],
                 MediaCatalog = [media],
@@ -1386,7 +1949,7 @@ public sealed class WallpaperCoordinatorTests
             }.CreateSnapshot();
         }
 
-        public SettingsV2 UpdateGlobalProfile(
+        public SettingsV3 UpdateGlobalProfile(
             Func<WallpaperProfile, WallpaperProfile> update)
         {
             ArgumentNullException.ThrowIfNull(update);
@@ -1403,7 +1966,8 @@ public sealed class WallpaperCoordinatorTests
 
         public WallpaperCoordinator CreateCoordinator(
             WallpaperCoordinatorOptions? options = null,
-            IWallpaperSourceProviderRegistry? sourceRegistry = null) => new(
+            IWallpaperSourceProviderRegistry? sourceRegistry = null,
+            IDynamicWallpaperActivationFactory? dynamicActivationFactory = null) => new(
             new FakePackageLocator(() => Package),
             ProcessSource,
             Activation,
@@ -1415,7 +1979,8 @@ public sealed class WallpaperCoordinatorTests
             {
                 DiscoveryTimeout = TimeSpan.FromSeconds(1),
                 DiscoveryInterval = TimeSpan.FromMilliseconds(1),
-            });
+            },
+            dynamicActivationFactory);
 
         private sealed class FakePackageLocator(Func<InstalledCodexPackage> locate)
             : IInstalledCodexPackageLocator
@@ -1652,12 +2217,23 @@ public sealed class WallpaperCoordinatorTests
 
     private sealed class FakeProjectSourceProvider(
         WallpaperContentKind contentKind,
-        MediaSourceKind sourceKind = MediaSourceKind.WallpaperEngineLocalProject)
+        MediaSourceKind sourceKind = MediaSourceKind.WallpaperEngineLocalProject,
+        bool allowAcquire = false,
+        int leaseDisposeFailures = 0,
+        Func<int, Task>? beforeLeaseDisposeAsync = null)
         : IWallpaperEngineProjectSourceProvider
     {
+        private readonly List<DisposeAttemptCounter> _disposeAttemptCounters = [];
+
         public int ResolveCount { get; private set; }
 
         public int AcquireCount { get; private set; }
+
+        public int LeaseDisposeAttempts =>
+            _disposeAttemptCounters.Sum(counter => counter.Count);
+
+        public IReadOnlyList<int> LeaseDisposeAttemptsByLease =>
+            _disposeAttemptCounters.Select(counter => counter.Count).ToArray();
 
         public MediaSourceKind SourceKind { get; } = sourceKind;
 
@@ -1695,13 +2271,202 @@ public sealed class WallpaperCoordinatorTests
                     directMediaMetadata: null));
         }
 
-        public ValueTask<IWallpaperEngineProjectLease> AcquireProjectLeaseAsync(
+        public async ValueTask<IWallpaperEngineProjectLease> AcquireProjectLeaseAsync(
             MediaReference reference,
             CancellationToken cancellationToken = default)
         {
             AcquireCount++;
-            throw new InvalidOperationException(
-                "Renderer-unavailable sources must not acquire a project lease.");
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!allowAcquire)
+            {
+                throw new InvalidOperationException(
+                    "Renderer-unavailable sources must not acquire a project lease.");
+            }
+
+            var resolution = await ResolveAsync(reference, cancellationToken);
+            var disposeAttemptCounter = new DisposeAttemptCounter();
+            _disposeAttemptCounters.Add(disposeAttemptCounter);
+            return new FakeProjectLease(
+                resolution,
+                leaseDisposeFailures,
+                disposeAttemptCounter,
+                beforeLeaseDisposeAsync);
+        }
+
+        private sealed class FakeProjectLease(
+            WallpaperSourceResolution resolution,
+            int disposeFailures,
+            DisposeAttemptCounter disposeAttemptCounter,
+            Func<int, Task>? beforeDisposeAsync)
+            : IWallpaperEngineProjectLease
+        {
+            public WallpaperSourceResolution Resolution { get; } = resolution;
+
+            public string LaunchPath { get; } =
+                @"C:\WallpaperEngine\projects\wallpaper\project.json";
+
+            public async ValueTask DisposeAsync()
+            {
+                disposeAttemptCounter.Count++;
+                if (beforeDisposeAsync is not null)
+                {
+                    await beforeDisposeAsync(disposeAttemptCounter.Count).ConfigureAwait(false);
+                }
+
+                if (disposeAttemptCounter.Count <= disposeFailures)
+                {
+                    throw new InvalidOperationException("Synthetic project cleanup failure.");
+                }
+            }
+        }
+
+        private sealed class DisposeAttemptCounter
+        {
+            internal int Count { get; set; }
+        }
+    }
+
+    private sealed class FakeDynamicWallpaperActivationFactory
+        : IDynamicWallpaperActivationFactory
+    {
+        public int ActivateCount { get; private set; }
+
+        public FakeDynamicActiveLease? ActiveLease { get; private set; }
+
+        public Exception? ActivateException { get; init; }
+
+        public bool ReportMutationBeforeThrow { get; init; }
+
+        public Action? AfterMutationReported { get; init; }
+
+        public PresentationContractSnapshot Presentation { get; } = new(
+            PresentationContractCatalog.CodexShellId,
+            ContractMatchState.Matched);
+
+        public CompatibilityCapabilities Capabilities { get; } =
+            PresentationContractCatalog.CreateFullySupportedCapabilities();
+
+        public ValueTask<DynamicWallpaperCapability> ProbeAsync(
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return ValueTask.FromResult(DynamicWallpaperCapability.Available());
+        }
+
+        public async ValueTask<DynamicWallpaperActivationResult> ActivateAsync(
+            DynamicWallpaperActivationRequest request,
+            IWallpaperEngineProjectLease projectLease,
+            CancellationToken cancellationToken = default)
+        {
+            ActivateCount++;
+            cancellationToken.ThrowIfCancellationRequested();
+            await Task.Yield();
+            if (ReportMutationBeforeThrow)
+            {
+                request.MutationSignal?.ReportPossibleMutation();
+                AfterMutationReported?.Invoke();
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+
+            if (ActivateException is not null)
+            {
+                throw ActivateException;
+            }
+
+            ActiveLease = new FakeDynamicActiveLease(
+                request.Generation,
+                request.Resolution.CanonicalReference.MediaId,
+                projectLease);
+            return new DynamicWallpaperActivationResult(
+                ActiveLease,
+                Presentation,
+                Capabilities);
+        }
+    }
+
+    private sealed class RejectingInstallationLocator : IWallpaperEngineInstallationLocator
+    {
+        public ValueTask<WallpaperEngineInstallation> LocateAsync(
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return ValueTask.FromException<WallpaperEngineInstallation>(
+                new WallpaperEngineUnavailableException(
+                    WallpaperEngineAvailabilityReason.UnsupportedPlatform));
+        }
+    }
+
+    private sealed class FakeDynamicActiveLease(
+        long generation,
+        Guid mediaId,
+        IAsyncDisposable project)
+        : IActiveWallpaperLease,
+          IPausableActiveWallpaperLease,
+          IActiveWallpaperHealthSource,
+          IWallpaperInjectionCapabilitySource
+    {
+        private readonly IAsyncDisposable _project = project;
+        private readonly TaskCompletionSource _completion =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        private EventHandler<WallpaperInjectionCapabilitiesChangedEventArgs>?
+            _capabilitiesChanged;
+
+        public event EventHandler<WallpaperInjectionCapabilitiesChangedEventArgs>?
+            CapabilitiesChanged
+        {
+            add => _capabilitiesChanged += value;
+            remove => _capabilitiesChanged -= value;
+        }
+
+        public int CapabilitySubscriberCount =>
+            _capabilitiesChanged?.GetInvocationList().Length ?? 0;
+
+        public long Generation { get; } = generation;
+
+        public Guid? MediaId { get; } = mediaId;
+
+        public ActiveWallpaperDeliveryKind DeliveryKind =>
+            ActiveWallpaperDeliveryKind.DynamicStream;
+
+        public Task Completion => _completion.Task;
+
+        public CompatibilityCapabilities Capabilities { get; private set; } =
+            PresentationContractCatalog.CreateFullySupportedCapabilities();
+
+        public PresentationContractSnapshot PresentationContract { get; } = new(
+            PresentationContractCatalog.CodexShellId,
+            ContractMatchState.Matched);
+
+        public List<bool> PauseStates { get; } = [];
+
+        public ValueTask SetPausedAsync(
+            bool paused,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            PauseStates.Add(paused);
+            return ValueTask.CompletedTask;
+        }
+
+        public async ValueTask DisposeAsync()
+        {
+            _completion.TrySetCanceled();
+            await _project.DisposeAsync();
+        }
+
+        public void RaiseCapabilitiesChanged(CompatibilityCapabilities capabilities)
+        {
+            ArgumentNullException.ThrowIfNull(capabilities);
+            var previous = Capabilities;
+            Capabilities = capabilities;
+            _capabilitiesChanged?.Invoke(
+                this,
+                new WallpaperInjectionCapabilitiesChangedEventArgs(
+                    Generation,
+                    previous,
+                    capabilities,
+                    PresentationContract));
         }
     }
 
@@ -1758,9 +2523,14 @@ public sealed class WallpaperCoordinatorTests
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
-    private sealed class FakePlaybackPool : IPlaybackPool
+    private sealed class FakePlaybackPool : IPlaybackPool, IActiveWallpaperPool
     {
+        private IActiveWallpaperLease? _activeWallpaperLease;
+
         public IDirectMediaLease? ActiveLease { get; private set; }
+
+        IActiveWallpaperLease? IActiveWallpaperPool.ActiveLease =>
+            _activeWallpaperLease;
 
         public PlaybackOwnershipToken? ActiveOwnership { get; private set; }
 
@@ -1790,10 +2560,35 @@ public sealed class WallpaperCoordinatorTests
                 PlaybackOwnershipToken.Create(),
                 cancellationToken);
 
+        ValueTask IActiveWallpaperPool.ActivateAsync(
+            IActiveWallpaperLease lease,
+            CancellationToken cancellationToken) =>
+            ActivateActiveOwnedAsync(
+                lease,
+                PlaybackOwnershipToken.Create(),
+                cancellationToken);
+
+        ValueTask IActiveWallpaperPool.ActivateOwnedAsync(
+            IActiveWallpaperLease lease,
+            PlaybackOwnershipToken ownership,
+            CancellationToken cancellationToken) =>
+            ActivateActiveOwnedAsync(lease, ownership, cancellationToken);
+
         public async ValueTask ActivateOwnedAsync(
             IDirectMediaLease lease,
             PlaybackOwnershipToken ownership,
             CancellationToken cancellationToken = default)
+        {
+            await ActivateActiveOwnedAsync(
+                new DirectMediaActiveWallpaperLease(1, lease),
+                ownership,
+                cancellationToken);
+        }
+
+        private async ValueTask ActivateActiveOwnedAsync(
+            IActiveWallpaperLease lease,
+            PlaybackOwnershipToken ownership,
+            CancellationToken cancellationToken)
         {
             ActivateCount++;
             if (BeforeActivateAsync is { } beforeActivate)
@@ -1802,8 +2597,9 @@ public sealed class WallpaperCoordinatorTests
             }
 
             cancellationToken.ThrowIfCancellationRequested();
-            var previous = ActiveLease;
-            ActiveLease = lease;
+            var previous = _activeWallpaperLease;
+            _activeWallpaperLease = lease;
+            ActiveLease = (lease as DirectMediaActiveWallpaperLease)?.MediaLease;
             ActiveOwnership = ReportOwnershipAfterActivation ? ownership : null;
             if (previous is not null && !ReferenceEquals(previous, lease))
             {
@@ -1825,7 +2621,8 @@ public sealed class WallpaperCoordinatorTests
                 throw ReleaseException;
             }
 
-            var lease = ActiveLease;
+            var lease = _activeWallpaperLease;
+            _activeWallpaperLease = null;
             ActiveLease = null;
             ActiveOwnership = null;
             if (lease is not null)
@@ -1850,7 +2647,8 @@ public sealed class WallpaperCoordinatorTests
         public async ValueTask DisposeAsync()
         {
             DisposeCount++;
-            var lease = ActiveLease;
+            var lease = _activeWallpaperLease;
+            _activeWallpaperLease = null;
             ActiveLease = null;
             ActiveOwnership = null;
             if (lease is not null)

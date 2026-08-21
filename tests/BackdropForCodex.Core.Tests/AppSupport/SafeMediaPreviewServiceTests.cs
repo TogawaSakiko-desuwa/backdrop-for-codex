@@ -15,6 +15,18 @@ public sealed class SafeMediaPreviewServiceTests
     }
 
     [Fact]
+    public void ApplicationCompositionRegistersLocalAndWallpaperEngineNamespaces()
+    {
+        Assert.Equal(
+            [
+                MediaSourceKind.LocalFile,
+                MediaSourceKind.WallpaperEngineLocalProject,
+                MediaSourceKind.WallpaperEngineWorkshopProject,
+            ],
+            AppWallpaperSources.Registry.SourceKinds);
+    }
+
+    [Fact]
     public void Acquire_DelegatesToLocalProviderAndDisposesItsPinnedLease()
     {
         var provider = new RecordingSourceProvider();
@@ -47,6 +59,28 @@ public sealed class SafeMediaPreviewServiceTests
         var available = service.IsAvailable(@"C:\wallpapers\sky.png");
 
         Assert.False(available);
+    }
+
+    [Fact]
+    public void IsAvailable_MapsMissingWallpaperEngineProjectToUnavailable()
+    {
+        var provider = new RecordingSourceProvider
+        {
+            SourceKindOverride = MediaSourceKind.WallpaperEngineWorkshopProject,
+            Failure = new WallpaperEngineProjectUnavailableException(
+                MediaSourceKind.WallpaperEngineWorkshopProject,
+                WallpaperEngineProjectUnavailableReason.NotFound),
+        };
+        var service = CreateService(provider);
+        var reference = new MediaReference
+        {
+            MediaId = Guid.CreateVersion7(),
+            SourceKind = MediaSourceKind.WallpaperEngineWorkshopProject,
+            SourceIdentifier = "123456",
+            LastKnownKind = MediaKind.Video,
+        };
+
+        Assert.False(service.IsAvailable(reference));
     }
 
     [Fact]

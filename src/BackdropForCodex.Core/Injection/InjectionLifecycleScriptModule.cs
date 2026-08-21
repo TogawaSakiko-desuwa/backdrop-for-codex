@@ -2,11 +2,19 @@ using System.Text.Json;
 
 namespace BackdropForCodex.Core.Injection;
 
+/// <summary>
+/// Builds generation-scoped maintenance expressions for the injected DOM graph. Lease renewal
+/// and cleanup both require proof that the graph still belongs to the expected generation.
+/// </summary>
 internal static class InjectionLifecycleScriptModule
 {
+    // The renderer-side lease spans several host ticks so a transient CDP delay does not remove a
+    // healthy wallpaper, while an abandoned controller still causes bounded self-cleanup.
     internal static readonly TimeSpan HeartbeatInterval = TimeSpan.FromSeconds(2);
     internal static readonly TimeSpan LeaseTimeout = TimeSpan.FromSeconds(10);
 
+    // A heartbeat is also an ownership check: renewing a partially replaced or detached graph
+    // would keep foreign or stale nodes alive under this component's lease.
     internal static string BuildHeartbeat(long generation)
     {
         EnsureGeneration(generation);
@@ -67,6 +75,8 @@ internal static class InjectionLifecycleScriptModule
     internal static string BuildCleanup(long generation)
     {
         EnsureGeneration(generation);
+        // A stale host callback must not remove a newer generation. The fallback path is needed
+        // when page state is damaged, but it still removes only exact owner/generation matches.
         return $$"""
             (() => {
               "use strict";

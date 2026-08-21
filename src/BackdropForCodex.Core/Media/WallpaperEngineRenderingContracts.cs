@@ -48,9 +48,92 @@ public sealed record WallpaperEngineWindowOptions
     public int Height { get; }
 }
 
+/// <summary>
+/// Opaque authority for one previously verified Wallpaper Engine pop-out. Consumers cannot read
+/// or manufacture its HWND/process identity; the capture boundary must revalidate that identity
+/// every time a new capture session is created.
+/// </summary>
+public sealed class WallpaperEngineWindowCaptureTarget
+{
+    private readonly IWallpaperEngineWindowCaptureAuthority _authority;
+    private int _revoked;
+
+    internal WallpaperEngineWindowCaptureTarget(
+        WallpaperEngineVerifiedWindow expectedWindow,
+        IWallpaperEngineOwnedWindowVerifier verifier)
+        : this(new OwnedWindowCaptureAuthority(expectedWindow, verifier))
+    {
+    }
+
+    internal WallpaperEngineWindowCaptureTarget(
+        IWallpaperEngineWindowCaptureAuthority authority)
+    {
+        _authority = authority ?? throw new ArgumentNullException(nameof(authority));
+    }
+
+    internal async ValueTask<nint> RevalidateAsync(
+        CancellationToken cancellationToken)
+    {
+        ThrowIfRevoked();
+        var windowHandle = await _authority
+            .RevalidateAsync(cancellationToken)
+            .ConfigureAwait(false);
+        ThrowIfRevoked();
+        return windowHandle;
+    }
+
+    internal void Revoke() => Interlocked.Exchange(ref _revoked, 1);
+
+    public override string ToString() =>
+        $"{nameof(WallpaperEngineWindowCaptureTarget)} {{ Identity = <redacted> }}";
+
+    private void ThrowIfRevoked()
+    {
+        if (Volatile.Read(ref _revoked) != 0)
+        {
+            throw new WallpaperEnginePlatformUnavailableException(
+                WallpaperEnginePlatformUnavailableReason.WindowOwnershipNotProven);
+        }
+    }
+
+    private sealed class OwnedWindowCaptureAuthority
+        : IWallpaperEngineWindowCaptureAuthority
+    {
+        private readonly WallpaperEngineVerifiedWindow _expectedWindow;
+        private readonly IWallpaperEngineOwnedWindowVerifier _verifier;
+
+        internal OwnedWindowCaptureAuthority(
+            WallpaperEngineVerifiedWindow expectedWindow,
+            IWallpaperEngineOwnedWindowVerifier verifier)
+        {
+            _expectedWindow = expectedWindow ??
+                throw new ArgumentNullException(nameof(expectedWindow));
+            _verifier = verifier ?? throw new ArgumentNullException(nameof(verifier));
+        }
+
+        public async ValueTask<nint> RevalidateAsync(CancellationToken cancellationToken)
+        {
+            await _verifier
+                .RevalidateOwnedWindowAsync(_expectedWindow, cancellationToken)
+                .ConfigureAwait(false);
+            return _expectedWindow.WindowHandle;
+        }
+    }
+}
+
+internal interface IWallpaperEngineWindowCaptureAuthority
+{
+    ValueTask<nint> RevalidateAsync(CancellationToken cancellationToken);
+}
+
 public interface IWallpaperEngineWindowLease : IAsyncDisposable
 {
-    nint WindowHandle { get; }
+    /// <summary>
+    /// Current opaque capture authority. Cleanup revokes it before closing the pop-out and clears
+    /// it once closure is proven; a failed cleanup may therefore retain only a revoked token.
+    /// A raw HWND is never sufficient authorization for Windows Graphics Capture.
+    /// </summary>
+    WallpaperEngineWindowCaptureTarget? CaptureTarget { get; }
 
     ValueTask SetPausedAsync(
         bool paused,
@@ -58,8 +141,8 @@ public interface IWallpaperEngineWindowLease : IAsyncDisposable
 }
 
 /// <summary>
-/// Starts an owned Wallpaper Engine child window. Version one accepts only DynamicFrames; capture
-/// and frame transport are intentionally outside this contract until the renderer spike lands.
+/// Starts an owned Wallpaper Engine child window. The lease exposes only a revocable capture
+/// authority; raw window and process identity stay inside the renderer boundary.
 /// </summary>
 public interface IWallpaperEngineWindowRenderer
 {

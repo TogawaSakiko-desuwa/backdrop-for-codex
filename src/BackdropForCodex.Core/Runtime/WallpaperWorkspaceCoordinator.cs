@@ -27,7 +27,7 @@ public sealed class WallpaperWorkspaceCoordinator : IAsyncDisposable
     private readonly SemaphoreSlim _mailboxSignal = new(0);
     private readonly Task _workerTask;
     private WallpaperWorkspace _workspace =
-        new(SettingsV2.CreateDefault(), WallpaperRuntimeSurface.Disconnected());
+        new(SettingsV3.CreateDefault(), WallpaperRuntimeSurface.Disconnected());
     private LinkedListNode<ActorCommand>? _pendingApplyNode;
     private ApplyCommand? _runningApply;
     private CancellationTokenSource? _runningApplyCancellation;
@@ -113,7 +113,7 @@ public sealed class WallpaperWorkspaceCoordinator : IAsyncDisposable
             .ConfigureAwait(false);
     }
 
-    public void ReplaceDraft(SettingsV2 draft)
+    public void ReplaceDraft(SettingsV3 draft)
     {
         EnsureInitialized();
         _workspace.ReplaceDraft(draft);
@@ -180,6 +180,12 @@ public sealed class WallpaperWorkspaceCoordinator : IAsyncDisposable
 
     public Task<RuntimeActivationResult> ApplyAsync(
         RuntimeLaunchMode launchMode = RuntimeLaunchMode.ManualApply,
+        CancellationToken cancellationToken = default) =>
+        ApplyAsync(launchMode, expectedSourceResolution: null, cancellationToken);
+
+    public Task<RuntimeActivationResult> ApplyAsync(
+        RuntimeLaunchMode launchMode,
+        WallpaperSourceResolution? expectedSourceResolution,
         CancellationToken cancellationToken = default)
     {
         EnsureInitialized();
@@ -193,6 +199,7 @@ public sealed class WallpaperWorkspaceCoordinator : IAsyncDisposable
             revision,
             _workspace.CaptureDraft(),
             launchMode,
+            expectedSourceResolution,
             cancellationToken);
         _workspace.BeginRevision(revision);
         PublishState();
@@ -239,7 +246,7 @@ public sealed class WallpaperWorkspaceCoordinator : IAsyncDisposable
         runningCancellation?.Cancel();
     }
 
-    public Task<SettingsV2> SetRiskAcceptanceAsync(
+    public Task<SettingsV3> SetRiskAcceptanceAsync(
         bool accepted,
         CancellationToken cancellationToken = default)
     {
@@ -267,7 +274,7 @@ public sealed class WallpaperWorkspaceCoordinator : IAsyncDisposable
             cancellationToken);
     }
 
-    public Task<SettingsV2> RemoveRecentMediaAsync(
+    public Task<SettingsV3> RemoveRecentMediaAsync(
         Guid mediaId,
         CancellationToken cancellationToken = default)
     {
@@ -277,7 +284,7 @@ public sealed class WallpaperWorkspaceCoordinator : IAsyncDisposable
             cancellationToken);
     }
 
-    public Task<SettingsV2> ClearRecentMediaAsync(
+    public Task<SettingsV3> ClearRecentMediaAsync(
         CancellationToken cancellationToken = default)
     {
         EnsureInitialized();
@@ -348,7 +355,7 @@ public sealed class WallpaperWorkspaceCoordinator : IAsyncDisposable
             cancellationToken);
     }
 
-    public Task<SettingsV2> ResetAsync(
+    public Task<SettingsV3> ResetAsync(
         CancellationToken cancellationToken = default)
     {
         EnsureInitialized();
@@ -409,7 +416,7 @@ public sealed class WallpaperWorkspaceCoordinator : IAsyncDisposable
             cancellationToken);
     }
 
-    public Task<SettingsV2> RestoreVersion1BackupAsync(
+    public Task<SettingsV3> RestoreVersion1BackupAsync(
         CancellationToken cancellationToken = default)
     {
         EnsureInitialized();
@@ -693,6 +700,7 @@ public sealed class WallpaperWorkspaceCoordinator : IAsyncDisposable
 
             var canonical = await CanonicalizeAsync(
                     command.DraftSnapshot,
+                    command.ExpectedSourceResolution,
                     cancellationToken)
                 .ConfigureAwait(false);
             ThrowIfApplyStopped(command, cancellationToken);
@@ -729,7 +737,7 @@ public sealed class WallpaperWorkspaceCoordinator : IAsyncDisposable
                 saved,
                 command.LaunchMode);
             if (currentState.ActiveSnapshot is not null &&
-                SettingsV2Comparer.RuntimeEquivalent(
+                SettingsV3Comparer.RuntimeEquivalent(
                     saved,
                     currentState.ActiveSnapshot))
             {
@@ -894,8 +902,9 @@ public sealed class WallpaperWorkspaceCoordinator : IAsyncDisposable
         PublishState();
     }
 
-    private async Task<SettingsV2> CanonicalizeAsync(
-        SettingsV2 draft,
+    private async Task<SettingsV3> CanonicalizeAsync(
+        SettingsV3 draft,
+        WallpaperSourceResolution? expectedSourceResolution,
         CancellationToken cancellationToken)
     {
         var snapshot = draft.CreateSnapshot();
@@ -917,22 +926,31 @@ public sealed class WallpaperWorkspaceCoordinator : IAsyncDisposable
             .ResolveRequiredAsync(media, cancellationToken)
             .ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
-        var metadata = resolution.Descriptor.DeliveryKind switch
+        if (expectedSourceResolution is not null &&
+            !MatchesExpectedSourceResolution(resolution, expectedSourceResolution))
         {
-            WallpaperDeliveryKind.DirectMedia =>
-                RequireDirectMediaMetadata(_sourceRegistry, resolution),
-            WallpaperDeliveryKind.WallpaperEngineWindow =>
-                throw new WallpaperRendererUnavailableException(resolution.Descriptor),
-            WallpaperDeliveryKind.Unsupported =>
-                throw new WallpaperContentNotSupportedException(resolution.Descriptor),
-            _ => throw new WallpaperSourceCapabilityException(
-                "The wallpaper source declared an unknown delivery path."),
-        };
+            throw new WallpaperSourceCapabilityException(
+                "The wallpaper source changed after activation authorization.");
+        }
+
+        switch (resolution.Descriptor.DeliveryKind)
+        {
+            case WallpaperDeliveryKind.DirectMedia:
+                _ = RequireDirectMediaMetadata(_sourceRegistry, resolution);
+                break;
+            case WallpaperDeliveryKind.WallpaperEngineWindow:
+                _ = RequireProjectProvider(_sourceRegistry, resolution);
+                break;
+            case WallpaperDeliveryKind.Unsupported:
+                throw new WallpaperContentNotSupportedException(resolution.Descriptor);
+            default:
+                throw new WallpaperSourceCapabilityException(
+                    "The wallpaper source declared an unknown delivery path.");
+        }
 
         var canonicalMedia = resolution.CanonicalReference with
         {
             MediaId = media.MediaId,
-            LastKnownKind = metadata.Kind,
         };
         var catalog = snapshot.MediaCatalog
             .Select(item => item.MediaId == mediaId ? canonicalMedia : item)
@@ -945,7 +963,24 @@ public sealed class WallpaperWorkspaceCoordinator : IAsyncDisposable
         }).CreateSnapshot();
     }
 
-    private Guid[] PromoteRecentMedia(SettingsV2 settings, Guid mediaId)
+    private static bool MatchesExpectedSourceResolution(
+        WallpaperSourceResolution current,
+        WallpaperSourceResolution expected) =>
+        current.CanonicalReference.MediaId == expected.CanonicalReference.MediaId &&
+        current.Descriptor.SourceKind == expected.Descriptor.SourceKind &&
+        WallpaperSourceIdentifier.AreEqual(
+            current.Descriptor.SourceKind,
+            current.CanonicalReference.SourceIdentifier,
+            expected.CanonicalReference.SourceIdentifier) &&
+        current.Descriptor.ContentKind == expected.Descriptor.ContentKind &&
+        current.Descriptor.DeliveryKind == expected.Descriptor.DeliveryKind;
+
+    private static IWallpaperEngineProjectSourceProvider RequireProjectProvider(
+        IWallpaperSourceProviderRegistry sourceRegistry,
+        WallpaperSourceResolution resolution) =>
+        sourceRegistry.GetRequiredProjectProvider(resolution);
+
+    private Guid[] PromoteRecentMedia(SettingsV3 settings, Guid mediaId)
     {
         var hiddenIds = settings.RecentMediaIds
             .Where(
@@ -958,10 +993,10 @@ public sealed class WallpaperWorkspaceCoordinator : IAsyncDisposable
                 settings.RecentMediaIds.Where(
                     id => id != mediaId && !hiddenSet.Contains(id)))
             .Distinct()
-            .Take(SettingsV2.MaximumRecentMediaIds - hiddenIds.Length)
+            .Take(SettingsV3.MaximumRecentMediaIds - hiddenIds.Length)
             .ToArray();
 
-        var result = new List<Guid>(SettingsV2.MaximumRecentMediaIds);
+        var result = new List<Guid>(SettingsV3.MaximumRecentMediaIds);
         var localIndex = 0;
         foreach (var existing in settings.RecentMediaIds)
         {
@@ -980,7 +1015,7 @@ public sealed class WallpaperWorkspaceCoordinator : IAsyncDisposable
             result.Add(localIds[localIndex++]);
         }
 
-        return result.Take(SettingsV2.MaximumRecentMediaIds).ToArray();
+        return result.Take(SettingsV3.MaximumRecentMediaIds).ToArray();
     }
 
     private static MediaFileMetadata RequireDirectMediaMetadata(
@@ -993,7 +1028,7 @@ public sealed class WallpaperWorkspaceCoordinator : IAsyncDisposable
                 "A direct wallpaper source resolution has no validated metadata.");
     }
 
-    private Task<SettingsV2> MutateRecentMediaAsync(
+    private Task<SettingsV3> MutateRecentMediaAsync(
         Func<IReadOnlyList<Guid>, IReadOnlyList<Guid>> update,
         CancellationToken cancellationToken) =>
         EnqueueControlAsync(
@@ -1172,15 +1207,19 @@ public sealed class WallpaperWorkspaceCoordinator : IAsyncDisposable
 
     private sealed class ApplyCommand(
         long revision,
-        SettingsV2 draftSnapshot,
+        SettingsV3 draftSnapshot,
         RuntimeLaunchMode launchMode,
+        WallpaperSourceResolution? expectedSourceResolution,
         CancellationToken cancellationToken) : ActorCommand
     {
         internal long Revision { get; } = revision;
 
-        internal SettingsV2 DraftSnapshot { get; } = draftSnapshot;
+        internal SettingsV3 DraftSnapshot { get; } = draftSnapshot;
 
         internal RuntimeLaunchMode LaunchMode { get; } = launchMode;
+
+        internal WallpaperSourceResolution? ExpectedSourceResolution { get; } =
+            expectedSourceResolution;
 
         internal CancellationToken CancellationToken { get; } = cancellationToken;
 

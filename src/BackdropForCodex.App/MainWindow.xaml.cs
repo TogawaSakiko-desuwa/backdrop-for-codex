@@ -47,6 +47,7 @@ public partial class MainWindow : FluentWindow
     private bool _allowClose;
     private bool _closeTipInProgress;
     private bool _isLibraryDrawerOpen;
+    private bool _isWallpaperEngineLibraryOpen;
     private bool _statusAnnouncementPending;
     private MobileWorkbenchPane _mobilePane = MobileWorkbenchPane.Preview;
     private Task? _initializationTask;
@@ -70,6 +71,7 @@ public partial class MainWindow : FluentWindow
         DataContext = _viewModel;
         _viewModel.RenameProfilePromptAsync = ShowRenameProfileDialogAsync;
         _viewModel.DeleteProfilePromptAsync = ShowDeleteProfileDialogAsync;
+        _viewModel.WebWallpaperPrivacyPromptAsync = ShowWebWallpaperPrivacyDialogAsync;
         _viewModel.RestoreProfileFocus = LibraryPane.FocusSelectedProfile;
         _themeController = new ThemeController(this);
         IsWorkbenchHighContrast = SystemParameters.HighContrast;
@@ -88,6 +90,11 @@ public partial class MainWindow : FluentWindow
         {
             await InitializeAsync();
             if (_viewModel.HasProtectedSettings)
+            {
+                return;
+            }
+
+            if (!await _viewModel.EnsureWebWallpaperPrivacyAcknowledgedAsync())
             {
                 return;
             }
@@ -147,9 +154,12 @@ public partial class MainWindow : FluentWindow
 
     private async Task InitializeCoreAsync()
     {
+        // Size the shell before provider discovery begins. Wallpaper Engine discovery can outlive
+        // the first layout pass, and a delayed clamp must never undo a user's responsive resize.
+        ClampInitialSizeToWorkArea();
+        UpdateResponsiveLayout(ActualWidth);
         await _viewModel.InitializeAsync();
         ApplyTheme();
-        ClampInitialSizeToWorkArea();
         UpdateResponsiveLayout(ActualWidth);
     }
 
@@ -170,6 +180,7 @@ public partial class MainWindow : FluentWindow
         _viewModel.PropertyChanged -= ViewModel_PropertyChanged;
         SystemParameters.StaticPropertyChanged -= SystemParameters_StaticPropertyChanged;
         _viewModel.RestoreProfileFocus = null;
+        _viewModel.WebWallpaperPrivacyPromptAsync = null;
         _viewModel.Dispose();
         _themeController.Dispose();
         PreviewView.ReleaseMedia();
@@ -262,8 +273,9 @@ public partial class MainWindow : FluentWindow
                     "Dialog_SelectWallpaperMediaTitle",
                     "Choose wallpaper media"),
                 Filter =
-                    "Supported media|*.png;*.jpg;*.jpeg;*.webp;*.mp4;*.webm|" +
-                    "Images|*.png;*.jpg;*.jpeg;*.webp|Videos|*.mp4;*.webm",
+                    _text.GetStringOrFallback(
+                        "Dialog_WallpaperMediaFilter",
+                        "Supported media|*.png;*.jpg;*.jpeg;*.webp;*.mp4;*.webm|Images|*.png;*.jpg;*.jpeg;*.webp|Videos|*.mp4;*.webm"),
                 CheckFileExists = true,
                 Multiselect = false,
             };
@@ -390,6 +402,11 @@ public partial class MainWindow : FluentWindow
     {
         try
         {
+            if (!await _viewModel.EnsureWebWallpaperPrivacyAcknowledgedAsync())
+            {
+                return;
+            }
+
             if (_viewModel.Editor.RequiresCdpRisk &&
                 !await ShowRiskDialogAsync(allowRevoke: false))
             {
@@ -402,6 +419,48 @@ public partial class MainWindow : FluentWindow
         {
             ReportUnexpectedError(exception);
         }
+    }
+
+    private async Task<bool> ShowWebWallpaperPrivacyDialogAsync(
+        CancellationToken cancellationToken)
+    {
+        var content = new StackPanel
+        {
+            MaxWidth = 540,
+        };
+        content.Children.Add(
+            new TextBlock
+            {
+                Text = _text.GetStringOrFallback(
+                    "WebPrivacy_Message",
+                    "Third-party Web wallpapers run inside Wallpaper Engine, may access the network, and may play sound. Backdrop does not enumerate, mute, or change Wallpaper Engine audio sessions. It sends captured pixels, but no audio, into Codex and never exposes Codex content to the wallpaper."),
+                TextWrapping = TextWrapping.Wrap,
+            });
+        content.Children.Add(
+            new TextBlock
+            {
+                Margin = new Thickness(0, 12, 0, 0),
+                Text = _text.GetStringOrFallback(
+                    "WebPrivacy_TrustNote",
+                    "Only continue with wallpapers whose publisher and contents you trust."),
+                Foreground = SystemColors.GrayTextBrush,
+                TextWrapping = TextWrapping.Wrap,
+            });
+
+        var dialog = new ContentDialog(DialogHost)
+        {
+            Title = _text.GetStringOrFallback(
+                "WebPrivacy_Title",
+                "Before using a Web wallpaper"),
+            Content = content,
+            PrimaryButtonText = _text.GetStringOrFallback(
+                "WebPrivacy_Acknowledge",
+                "I understand and want to continue"),
+            CloseButtonText = _text.GetStringOrFallback("Action_Cancel", "Cancel"),
+            PrimaryButtonAppearance = ControlAppearance.Primary,
+            DialogMaxWidth = 620,
+        };
+        return await dialog.ShowAsync(cancellationToken) == ContentDialogResult.Primary;
     }
 
     private void RetryStatusApply_Click(object sender, RoutedEventArgs e) =>
@@ -665,7 +724,9 @@ public partial class MainWindow : FluentWindow
             CheckPathExists = true,
             DefaultExt = ".json",
             FileName = "BackdropForCodex-diagnostic.json",
-            Filter = "JSON diagnostic report (*.json)|*.json",
+            Filter = _text.GetStringOrFallback(
+                "Diagnostics_FileFilter",
+                "Diagnostic report (*.json)|*.json"),
             OverwritePrompt = true,
             Title = _text.GetStringOrFallback("Diagnostics_SaveTitle", "Save diagnostic report"),
         };
@@ -677,7 +738,8 @@ public partial class MainWindow : FluentWindow
         var runtime = _diagnosticReports.CreateRuntimeSnapshot(
             _viewModel.RuntimePhase,
             _viewModel.IsActive,
-            _viewModel.IsPaused);
+            _viewModel.IsPaused,
+            _viewModel.RuntimeError);
         var compatibility = _diagnosticReports.CreateCompatibilitySnapshot(
             _viewModel.WallpaperCompatibility);
         var report = _diagnosticReports.CreateReport(runtime, compatibility);
@@ -693,7 +755,7 @@ public partial class MainWindow : FluentWindow
             {
                 Text = _text.GetStringOrFallback(
                     "Diagnostics_CompleteMessage",
-                    "The allow-listed local report was saved to the location you selected."),
+                    "The local report was saved to the location you selected."),
                 MaxWidth = 480,
                 TextWrapping = TextWrapping.Wrap,
             },
@@ -711,8 +773,8 @@ public partial class MainWindow : FluentWindow
             Content = new TextBlock
             {
                 Text = _text.GetStringOrFallback(
-                    "Settings_ResetDescription",
-                    "This restores the official background; permanently deletes settings, recent media, and any preserved V1 migration backup; revokes acknowledgement; resets UI preferences; and removes only a shortcut verified as owned by this app."),
+                "Settings_ResetDescription",
+                "This restores the official background and permanently deletes all app settings, recent media, protected backups, enhanced-launch confirmation, appearance preferences, and the enhanced shortcut created by Backdrop."),
                 MaxWidth = 520,
                 TextWrapping = TextWrapping.Wrap,
             },
@@ -861,6 +923,79 @@ public partial class MainWindow : FluentWindow
         {
             ReportUnexpectedError(exception);
         }
+    }
+
+    private async void Library_WallpaperEngineRequested(
+        object sender,
+        RoutedEventArgs e)
+    {
+        _ = sender;
+        e.Handled = true;
+        CloseLibraryDrawer();
+        _isWallpaperEngineLibraryOpen = true;
+        WallpaperEngineLibraryModalLayer.Visibility = Visibility.Visible;
+        UpdateWallpaperEngineLibraryLayout(ActualWidth);
+        _ = Dispatcher.BeginInvoke(
+            DispatcherPriority.Input,
+            new Action(WallpaperEngineLibrary.FocusSearch));
+        try
+        {
+            await _viewModel
+                .RefreshWallpaperEngineLibraryAsync()
+                .ConfigureAwait(true);
+        }
+        catch (OperationCanceledException)
+        {
+            // A newer library-open request owns the latest discovery snapshot.
+        }
+        catch (ObjectDisposedException)
+        {
+            // Window shutdown can supersede an in-flight discovery.
+        }
+        catch (Exception exception)
+        {
+            ReportUnexpectedError(exception);
+        }
+    }
+
+    private void WallpaperEngineLibrary_AssignRequested(
+        object? sender,
+        EventArgs e)
+    {
+        _ = sender;
+        _ = e;
+        if (WallpaperEngineLibrary.SelectedSource is not { } source)
+        {
+            return;
+        }
+
+        try
+        {
+            _viewModel.SelectSource(source);
+            CloseWallpaperEngineLibrary(restoreFocus: true);
+        }
+        catch (Exception exception)
+        {
+            ReportUnexpectedError(exception);
+        }
+    }
+
+    private void WallpaperEngineLibrary_CloseRequested(
+        object? sender,
+        EventArgs e)
+    {
+        _ = sender;
+        _ = e;
+        CloseWallpaperEngineLibrary(restoreFocus: true);
+    }
+
+    private void WallpaperEngineLibraryScrim_MouseLeftButtonDown(
+        object sender,
+        System.Windows.Input.MouseButtonEventArgs e)
+    {
+        _ = sender;
+        e.Handled = true;
+        CloseWallpaperEngineLibrary(restoreFocus: true);
     }
 
     private void Window_DragEnter(object sender, DragEventArgs e) =>
@@ -1019,6 +1154,7 @@ public partial class MainWindow : FluentWindow
     {
         var isMobile = UsesStackedLayout(width);
         var useCompactRail = UsesCompactRail(width);
+        UpdateWallpaperEngineLibraryLayout(width);
         InspectorHost.BorderThickness = isMobile
             ? new Thickness(0)
             : new Thickness(1, 0, 0, 0);
@@ -1141,12 +1277,55 @@ public partial class MainWindow : FluentWindow
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         _ = sender;
-        if (e.Key != Key.Escape || !CloseLibraryDrawer(restoreFocus: true))
+        if (e.Key != Key.Escape)
         {
             return;
         }
 
-        e.Handled = true;
+        if (CloseWallpaperEngineLibrary(restoreFocus: true) ||
+            CloseLibraryDrawer(restoreFocus: true))
+        {
+            e.Handled = true;
+        }
+    }
+
+    private void UpdateWallpaperEngineLibraryLayout(double width)
+    {
+        var isMobile = UsesStackedLayout(width);
+        WallpaperEngineLibrary.Margin = isMobile
+            ? new Thickness(0)
+            : new Thickness(32);
+        WallpaperEngineLibrary.MaxWidth = isMobile
+            ? double.PositiveInfinity
+            : 1120;
+        WallpaperEngineLibrary.MaxHeight = isMobile
+            ? double.PositiveInfinity
+            : 760;
+        WallpaperEngineLibrary.HorizontalAlignment = isMobile
+            ? HorizontalAlignment.Stretch
+            : HorizontalAlignment.Center;
+        WallpaperEngineLibrary.VerticalAlignment = isMobile
+            ? VerticalAlignment.Stretch
+            : VerticalAlignment.Center;
+    }
+
+    private bool CloseWallpaperEngineLibrary(bool restoreFocus = false)
+    {
+        if (!_isWallpaperEngineLibraryOpen)
+        {
+            return false;
+        }
+
+        _isWallpaperEngineLibraryOpen = false;
+        WallpaperEngineLibraryModalLayer.Visibility = Visibility.Collapsed;
+        if (restoreFocus)
+        {
+            _ = Dispatcher.BeginInvoke(
+                DispatcherPriority.Input,
+                new Action(LibraryPane.FocusWallpaperEngineEntry));
+        }
+
+        return true;
     }
 
     private void ShowPreviewMode_Click(object sender, RoutedEventArgs e)

@@ -230,14 +230,18 @@ public sealed class WallpaperEditorViewModel : ObservableObject
                 SourceKind = MediaSourceKind.LocalFile,
                 SourceIdentifier = normalizedPath,
                 LastKnownKind = kind,
+                LastKnownContentKind = kind == MediaKind.Image
+                    ? WallpaperContentKind.Image
+                    : WallpaperContentKind.Video,
+                LastKnownDisplayName = Path.GetFileName(normalizedPath),
             },
             Path.GetFileName(normalizedPath));
     }
 
     /// <summary>
     /// Selects a discovered provider source without interpreting its identifier as a file path.
-    /// Scene, Web, and unsupported sources remain durable selections but intentionally carry no
-    /// direct-media kind until a renderer integration is available.
+    /// Scene and Web sources remain durable dynamic selections while intentionally carrying no
+    /// direct-media kind; their static workbench preview is independent from runtime activation.
     /// </summary>
     public void SelectSource(WallpaperSourceDescriptor descriptor)
     {
@@ -259,6 +263,8 @@ public sealed class WallpaperEditorViewModel : ObservableObject
                     WallpaperContentKind.Video => MediaKind.Video,
                     _ => MediaKind.None,
                 },
+                LastKnownContentKind = descriptor.ContentKind,
+                LastKnownDisplayName = descriptor.DisplayName,
             },
             descriptor.DisplayName);
     }
@@ -278,7 +284,7 @@ public sealed class WallpaperEditorViewModel : ObservableObject
             });
     }
 
-    public void ApplySettings(SettingsV2 settings)
+    public void ApplySettings(SettingsV3 settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
         var snapshot = settings.CreateSnapshot();
@@ -306,7 +312,7 @@ public sealed class WallpaperEditorViewModel : ObservableObject
             });
     }
 
-    public SettingsV2 ProjectOnto(SettingsV2 baseline)
+    public SettingsV3 ProjectOnto(SettingsV3 baseline)
     {
         ArgumentNullException.ThrowIfNull(baseline);
         var snapshot = baseline.CreateSnapshot();
@@ -326,10 +332,20 @@ public sealed class WallpaperEditorViewModel : ObservableObject
                 existing = selected;
                 mediaCatalog.Add(existing);
             }
-            else if (existing.LastKnownKind != SelectedMediaKind)
+            else if (existing.LastKnownKind != selected.LastKnownKind ||
+                     existing.LastKnownContentKind != selected.LastKnownContentKind ||
+                     !string.Equals(
+                         existing.LastKnownDisplayName,
+                         selected.LastKnownDisplayName,
+                         StringComparison.Ordinal))
             {
                 var index = mediaCatalog.IndexOf(existing);
-                existing = existing with { LastKnownKind = SelectedMediaKind };
+                existing = existing with
+                {
+                    LastKnownKind = selected.LastKnownKind,
+                    LastKnownContentKind = selected.LastKnownContentKind,
+                    LastKnownDisplayName = selected.LastKnownDisplayName,
+                };
                 mediaCatalog[index] = existing;
             }
 
@@ -408,8 +424,8 @@ public sealed class WallpaperEditorViewModel : ObservableObject
     {
         var snapshot = reference?.Snapshot();
         var normalizedDisplayName = string.IsNullOrWhiteSpace(displayName)
-            ? null
-            : displayName;
+            ? snapshot?.LastKnownDisplayName
+            : displayName.Trim();
         if (Equals(_selectedMediaReference, snapshot) &&
             string.Equals(
                 _selectedMediaDisplayName,

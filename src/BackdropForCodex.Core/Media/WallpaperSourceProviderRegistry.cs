@@ -134,4 +134,23 @@ public static class WallpaperSourceProviderRegistryExtensions
             throw new WallpaperSourceCapabilityException(
                 "The registered provider cannot acquire its declared direct media source.");
     }
+
+    public static IWallpaperEngineProjectSourceProvider GetRequiredProjectProvider(
+        this IWallpaperSourceProviderRegistry registry,
+        WallpaperSourceResolution resolution)
+    {
+        ArgumentNullException.ThrowIfNull(registry);
+        ArgumentNullException.ThrowIfNull(resolution);
+        if (resolution.Descriptor.DeliveryKind !=
+            WallpaperDeliveryKind.WallpaperEngineWindow)
+        {
+            throw new WallpaperSourceCapabilityException(
+                "The resolved wallpaper source is not a Wallpaper Engine project.");
+        }
+
+        var provider = registry.GetRequired(resolution.Descriptor.SourceKind);
+        return provider as IWallpaperEngineProjectSourceProvider ??
+            throw new WallpaperSourceCapabilityException(
+                "The registered provider cannot acquire its declared Wallpaper Engine project.");
+    }
 }

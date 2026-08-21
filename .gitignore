@@ -22,6 +22,10 @@ Thumbs.db
 *.log
 *.dmp
 settings.local.json
+.tmp/
 
 # Local-only development overlays
 /.agents/
+/AGENTS.md
+/.impeccable/actual/
+/.impeccable/mocks/*.png

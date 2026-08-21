@@ -54,6 +54,27 @@ public partial class WallpaperLibraryView : UserControl
             typeof(WallpaperLibraryView),
             new PropertyMetadata(false));
 
+    public static readonly DependencyProperty WallpaperEngineProjectCountProperty =
+        DependencyProperty.Register(
+            nameof(WallpaperEngineProjectCount),
+            typeof(int),
+            typeof(WallpaperLibraryView),
+            new PropertyMetadata(0));
+
+    public static readonly DependencyProperty WallpaperEngineAvailabilityProperty =
+        DependencyProperty.Register(
+            nameof(WallpaperEngineAvailability),
+            typeof(WallpaperSourceAvailability),
+            typeof(WallpaperLibraryView),
+            new PropertyMetadata(WallpaperSourceAvailability.NotLoaded));
+
+    public static readonly DependencyProperty IsWallpaperEngineRefreshingProperty =
+        DependencyProperty.Register(
+            nameof(IsWallpaperEngineRefreshing),
+            typeof(bool),
+            typeof(WallpaperLibraryView),
+            new PropertyMetadata(false));
+
     public static readonly DependencyProperty RecentItemsSourceProperty =
         DependencyProperty.Register(
             nameof(RecentItemsSource),
@@ -154,6 +175,13 @@ public partial class WallpaperLibraryView : UserControl
             typeof(RoutedEventHandler),
             typeof(WallpaperLibraryView));
 
+    public static readonly RoutedEvent WallpaperEngineLibraryRequestedEvent =
+        EventManager.RegisterRoutedEvent(
+            nameof(WallpaperEngineLibraryRequested),
+            RoutingStrategy.Bubble,
+            typeof(RoutedEventHandler),
+            typeof(WallpaperLibraryView));
+
     public WallpaperLibraryView()
     {
         InitializeComponent();
@@ -190,6 +218,12 @@ public partial class WallpaperLibraryView : UserControl
         remove => RemoveHandler(ChooseLocalMediaRequestedEvent, value);
     }
 
+    public event RoutedEventHandler WallpaperEngineLibraryRequested
+    {
+        add => AddHandler(WallpaperEngineLibraryRequestedEvent, value);
+        remove => RemoveHandler(WallpaperEngineLibraryRequestedEvent, value);
+    }
+
     public IEnumerable? ProfileItemsSource
     {
         get => (IEnumerable?)GetValue(ProfileItemsSourceProperty);
@@ -218,6 +252,24 @@ public partial class WallpaperLibraryView : UserControl
     {
         get => (bool)GetValue(HasSourceDiscoveryFailuresProperty);
         set => SetValue(HasSourceDiscoveryFailuresProperty, value);
+    }
+
+    public int WallpaperEngineProjectCount
+    {
+        get => (int)GetValue(WallpaperEngineProjectCountProperty);
+        set => SetValue(WallpaperEngineProjectCountProperty, value);
+    }
+
+    public WallpaperSourceAvailability WallpaperEngineAvailability
+    {
+        get => (WallpaperSourceAvailability)GetValue(WallpaperEngineAvailabilityProperty);
+        set => SetValue(WallpaperEngineAvailabilityProperty, value);
+    }
+
+    public bool IsWallpaperEngineRefreshing
+    {
+        get => (bool)GetValue(IsWallpaperEngineRefreshingProperty);
+        set => SetValue(IsWallpaperEngineRefreshingProperty, value);
     }
 
     public IEnumerable? RecentItemsSource
@@ -307,6 +359,12 @@ public partial class WallpaperLibraryView : UserControl
     public void FocusSelectedProfile() =>
         ProfilesSection.FocusSelectedProfile();
 
+    public void FocusWallpaperEngineEntry() =>
+        _ = (IsCompact
+                ? CompactWallpaperEngineButton
+                : ExpandedWallpaperEngineButton)
+            .Focus();
+
     private static DependencyProperty RegisterCommand(string propertyName) =>
         DependencyProperty.Register(
             propertyName,
@@ -362,6 +420,12 @@ public partial class WallpaperLibraryView : UserControl
             IsCompact ? Visibility.Collapsed : Visibility.Visible;
         CompactChooseMediaButton.Visibility =
             IsCompact ? Visibility.Visible : Visibility.Collapsed;
+        ExpandedWallpaperEngineButton.Visibility =
+            IsCompact ? Visibility.Collapsed : Visibility.Visible;
+        ExpandedWallpaperEngineRefreshButton.Visibility =
+            IsCompact ? Visibility.Collapsed : Visibility.Visible;
+        CompactWallpaperEngineButton.Visibility =
+            IsCompact ? Visibility.Visible : Visibility.Collapsed;
         _ = VisualStateManager.GoToElementState(
             RailLayout,
             IsCompact ? "Compact" : "Expanded",
@@ -381,12 +445,14 @@ public partial class WallpaperLibraryView : UserControl
         e.Handled = true;
     }
 
-    private void SourcesSection_SourceInvoked(object? sender, EventArgs e)
+    private void WallpaperEngineLibrary_Click(object sender, RoutedEventArgs e)
     {
         _ = sender;
-        _ = e;
-        SetCurrentValue(SelectedSourceProperty, SourcesSection.SelectedSource);
-        RaiseEvent(new RoutedEventArgs(SourceInvokedEvent, this));
+        RaiseEvent(
+            new RoutedEventArgs(
+                WallpaperEngineLibraryRequestedEvent,
+                this));
+        e.Handled = true;
     }
 
     private void RecentsSection_RecentMediaInvoked(object? sender, EventArgs e)

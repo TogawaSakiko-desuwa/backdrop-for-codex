@@ -1,8 +1,8 @@
 # 第三方软件声明
 
-最后人工核对：2026-07-24
+最后人工核对：2026-08-10
 
-Backdrop for Codex 依据 Apache License 2.0 发布，但它依赖或随发布物包含由其他作者提供的软件。第三方组件仍受各自许可证和声明约束。本文件是便于阅读的基线；具体发行版中直接、传递、运行时及相关构建组件的机器可读清单是随该发行版发布的 SPDX SBOM，发行 ZIP 同时保留适用的 WPF-UI、WPF-UI.Tray、CommunityToolkit.Mvvm、PuppeteerSharp、WebDriverBiDi、Microsoft.IO.RecyclableMemoryStream、Microsoft.Extensions.Logging.Abstractions、.NET Runtime/Windows Desktop 上游许可证与第三方 notice。
+Backdrop for Codex 依据 Apache License 2.0 发布，但它依赖或随发布物包含由其他作者提供的软件。第三方组件仍受各自许可证和声明约束。本文件是便于阅读的基线；具体发行版中直接、传递、运行时及相关构建组件的机器可读清单是随该发行版发布的 SPDX SBOM，发行 ZIP 同时保留适用的 WPF-UI、WPF-UI.Tray、CommunityToolkit.Mvvm、PuppeteerSharp、WebDriverBiDi、Microsoft.IO.RecyclableMemoryStream、Microsoft.Extensions.Logging.Abstractions、Vortice.MediaFoundation、Vortice.DirectX、Vortice.Mathematics、SharpGen.Runtime、SharpGen.Runtime.COM、.NET Runtime/Windows Desktop 上游许可证与第三方 notice。
 
 ## 运行时直接依赖
 
@@ -13,6 +13,11 @@ Backdrop for Codex 依据 Apache License 2.0 发布，但它依赖或随发布�
 | CommunityToolkit.Mvvm | 8.4.2 | ViewModel、可观察属性与命令基础设施 | MIT |
 | PuppeteerSharp | 25.3.4 | CDP 客户端 | MIT |
 | Microsoft.Extensions.Logging.Abstractions | 8.0.0 | 核心运行时的结构化日志抽象 | MIT |
+| Vortice.MediaFoundation | 3.8.3 | Windows Media Foundation 托管绑定 | MIT |
+| Vortice.DirectX | 3.8.3（传递依赖） | Vortice 共用的 DirectX 类型与互操作基础 | MIT |
+| Vortice.Mathematics | 2.1.0（传递依赖） | Vortice 图形与媒体绑定使用的数学类型 | MIT |
+| SharpGen.Runtime | 2.4.2-beta（传递依赖） | SharpGen 生成绑定的运行时支持 | MIT |
+| SharpGen.Runtime.COM | 2.4.2-beta（传递依赖） | SharpGen 生成绑定的 COM 互操作支持 | MIT |
 | WebDriverBiDi | 0.0.54（传递依赖） | 浏览器协议模型 | MIT |
 | Microsoft.IO.RecyclableMemoryStream | 3.0.1（传递依赖） | PuppeteerSharp 缓冲区 | MIT |
 | .NET Runtime / Windows Desktop | .NET 10，self-contained `win-x64` | 托管运行时与 WPF | MIT 及其上游第三方声明 |
@@ -23,6 +28,9 @@ Backdrop for Codex 依据 Apache License 2.0 发布，但它依赖或随发布�
 - CommunityToolkit.Mvvm: <https://github.com/CommunityToolkit/dotnet>
 - PuppeteerSharp: <https://github.com/hardkoded/puppeteer-sharp>
 - Microsoft.Extensions.Logging.Abstractions: <https://github.com/dotnet/runtime>
+- Vortice.MediaFoundation / Vortice.DirectX: <https://github.com/amerkoleci/Vortice.Windows>
+- Vortice.Mathematics: <https://github.com/amerkoleci/Vortice.Mathematics>
+- SharpGen.Runtime / SharpGen.Runtime.COM: <https://github.com/SharpGenTools/SharpGenTools>
 - WebDriverBiDi.NET: <https://github.com/webdriverbidi-net/webdriverbidi-net>
 - Microsoft.IO.RecyclableMemoryStream: <https://github.com/microsoft/Microsoft.IO.RecyclableMemoryStream>
 - .NET Runtime、WPF: <https://github.com/dotnet>
@@ -32,8 +40,11 @@ Backdrop for Codex 依据 Apache License 2.0 发布，但它依赖或随发布�
 - PuppeteerSharp 25.3.4：`cc97ee0992a4ff4fbd88fcfaa7e674ea28502a08` 的 [`LICENSE`](https://github.com/hardkoded/puppeteer-sharp/blob/cc97ee0992a4ff4fbd88fcfaa7e674ea28502a08/LICENSE)
 - WebDriverBiDi 0.0.54：`bd30c1107b16ca24fb4d27ad176f86971085aa34` 的 [`LICENSE`](https://github.com/webdriverbidi-net/webdriverbidi-net/blob/bd30c1107b16ca24fb4d27ad176f86971085aa34/LICENSE)
 - Microsoft.IO.RecyclableMemoryStream 3.0.1：`e29a28387da9018fa9605a1dcb3f7a0435aa9974` 的 [`LICENSE`](https://github.com/microsoft/Microsoft.IO.RecyclableMemoryStream/blob/e29a28387da9018fa9605a1dcb3f7a0435aa9974/LICENSE)
+- Vortice.MediaFoundation 3.8.3 与 Vortice.DirectX 3.8.3：Vortice.Windows `9e609cb9439c9872aa1b339f177e40ec96f77239` 的 [`LICENSE`](https://github.com/amerkoleci/Vortice.Windows/blob/9e609cb9439c9872aa1b339f177e40ec96f77239/LICENSE)
+- Vortice.Mathematics 2.1.0：`fa05ec6dcba48f3f7331791da6dc7f3d866b2ad6` 的 [`LICENSE`](https://github.com/amerkoleci/Vortice.Mathematics/blob/fa05ec6dcba48f3f7331791da6dc7f3d866b2ad6/LICENSE)
+- SharpGen.Runtime 2.4.2-beta 与 SharpGen.Runtime.COM 2.4.2-beta：SharpGenTools `6990bcafe124a4c22515ad19cee5a081da8db67b` 的 [`LICENSE.txt`](https://github.com/SharpGenTools/SharpGenTools/blob/6990bcafe124a4c22515ad19cee5a081da8db67b/LICENSE.txt)
 
-Windows API、媒体栈、Microsoft Store/MSIX 与官方 Codex 由用户系统或独立产品提供，不因本项目而重新许可或成为本项目的一部分。
+Windows API、Windows Media Foundation 平台组件、Microsoft Store/MSIX 与官方 Codex 由用户系统或独立产品提供，不因本项目而重新许可或成为本项目的一部分；本项目随附的托管绑定已在上表单独列明。
 
 ## 构建与发布工具
 
@@ -73,4 +84,4 @@ Apache-2.0 的完整文本见 [LICENSE](LICENSE)。具体第三方版权名称�
 
 ## 维护要求
 
-新增、升级或移除依赖时，贡献者必须核对许可证兼容性、更新本表，并确保发布流程的 SBOM 反映实际输出。发现遗漏或不准确声明时，请提交普通 Issue；若遗漏导致安全或敏感供应链影响，请按 [SECURITY.md](SECURITY.md) 私下报告。
+新增、升级或移除依赖时，贡献者必须核对许可证兼容性、更新本表，并确保发布流程的 SBOM 反映实际输出。发现遗漏或不准确声明时，请提交普通 Issue；若遗漏导致安全或敏感供应链影响，请按 [v1.5.0 安全策略](https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/blob/v1.5.0/SECURITY.md) 私下报告。

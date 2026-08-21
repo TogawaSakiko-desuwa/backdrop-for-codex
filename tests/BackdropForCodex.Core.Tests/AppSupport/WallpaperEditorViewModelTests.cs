@@ -39,7 +39,7 @@ public sealed class WallpaperEditorViewModelTests
         var recentMedia = CreateMedia(
             @"C:\wallpapers\recent.webp",
             MediaKind.Image);
-        var baseline = SettingsV2.CreateDefault() with
+        var baseline = SettingsV3.CreateDefault() with
         {
             MediaCatalog = [recentMedia],
             RecentMediaIds = [recentMedia.MediaId],
@@ -137,7 +137,7 @@ public sealed class WallpaperEditorViewModelTests
             WallpaperDeliveryCapabilities.None);
 
         editor.SelectSource(descriptor);
-        var projected = editor.ProjectOnto(SettingsV2.CreateDefault());
+        var projected = editor.ProjectOnto(SettingsV3.CreateDefault());
         var profile = projected.ResolveProfile(SemanticRegion.Global);
         var media = projected.FindMedia(Assert.IsType<Guid>(profile.MediaId));
 
@@ -149,6 +149,8 @@ public sealed class WallpaperEditorViewModelTests
             MediaSourceKind.WallpaperEngineWorkshopProject,
             media.SourceKind);
         Assert.Equal("76561198000000001", media.SourceIdentifier);
+        Assert.Equal(WallpaperContentKind.Video, media.LastKnownContentKind);
+        Assert.Equal("Workshop video", media.LastKnownDisplayName);
         var probed = Assert.Single(previewMedia.ProbedReferences);
         Assert.Equal(
             MediaSourceKind.WallpaperEngineWorkshopProject,
@@ -190,21 +192,71 @@ public sealed class WallpaperEditorViewModelTests
         var editor = new WallpaperEditorViewModel(
             new FallbackTextProvider(),
             previewMedia);
-        editor.SelectSource(
-            new WallpaperSourceDescriptor(
-                MediaSourceKind.WallpaperEngineWorkshopProject,
-                "123",
-                contentKind.ToString(),
-                contentKind,
-                WallpaperDeliveryKind.WallpaperEngineWindow,
-                WallpaperDeliveryCapabilities.DynamicFrames));
+        var descriptor = new WallpaperSourceDescriptor(
+            MediaSourceKind.WallpaperEngineWorkshopProject,
+            "123",
+            contentKind.ToString(),
+            contentKind,
+            WallpaperDeliveryKind.WallpaperEngineWindow,
+            WallpaperDeliveryCapabilities.DynamicFrames);
+        editor.SelectSource(descriptor);
+        var projected = editor.ProjectOnto(SettingsV3.CreateDefault());
+        var profile = projected.ResolveProfile(SemanticRegion.Global);
+        var media = projected.FindMedia(Assert.IsType<Guid>(profile.MediaId));
 
         Assert.True(editor.HasSelectedMedia);
         Assert.Equal(MediaKind.None, editor.SelectedMediaKind);
         Assert.True(editor.IsPreviewUnavailable);
         Assert.False(editor.IsMediaMissing);
+        Assert.NotNull(media);
+        Assert.Equal(contentKind, media.LastKnownContentKind);
+        Assert.Equal(descriptor.DisplayName, media.LastKnownDisplayName);
         Assert.Empty(previewMedia.ProbedReferences);
         Assert.Empty(previewMedia.ProbedPaths);
+    }
+
+    [Theory]
+    [InlineData(WallpaperContentKind.Scene)]
+    [InlineData(WallpaperContentKind.Web)]
+    public void PersistedDynamicReferenceRoundTripsThroughEditorProjection(
+        WallpaperContentKind contentKind)
+    {
+        var baseline = SettingsV3.CreateDefault();
+        var profile = baseline.ResolveProfile(SemanticRegion.Global);
+        var media = new MediaReference
+        {
+            MediaId = Guid.CreateVersion7(),
+            SourceKind = MediaSourceKind.WallpaperEngineWorkshopProject,
+            SourceIdentifier = "123456",
+            LastKnownKind = MediaKind.None,
+            LastKnownContentKind = contentKind,
+            LastKnownDisplayName = $"Saved {contentKind}",
+        };
+        var settings = (baseline with
+        {
+            Profiles = [profile with { MediaId = media.MediaId }],
+            MediaCatalog = [media],
+        }).CreateSnapshot();
+        var preview = new RecordingPreviewMediaService(isAvailable: false);
+        var editor = new WallpaperEditorViewModel(
+            new FallbackTextProvider(),
+            preview);
+
+        editor.ApplySettings(settings);
+        var projected = editor.ProjectOnto(SettingsV3.CreateDefault());
+        var projectedMedia = projected.FindMedia(
+            Assert.IsType<Guid>(
+                projected.ResolveProfile(SemanticRegion.Global).MediaId));
+
+        Assert.NotNull(projectedMedia);
+        Assert.Equal(media.SourceKind, projectedMedia.SourceKind);
+        Assert.Equal(media.SourceIdentifier, projectedMedia.SourceIdentifier);
+        Assert.Equal(MediaKind.None, projectedMedia.LastKnownKind);
+        Assert.Equal(contentKind, projectedMedia.LastKnownContentKind);
+        Assert.Equal(media.LastKnownDisplayName, projectedMedia.LastKnownDisplayName);
+        Assert.True(editor.IsPreviewUnavailable);
+        Assert.False(editor.IsMediaMissing);
+        Assert.Empty(preview.ProbedReferences);
     }
 
     [Theory]
@@ -228,7 +280,7 @@ public sealed class WallpaperEditorViewModelTests
             () => editor.SelectSource(descriptor));
         Assert.False(editor.HasSelectedMedia);
         Assert.Null(
-            editor.ProjectOnto(SettingsV2.CreateDefault())
+            editor.ProjectOnto(SettingsV3.CreateDefault())
                 .ResolveProfile(SemanticRegion.Global)
                 .MediaId);
     }
@@ -250,13 +302,13 @@ public sealed class WallpaperEditorViewModelTests
         Assert.Equal(0.5, editor.FocusY);
     }
 
-    private static SettingsV2 CreateSettings(
+    private static SettingsV3 CreateSettings(
         string? mediaPath,
         MediaKind mediaKind,
         Func<WallpaperProfile, WallpaperProfile>? updateProfile = null,
         bool acceptedCdpRisk = false)
     {
-        var baseline = SettingsV2.CreateDefault();
+        var baseline = SettingsV3.CreateDefault();
         var profile = baseline.ResolveProfile(SemanticRegion.Global);
         MediaReference[] catalog = [];
         if (mediaPath is not null)

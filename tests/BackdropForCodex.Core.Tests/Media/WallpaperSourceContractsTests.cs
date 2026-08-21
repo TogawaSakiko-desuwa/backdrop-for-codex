@@ -63,6 +63,36 @@ public sealed class WallpaperSourceContractsTests
     }
 
     [Fact]
+    public void DescriptorSanitizesUntrustedDisplayNamesAtTheProviderBoundary()
+    {
+        var descriptor = CreateDescriptor(
+            displayName: "  壁纸\r\n\u0001\u202e 🌌安全\u0085\u2066  ");
+
+        Assert.Equal("壁纸 🌌安全", descriptor.DisplayName);
+    }
+
+    [Fact]
+    public void DescriptorPreservesUnicodeJoinersUsedByLegitimateDisplayNames()
+    {
+        var descriptor = CreateDescriptor(displayName: "开发者 👩\u200d💻");
+
+        Assert.Equal("开发者 👩\u200d💻", descriptor.DisplayName);
+    }
+
+    [Fact]
+    public void MediaReferenceSnapshotRejectsANameThatSanitizesToEmpty()
+    {
+        var reference = CreateReference(
+            MediaSourceKind.WallpaperEngineWorkshopProject,
+            "123456") with
+        {
+            LastKnownDisplayName = "\u0001\u202e\u2066",
+        };
+
+        Assert.Throws<MediaReferenceValidationException>(reference.Snapshot);
+    }
+
+    [Fact]
     public void DescriptorRejectsInvalidEnumsAndCapabilityBits()
     {
         Assert.Throws<ArgumentOutOfRangeException>(
@@ -202,7 +232,17 @@ public sealed class WallpaperSourceContractsTests
 
         var resolution = new WallpaperSourceResolution(reference, descriptor, metadata);
 
-        Assert.Equal(reference.Snapshot(), resolution.CanonicalReference);
+        Assert.Equal(reference.MediaId, resolution.CanonicalReference.MediaId);
+        Assert.Equal(descriptor.ContentKind, resolution.CanonicalReference.LastKnownContentKind);
+        Assert.Equal(descriptor.DisplayName, resolution.CanonicalReference.LastKnownDisplayName);
+        Assert.Equal(
+            contentKind switch
+            {
+                WallpaperContentKind.Image => MediaKind.Image,
+                WallpaperContentKind.Video => MediaKind.Video,
+                _ => MediaKind.None,
+            },
+            resolution.CanonicalReference.LastKnownKind);
         Assert.Same(descriptor, resolution.Descriptor);
         Assert.Same(metadata, resolution.DirectMediaMetadata);
     }

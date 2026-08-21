@@ -3,11 +3,10 @@
                  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                  xmlns:localization="clr-namespace:BackdropForCodex.App.Services.Localization"
                  xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
-                 xmlns:viewModels="clr-namespace:BackdropForCodex.App.ViewModels"
-                 xmlns:views="clr-namespace:BackdropForCodex.App.Views"
-                 Title="{localization:Loc App_Title, Fallback='Backdrop for Codex'}"
-                 Tag="precision-optical-proofing-bench:f91f3aae"
-                 Width="1440"
+                  xmlns:viewModels="clr-namespace:BackdropForCodex.App.ViewModels"
+                  xmlns:views="clr-namespace:BackdropForCodex.App.Views"
+                  Title="{localization:Loc App_Title, Fallback='Backdrop for Codex'}"
+                  Width="1440"
                  Height="860"
                  MinWidth="640"
                  MinHeight="520"
@@ -23,26 +22,14 @@
                  DragOver="Window_DragOver"
                  DragLeave="Window_DragLeave"
                  Drop="Window_Drop"
-                 PreviewKeyDown="Window_PreviewKeyDown"
-                 SizeChanged="Window_SizeChanged">
-  <!--
-    THESIS: A precision optical proofing bench turns source, proof, calibration, and safe commit
-    into one legible flow; it refuses the horizontal-carousel plus settings-card dashboard.
-    OWN-WORLD: Cool Windows Mica neutrals, system accent, precise seams, restrained crop marks,
-    compact source rows, whitespace-grouped controls, and almost no decorative elevation.
-    STORY: Choose a profile and source, judge the dominant live proof, tune readability, resolve
-    any safety preflight, then apply once with a clear recovery path.
-    FIRST VIEWPORT: Collapsible 224 rail, dominant center proof stage, 360 inspector titled for the
-    profile, and a fixed bottom status/commit bar; the preview is the only saturated field.
-    FORM: Stage-led optical proofing bench, pinned user direction; seed f91f3aae; approved comp
-    .impeccable/mocks/workbench-b-stage-led.png.
-    FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
-  -->
+                  PreviewKeyDown="Window_PreviewKeyDown"
+                  SizeChanged="Window_SizeChanged">
   <ui:FluentWindow.Resources>
     <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
   </ui:FluentWindow.Resources>
 
-  <Grid TextElement.FontFamily="{DynamicResource WorkbenchTextFontFamily}">
+  <Grid x:Name="RootLayout"
+        TextElement.FontFamily="{DynamicResource WorkbenchTextFontFamily}">
     <Grid.RowDefinitions>
       <RowDefinition Height="48" />
       <RowDefinition Height="*" />
@@ -170,6 +157,9 @@
                                   SelectedProfile="{Binding SelectedProfileCard, Mode=TwoWay}"
                                   SourceItemsSource="{Binding SourceLibrary.Sources}"
                                   HasSourceDiscoveryFailures="{Binding SourceLibrary.HasDiscoveryFailures}"
+                                  WallpaperEngineProjectCount="{Binding SourceLibrary.InstalledCount}"
+                                  WallpaperEngineAvailability="{Binding SourceLibrary.IntegrationAvailability}"
+                                  IsWallpaperEngineRefreshing="{Binding SourceLibrary.IsRefreshing}"
                                   RefreshSourcesCommand="{Binding SourceLibrary.RefreshCommand}"
                                   RecentItemsSource="{Binding Recents}"
                                   CreateProfileCommand="{Binding CreateProfileCommand}"
@@ -181,7 +171,7 @@
                                   CanEditProfiles="{Binding CanEditDraft}"
                                   CanChooseMedia="{Binding CanEdit}"
                                   SelectedProfileChanged="Library_SelectedProfileChanged"
-                                  SourceInvoked="Library_SourceInvoked"
+                                  WallpaperEngineLibraryRequested="Library_WallpaperEngineRequested"
                                   SelectedRecentMediaChanged="Library_SelectedRecentMediaChanged"
                                   ChooseLocalMediaRequested="Library_ChooseLocalMediaRequested"
                                   ContextMenuOpening="LibraryPane_ContextMenuOpening">
@@ -284,6 +274,7 @@
                                       CenterFocusRequested="CenterFocus_Click"
                                       ReviewRiskRequested="ReviewRisk_Click" />
       </Border>
+
     </Grid>
 
     <Border x:Name="FooterCommandBar"
@@ -492,6 +483,31 @@
         </StackPanel>
       </Grid>
     </Border>
+
+    <Grid x:Name="WallpaperEngineLibraryModalLayer"
+          Grid.Row="0"
+          Grid.RowSpan="3"
+          Panel.ZIndex="40"
+          Visibility="Collapsed"
+          FocusManager.IsFocusScope="True"
+          KeyboardNavigation.TabNavigation="Cycle"
+          KeyboardNavigation.ControlTabNavigation="Cycle"
+          KeyboardNavigation.DirectionalNavigation="Contained">
+      <Border x:Name="WallpaperEngineLibraryScrim"
+              Background="{DynamicResource SmokeFillColorDefaultBrush}"
+              MouseLeftButtonDown="WallpaperEngineLibraryScrim_MouseLeftButtonDown" />
+
+      <views:WallpaperEngineLibraryView x:Name="WallpaperEngineLibrary"
+                                         Panel.ZIndex="10"
+                                         Margin="32"
+                                         MaxWidth="1120"
+                                         MaxHeight="760"
+                                         HorizontalAlignment="Center"
+                                         VerticalAlignment="Center"
+                                         DataContext="{Binding SourceLibrary}"
+                                         AssignRequested="WallpaperEngineLibrary_AssignRequested"
+                                         CloseRequested="WallpaperEngineLibrary_CloseRequested" />
+    </Grid>
 
     <ui:SnackbarPresenter x:Name="SnackbarPresenter"
                           Grid.Row="1"

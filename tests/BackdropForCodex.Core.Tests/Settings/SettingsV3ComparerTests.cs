@@ -4,7 +4,7 @@ using Xunit;
 
 namespace BackdropForCodex.Core.Tests.Settings;
 
-public sealed class SettingsV2ComparerTests
+public sealed class SettingsV3ComparerTests
 {
     [Fact]
     public void CreateSnapshotNormalizesAndIsolatesEveryCollection()
@@ -22,7 +22,7 @@ public sealed class SettingsV2ComparerTests
         {
             [SemanticRegion.Global] = profile.ProfileId,
         };
-        var settings = new SettingsV2
+        var settings = new SettingsV3
         {
             Profiles = profiles,
             MediaCatalog = catalog,
@@ -57,7 +57,7 @@ public sealed class SettingsV2ComparerTests
             MediaId = firstMedia.MediaId,
         };
         var original = WithLegacyCompatibilityProfileId(
-            new SettingsV2
+            new SettingsV3
             {
                 Profiles = [profile],
                 MediaCatalog = [firstMedia, secondMedia],
@@ -70,13 +70,13 @@ public sealed class SettingsV2ComparerTests
             }.CreateSnapshot(),
             "legacy-marker");
 
-        Assert.True(SettingsV2Comparer.DurableEquals(original, original.CreateSnapshot()));
+        Assert.True(SettingsV3Comparer.DurableEquals(original, original.CreateSnapshot()));
         Assert.False(
-            SettingsV2Comparer.DurableEquals(
+            SettingsV3Comparer.DurableEquals(
                 original,
                 original with { AcceptedCdpRisk = false }));
         Assert.False(
-            SettingsV2Comparer.DurableEquals(
+            SettingsV3Comparer.DurableEquals(
                 original,
                 original with
                 {
@@ -87,7 +87,7 @@ public sealed class SettingsV2ComparerTests
                     ],
                 }));
         Assert.False(
-            SettingsV2Comparer.DurableEquals(
+            SettingsV3Comparer.DurableEquals(
                 original,
                 WithLegacyCompatibilityProfileId(original, "changed-marker")));
     }
@@ -102,7 +102,7 @@ public sealed class SettingsV2ComparerTests
             MediaId = firstMedia.MediaId,
         };
         var original = WithLegacyCompatibilityProfileId(
-            new SettingsV2
+            new SettingsV3
             {
                 Profiles = [profile],
                 MediaCatalog = [firstMedia, secondMedia],
@@ -126,9 +126,9 @@ public sealed class SettingsV2ComparerTests
             },
             "different-marker");
 
-        Assert.True(SettingsV2Comparer.UiDirtyEquals(original, metadataOnly));
+        Assert.True(SettingsV3Comparer.UiDirtyEquals(original, metadataOnly));
         Assert.False(
-            SettingsV2Comparer.UiDirtyEquals(
+            SettingsV3Comparer.UiDirtyEquals(
                 original,
                 original with
                 {
@@ -138,7 +138,7 @@ public sealed class SettingsV2ComparerTests
                     ],
                 }));
         Assert.False(
-            SettingsV2Comparer.UiDirtyEquals(
+            SettingsV3Comparer.UiDirtyEquals(
                 original,
                 original with
                 {
@@ -168,7 +168,7 @@ public sealed class SettingsV2ComparerTests
             Volume = 0.1,
             PerformancePolicy = PerformancePolicy.PreferQuality,
         };
-        var first = new SettingsV2
+        var first = new SettingsV3
         {
             Profiles = [firstGlobal],
             MediaCatalog = [firstMedia],
@@ -191,7 +191,7 @@ public sealed class SettingsV2ComparerTests
             Volume = 0.9,
             PerformancePolicy = PerformancePolicy.PreferEfficiency,
         };
-        var second = new SettingsV2
+        var second = new SettingsV3
         {
             Profiles = [secondGlobal, hidden],
             MediaCatalog = [secondMedia],
@@ -203,9 +203,9 @@ public sealed class SettingsV2ComparerTests
             AcceptedCdpRisk = true,
         };
 
-        Assert.True(SettingsV2Comparer.RuntimeEquivalent(first, second));
+        Assert.True(SettingsV3Comparer.RuntimeEquivalent(first, second));
         Assert.False(
-            SettingsV2Comparer.RuntimeEquivalent(
+            SettingsV3Comparer.RuntimeEquivalent(
                 first,
                 second with
                 {
@@ -216,7 +216,7 @@ public sealed class SettingsV2ComparerTests
                     ],
                 }));
         Assert.False(
-            SettingsV2Comparer.RuntimeEquivalent(
+            SettingsV3Comparer.RuntimeEquivalent(
                 first,
                 second with
                 {
@@ -230,7 +230,7 @@ public sealed class SettingsV2ComparerTests
     [Fact]
     public void EmptyGlobalProfilesAreRuntimeEquivalentRegardlessOfStyle()
     {
-        var first = SettingsV2.CreateDefault();
+        var first = SettingsV3.CreateDefault();
         var firstProfile = first.ResolveProfile(SemanticRegion.Global);
         var secondProfile = WallpaperProfile.CreateDefault("Official") with
         {
@@ -244,7 +244,7 @@ public sealed class SettingsV2ComparerTests
             SoundEnabled = true,
             PerformancePolicy = PerformancePolicy.PreferEfficiency,
         };
-        var second = new SettingsV2
+        var second = new SettingsV3
         {
             Profiles = [secondProfile],
             RegionBindings = new Dictionary<SemanticRegion, Guid>
@@ -255,7 +255,7 @@ public sealed class SettingsV2ComparerTests
         };
 
         Assert.Null(firstProfile.MediaId);
-        Assert.True(SettingsV2Comparer.RuntimeEquivalent(first, second));
+        Assert.True(SettingsV3Comparer.RuntimeEquivalent(first, second));
     }
 
     private static MediaReference CreateMedia(Guid mediaId, string fileName) =>
@@ -268,8 +268,8 @@ public sealed class SettingsV2ComparerTests
         };
 
 #pragma warning disable CS0618 // Tests intentionally cover the deprecated durable field.
-    private static SettingsV2 WithLegacyCompatibilityProfileId(
-        SettingsV2 settings,
+    private static SettingsV3 WithLegacyCompatibilityProfileId(
+        SettingsV3 settings,
         string? profileId) =>
         settings with { LastCompatibilityProfileId = profileId };
 #pragma warning restore CS0618

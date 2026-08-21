@@ -1,4 +1,5 @@
 using BackdropForCodex.App.ViewModels;
+using BackdropForCodex.Core.Dynamic;
 using BackdropForCodex.Core.Media;
 using Xunit;
 
@@ -13,9 +14,18 @@ public sealed class WallpaperSourceLibraryViewModelTests
             new WallpaperSourceProviderRegistry(
                 [new LocalFileWallpaperSourceProvider()]));
 
+        Assert.Equal(
+            WallpaperSourceAvailability.NotLoaded,
+            viewModel.IntegrationAvailability);
+        Assert.Equal(0, viewModel.InstalledCount);
+
         await viewModel.RefreshAsync();
 
         Assert.Empty(viewModel.Sources);
+        Assert.Equal(0, viewModel.InstalledCount);
+        Assert.Equal(
+            WallpaperSourceAvailability.Ready,
+            viewModel.IntegrationAvailability);
         Assert.Empty(viewModel.FailedSourceKinds);
         Assert.False(viewModel.HasDiscoveryFailures);
         Assert.False(viewModel.IsRefreshing);
@@ -91,6 +101,97 @@ public sealed class WallpaperSourceLibraryViewModelTests
             viewModel.Sources,
             source => Assert.Equal(provider.SourceKind, source.SourceKind));
         Assert.False(viewModel.HasDiscoveryFailures);
+    }
+
+    [Fact]
+    public async Task DynamicItemsFollowTheRealCapabilityProbeWhileDirectItemsStayAvailable()
+    {
+        var provider = new MutableSourceProvider(
+            MediaSourceKind.WallpaperEngineWorkshopProject,
+            [
+                CreateWorkshopDescriptor("21", WallpaperContentKind.Video),
+                CreateWorkshopDescriptor("22", WallpaperContentKind.Scene),
+            ]);
+        var capabilitySource = new MutableDynamicCapabilitySource(
+            DynamicWallpaperCapability.Unavailable(
+                DynamicWallpaperCapabilityReasonCode.WallpaperEngineAudioIsolationUnavailable));
+        using var viewModel = new WallpaperSourceLibraryViewModel(
+            new WallpaperSourceProviderRegistry([provider]),
+            dynamicCapabilitySource: capabilitySource);
+
+        await viewModel.RefreshAsync();
+
+        Assert.Equal(1, capabilitySource.ProbeCount);
+        var video = Assert.Single(
+            viewModel.Items,
+            item => item.ContentKind == WallpaperContentKind.Video);
+        var scene = Assert.Single(
+            viewModel.Items,
+            item => item.ContentKind == WallpaperContentKind.Scene);
+        Assert.True(video.CanApply);
+        Assert.Equal(WallpaperSourceAvailability.Ready, video.Availability);
+        Assert.False(scene.CanApply);
+        Assert.Equal(
+            WallpaperSourceAvailability.RendererUnavailable,
+            scene.Availability);
+        Assert.Equal(
+            WallpaperSourceAvailability.RendererUnavailable,
+            viewModel.IntegrationAvailability);
+
+        capabilitySource.Capability = DynamicWallpaperCapability.Available();
+        await viewModel.RefreshAsync();
+
+        Assert.Equal(2, capabilitySource.ProbeCount);
+        scene = Assert.Single(
+            viewModel.Items,
+            item => item.ContentKind == WallpaperContentKind.Scene);
+        Assert.True(scene.CanApply);
+        Assert.Equal(WallpaperSourceAvailability.Ready, scene.Availability);
+        Assert.Equal(
+            WallpaperSourceAvailability.Ready,
+            viewModel.IntegrationAvailability);
+    }
+
+    [Fact]
+    public async Task TypedSafetyProbeFailureBecomesExplicitUnavailableState()
+    {
+        var provider = new MutableSourceProvider(
+            MediaSourceKind.WallpaperEngineWorkshopProject,
+            [
+                CreateWorkshopDescriptor("31", WallpaperContentKind.Video),
+                CreateWorkshopDescriptor("32", WallpaperContentKind.Scene),
+            ]);
+        var capabilitySource = new MutableDynamicCapabilitySource(
+            DynamicWallpaperCapability.Available())
+        {
+            ProbeFailure = new DynamicWallpaperUnavailableException(
+                DynamicWallpaperCapabilityReasonCode.WallpaperEngineAudioIsolationUnavailable),
+        };
+        using var viewModel = new WallpaperSourceLibraryViewModel(
+            new WallpaperSourceProviderRegistry([provider]),
+            dynamicCapabilitySource: capabilitySource);
+
+        await viewModel.RefreshAsync();
+
+        Assert.False(viewModel.DynamicCapability.IsAvailable);
+        Assert.Equal(
+            DynamicWallpaperCapabilityReasonCode.WallpaperEngineAudioIsolationUnavailable,
+            viewModel.DynamicCapability.ReasonCode);
+        Assert.False(viewModel.HasDiscoveryFailures);
+        Assert.Equal(
+            WallpaperSourceAvailability.RendererUnavailable,
+            viewModel.IntegrationAvailability);
+        Assert.True(
+            Assert.Single(
+                viewModel.Items,
+                item => item.ContentKind == WallpaperContentKind.Video).CanApply);
+        var scene = Assert.Single(
+            viewModel.Items,
+            item => item.ContentKind == WallpaperContentKind.Scene);
+        Assert.False(scene.CanApply);
+        Assert.Equal(
+            WallpaperSourceAvailability.RendererUnavailable,
+            scene.Availability);
     }
 
     [Fact]
@@ -425,6 +526,31 @@ public sealed class WallpaperSourceLibraryViewModelTests
             MediaReference reference,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
+    }
+
+    private sealed class MutableDynamicCapabilitySource(
+        DynamicWallpaperCapability capability) : IDynamicWallpaperCapabilitySource
+    {
+        private int _probeCount;
+
+        public DynamicWallpaperCapability Capability { get; set; } = capability;
+
+        public int ProbeCount => Volatile.Read(ref _probeCount);
+
+        public Exception? ProbeFailure { get; init; }
+
+        public ValueTask<DynamicWallpaperCapability> ProbeDynamicWallpaperAsync(
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            _ = Interlocked.Increment(ref _probeCount);
+            if (ProbeFailure is not null)
+            {
+                return ValueTask.FromException<DynamicWallpaperCapability>(ProbeFailure);
+            }
+
+            return ValueTask.FromResult(Capability);
+        }
     }
 
     private sealed class QueuedSynchronizationContext : SynchronizationContext

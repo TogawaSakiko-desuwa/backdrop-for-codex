@@ -12,7 +12,7 @@ related_targets: ["src/BackdropForCodex.App/MainWindow.xaml.cs","src/BackdropFor
 - Primary action: apply the selected profile and launch Codex. Restore official background and retry are explicit recovery actions, not competing primary actions.
 - Content: profiles, provider-backed source library, live proof, source/fit/focus/readability controls, concise runtime status, diagnostics on demand.
 - Constraints: Windows 11 x64, WPF/WPF UI, minimum 640x520, 200% scaling, keyboard and high contrast, localized copy, no raw exception as primary error, and no unsupported Wallpaper Engine provider shown.
-- Direction: stage-led “precision optical proofing bench”; seed `f91f3aae`; approved comp `.impeccable/mocks/workbench-b-stage-led.png`.
+- Direction: stage-led “precision optical proofing bench”; seed `f91f3aae`. The approved composition metadata remains in `.impeccable/mocks/workbench-b-stage-led.json`; local visual evidence is intentionally Git-ignored because it may contain user media.
 - Memorable moment: a selected source becomes the single saturated proof inside a precise calibration frame while the bottom preflight changes from a recoverable safety explanation to one confident commit action.
 - Responsive: >=1280 uses 224 rail + fluid proof + 360 inspector; 960–1279 collapses the rail to 56 with a flyout; <960 uses a source drawer and Preview/Adjust single-task switch with a fixed bottom action bar.
 - Unresolved: the future Scene/Web frame transport is outside this surface; until available, those sources may be described but cannot appear as activatable items.

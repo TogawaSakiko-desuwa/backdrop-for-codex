@@ -6,7 +6,7 @@ namespace BackdropForCodex.Core.Tests.Media;
 public sealed class WallpaperEngineRenderingContractsTests
 {
     [Fact]
-    public async Task RendererReceivesOwnedProjectLeaseWithoutCaptureOrInjectionContract()
+    public async Task RendererContractPassesTheOwnedProjectLeaseToTheWindowImplementation()
     {
         var lease = new RecordingProjectLease(
             CreateResolution(WallpaperContentKind.Scene),
@@ -21,13 +21,7 @@ public sealed class WallpaperEngineRenderingContractsTests
         Assert.Same(lease, renderer.ProjectLease);
         Assert.Equal(lease.LaunchPath, renderer.ProjectLease?.LaunchPath);
         Assert.Same(options, renderer.Options);
-        Assert.Equal((nint)42, window.WindowHandle);
-        Assert.DoesNotContain(
-            typeof(IWallpaperEngineWindowRenderer).Assembly.GetTypes(),
-            type =>
-                !type.IsAbstract &&
-                !type.IsInterface &&
-                typeof(IWallpaperEngineWindowRenderer).IsAssignableFrom(type));
+        Assert.Null(window.CaptureTarget);
     }
 
     [Theory]
@@ -66,6 +60,25 @@ public sealed class WallpaperEngineRenderingContractsTests
             () => WallpaperEngineProjectLeaseContract.Validate(relativeLease));
         Assert.Throws<WallpaperSourceCapabilityException>(
             () => WallpaperEngineWindowRendererContract.Validate(renderer));
+    }
+
+    [Fact]
+    public async Task CaptureTargetFailsClosedWhenRevokedDuringIdentityRevalidation()
+    {
+        var authority = new BlockingCaptureAuthority(new nint(42));
+        var target = new WallpaperEngineWindowCaptureTarget(authority);
+        var revalidation = target.RevalidateAsync(default).AsTask();
+        await authority.Entered;
+
+        target.Revoke();
+        authority.Release();
+
+        var exception = await Assert.ThrowsAsync<WallpaperEnginePlatformUnavailableException>(
+            () => revalidation);
+        Assert.Equal(
+            WallpaperEnginePlatformUnavailableReason.WindowOwnershipNotProven,
+            exception.Reason);
+        Assert.DoesNotContain("42", target.ToString(), StringComparison.Ordinal);
     }
 
     private static WallpaperSourceResolution CreateResolution(
@@ -150,7 +163,7 @@ public sealed class WallpaperEngineRenderingContractsTests
 
     private sealed class RecordingWindowLease : IWallpaperEngineWindowLease
     {
-        public nint WindowHandle => 42;
+        public WallpaperEngineWindowCaptureTarget? CaptureTarget => null;
 
         public ValueTask SetPausedAsync(
             bool paused,
@@ -161,5 +174,25 @@ public sealed class WallpaperEngineRenderingContractsTests
         }
 
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+
+    private sealed class BlockingCaptureAuthority(nint windowHandle)
+        : IWallpaperEngineWindowCaptureAuthority
+    {
+        private readonly TaskCompletionSource _entered =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _release =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        internal Task Entered => _entered.Task;
+
+        internal void Release() => _release.TrySetResult();
+
+        public async ValueTask<nint> RevalidateAsync(CancellationToken cancellationToken)
+        {
+            _entered.TrySetResult();
+            await _release.Task.WaitAsync(cancellationToken);
+            return windowHandle;
+        }
     }
 }

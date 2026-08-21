@@ -227,14 +227,16 @@ public sealed class LocalFileWallpaperSourceProvider : IDirectMediaSourceProvide
             path[extendedDosPrefix.Length + 2] != '\\';
     }
 
-    private sealed class LocalFileMediaLease(
+    internal sealed class LocalFileMediaLease(
         MediaReference reference,
         string resolvedPath,
         LocalFileIdentity fileIdentity,
         MediaFileMetadata metadata,
-        FileStream stream) : IDirectMediaLease
+        IDisposable stream) : IDirectMediaLease
     {
-        private FileStream? _stream = stream;
+        private readonly SemaphoreSlim _disposeGate = new(1, 1);
+        private IDisposable? _stream =
+            stream ?? throw new ArgumentNullException(nameof(stream));
 
         public MediaReference Reference { get; } = reference;
 
@@ -244,10 +246,24 @@ public sealed class LocalFileWallpaperSourceProvider : IDirectMediaSourceProvide
 
         public MediaFileMetadata Metadata { get; } = metadata;
 
-        public ValueTask DisposeAsync()
+        public async ValueTask DisposeAsync()
         {
-            Interlocked.Exchange(ref _stream, null)?.Dispose();
-            return ValueTask.CompletedTask;
+            await _disposeGate.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                var retainedStream = _stream;
+                if (retainedStream is null)
+                {
+                    return;
+                }
+
+                retainedStream.Dispose();
+                _stream = null;
+            }
+            finally
+            {
+                _disposeGate.Release();
+            }
         }
 
         public override string ToString() =>

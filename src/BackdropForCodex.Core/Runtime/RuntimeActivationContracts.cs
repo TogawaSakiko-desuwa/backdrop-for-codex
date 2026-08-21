@@ -1,3 +1,4 @@
+using BackdropForCodex.Core.Dynamic;
 using BackdropForCodex.Core.Media;
 using BackdropForCodex.Core.Settings;
 
@@ -44,16 +45,24 @@ public sealed record WallpaperRuntimeError
     public WallpaperRuntimeError(
         string code,
         string message,
-        string? exceptionType = null)
+        string? exceptionType = null,
+        DynamicWallpaperCapabilityReasonCode? dynamicReasonCode = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(code);
         ArgumentException.ThrowIfNullOrWhiteSpace(message);
+        if (dynamicReasonCode is { } reasonCode &&
+            (!Enum.IsDefined(reasonCode) ||
+             reasonCode == DynamicWallpaperCapabilityReasonCode.None))
+        {
+            throw new ArgumentOutOfRangeException(nameof(dynamicReasonCode));
+        }
 
         Code = code.Trim();
         Message = message.Trim();
         ExceptionType = string.IsNullOrWhiteSpace(exceptionType)
             ? null
             : exceptionType.Trim();
+        DynamicReasonCode = dynamicReasonCode;
     }
 
     public string Code { get; }
@@ -62,13 +71,61 @@ public sealed record WallpaperRuntimeError
 
     public string? ExceptionType { get; }
 
+    public DynamicWallpaperCapabilityReasonCode? DynamicReasonCode { get; }
+
     public static WallpaperRuntimeError FromException(string code, Exception exception)
     {
         ArgumentNullException.ThrowIfNull(exception);
+        var dynamicFailure = FindDynamicWallpaperFailure(exception);
+        if (dynamicFailure is not null)
+        {
+            return new WallpaperRuntimeError(
+                code,
+                dynamicFailure.Message,
+                dynamicFailure.GetType().FullName,
+                dynamicFailure.ReasonCode);
+        }
+
         return new WallpaperRuntimeError(
             code,
             exception.Message,
             exception.GetType().FullName);
+    }
+
+    private static DynamicWallpaperUnavailableException? FindDynamicWallpaperFailure(
+        Exception exception)
+    {
+        const int maximumVisitedExceptions = 64;
+        var pending = new Stack<Exception>();
+        var visited = new HashSet<Exception>(ReferenceEqualityComparer.Instance);
+        pending.Push(exception);
+        while (pending.Count > 0 && visited.Count < maximumVisitedExceptions)
+        {
+            var current = pending.Pop();
+            if (!visited.Add(current))
+            {
+                continue;
+            }
+
+            if (current is DynamicWallpaperUnavailableException dynamicFailure)
+            {
+                return dynamicFailure;
+            }
+
+            if (current is AggregateException aggregate)
+            {
+                for (var index = aggregate.InnerExceptions.Count - 1; index >= 0; index--)
+                {
+                    pending.Push(aggregate.InnerExceptions[index]);
+                }
+            }
+            else if (current.InnerException is { } innerException)
+            {
+                pending.Push(innerException);
+            }
+        }
+
+        return null;
     }
 }
 
@@ -235,7 +292,7 @@ public sealed class RuntimeActivationRequest
     private RuntimeActivationRequest(
         long revision,
         RuntimeLaunchMode launchMode,
-        SettingsV2 settingsSnapshot,
+        SettingsV3 settingsSnapshot,
         WallpaperProfile globalProfile,
         MediaReference? media)
     {
@@ -250,7 +307,7 @@ public sealed class RuntimeActivationRequest
 
     public RuntimeLaunchMode LaunchMode { get; }
 
-    public SettingsV2 SettingsSnapshot { get; }
+    public SettingsV3 SettingsSnapshot { get; }
 
     public WallpaperProfile GlobalProfile { get; }
 
@@ -260,7 +317,7 @@ public sealed class RuntimeActivationRequest
 
     public static RuntimeActivationRequest Create(
         long revision,
-        SettingsV2 settings,
+        SettingsV3 settings,
         RuntimeLaunchMode launchMode = RuntimeLaunchMode.ManualApply)
     {
         if (revision <= 0)
@@ -306,7 +363,7 @@ public sealed record RuntimeActivationResult
         long revision,
         RuntimeActivationOutcome outcome,
         WallpaperRuntimeSurface surface,
-        SettingsV2? activeSnapshot,
+        SettingsV3? activeSnapshot,
         WallpaperRuntimeError? error)
     {
         if (revision <= 0)
@@ -329,13 +386,13 @@ public sealed record RuntimeActivationResult
 
     public WallpaperRuntimeSurface Surface { get; }
 
-    public SettingsV2? ActiveSnapshot { get; }
+    public SettingsV3? ActiveSnapshot { get; }
 
     public WallpaperRuntimeError? Error { get; }
 
     public static RuntimeActivationResult MediaActive(
         long revision,
-        SettingsV2 activeSnapshot,
+        SettingsV3 activeSnapshot,
         WallpaperRuntimeSurface surface)
     {
         ArgumentNullException.ThrowIfNull(activeSnapshot);
@@ -367,7 +424,7 @@ public sealed record RuntimeActivationResult
 
     public static RuntimeActivationResult Official(
         long revision,
-        SettingsV2 activeSnapshot,
+        SettingsV3 activeSnapshot,
         WallpaperRuntimeSurface surface)
     {
         ArgumentNullException.ThrowIfNull(activeSnapshot);
@@ -398,7 +455,7 @@ public sealed record RuntimeActivationResult
     public static RuntimeActivationResult SavedButNotActivated(
         long revision,
         WallpaperRuntimeSurface surface,
-        SettingsV2? activeSnapshot,
+        SettingsV3? activeSnapshot,
         WallpaperRuntimeError error)
     {
         ArgumentNullException.ThrowIfNull(error);
@@ -413,7 +470,7 @@ public sealed record RuntimeActivationResult
     public static RuntimeActivationResult Superseded(
         long revision,
         WallpaperRuntimeSurface surface,
-        SettingsV2? activeSnapshot = null) =>
+        SettingsV3? activeSnapshot = null) =>
         new(
             revision,
             RuntimeActivationOutcome.Superseded,
@@ -424,7 +481,7 @@ public sealed record RuntimeActivationResult
     public static RuntimeActivationResult Canceled(
         long revision,
         WallpaperRuntimeSurface surface,
-        SettingsV2? activeSnapshot = null) =>
+        SettingsV3? activeSnapshot = null) =>
         new(
             revision,
             RuntimeActivationOutcome.Canceled,
@@ -435,7 +492,7 @@ public sealed record RuntimeActivationResult
     public static RuntimeActivationResult Failed(
         long revision,
         WallpaperRuntimeSurface surface,
-        SettingsV2? activeSnapshot,
+        SettingsV3? activeSnapshot,
         WallpaperRuntimeError error)
     {
         ArgumentNullException.ThrowIfNull(error);

@@ -321,6 +321,56 @@ public sealed class MainWindowLayoutTests
     }
 
     [Fact]
+    public void WallpaperEngineLibraryModalLayer_CoversTheWindowAndContainsFocus()
+    {
+        StaTest.Run(
+            () =>
+            {
+                var fixture = MainWindowViewModelTests.CreateLayoutFixture();
+                MainWindow? window = null;
+                try
+                {
+                    window = CreateWindow(fixture);
+                    ArrangeWindow(window, width: 1200, height: 760);
+
+                    var root = Assert.IsType<Grid>(FindElement(window, "RootLayout"));
+                    var modalLayer = Assert.IsType<Grid>(
+                        FindElement(window, "WallpaperEngineLibraryModalLayer"));
+                    modalLayer.Visibility = Visibility.Visible;
+                    window.UpdateLayout();
+
+                    Assert.Same(root, VisualTreeHelper.GetParent(modalLayer));
+                    Assert.Equal(0, Grid.GetRow(modalLayer));
+                    Assert.Equal(3, Grid.GetRowSpan(modalLayer));
+                    Assert.True(Panel.GetZIndex(modalLayer) > 0);
+                    Assert.True(FocusManager.GetIsFocusScope(modalLayer));
+                    Assert.Equal(
+                        KeyboardNavigationMode.Cycle,
+                        KeyboardNavigation.GetTabNavigation(modalLayer));
+                    Assert.Equal(
+                        KeyboardNavigationMode.Cycle,
+                        KeyboardNavigation.GetControlTabNavigation(modalLayer));
+                    Assert.Equal(
+                        KeyboardNavigationMode.Contained,
+                        KeyboardNavigation.GetDirectionalNavigation(modalLayer));
+                    AssertRectEqual(
+                        new Rect(root.RenderSize),
+                        GetBounds(modalLayer, root));
+
+                    AssertHitIsInsideModalLayer(root, modalLayer, new Point(8, 8));
+                    AssertHitIsInsideModalLayer(
+                        root,
+                        modalLayer,
+                        new Point(8, root.ActualHeight - 8));
+                }
+                finally
+                {
+                    CloseWindow(window, fixture);
+                }
+            });
+    }
+
+    [Fact]
     public void MobilePaneSelection_RemainsBoundToDynamicThemeResources()
     {
         StaTest.Run(
@@ -437,6 +487,30 @@ public sealed class MainWindowLayoutTests
                 finally
                 {
                     CloseWindow(window, fixture);
+                }
+            });
+    }
+
+    [Fact]
+    public void SettingsFirstUseDoesNotClaimRiskAcknowledgementWasRevoked()
+    {
+        StaTest.Run(
+            () =>
+            {
+                var fixture = MainWindowViewModelTests.CreateLayoutFixture();
+                try
+                {
+                    var text = new AppTextProvider(
+                        CultureInfo.GetCultureInfo("zh-Hans"));
+                    var content = new SettingsDialogContent(fixture.ViewModel, text);
+                    var state = Assert.IsType<TextBlock>(content.FindName("RiskStateText"));
+
+                    Assert.Equal(text.GetString("Risk_NotAcknowledged"), state.Text);
+                    Assert.NotEqual(text.GetString("Risk_Revoked"), state.Text);
+                }
+                finally
+                {
+                    fixture.ViewModel.Dispose();
                 }
             });
     }
@@ -827,6 +901,24 @@ public sealed class MainWindowLayoutTests
         Visual ancestor) =>
         element.TransformToAncestor(ancestor).TransformBounds(
             new Rect(element.RenderSize));
+
+    private static void AssertHitIsInsideModalLayer(
+        UIElement root,
+        DependencyObject modalLayer,
+        Point point)
+    {
+        var hit = Assert.IsAssignableFrom<DependencyObject>(
+            root.InputHitTest(point));
+        for (var current = hit; current is not null; current = VisualTreeHelper.GetParent(current))
+        {
+            if (ReferenceEquals(current, modalLayer))
+            {
+                return;
+            }
+        }
+
+        Assert.Fail($"Hit at {point} escaped the Wallpaper Engine modal layer.");
+    }
 
     private static void AssertRectEqual(Rect expected, Rect actual)
     {
