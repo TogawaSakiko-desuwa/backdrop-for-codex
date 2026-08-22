@@ -10,6 +10,11 @@ namespace BackdropForCodex.Core.Tests.Injection;
 
 public sealed class PuppeteerWallpaperSessionTests
 {
+    private static readonly JsonSerializerOptions PresentationEvidenceSerializerOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+    };
+
     [Fact]
     public void IsReviewedTargetDocument_RequiresExactTargetIdAndDocumentPath()
     {
@@ -108,13 +113,16 @@ public sealed class PuppeteerWallpaperSessionTests
         capabilityState.Begin(
             selected.Capabilities,
             continuesCurrentGeneration: false);
-        capabilityState.Observe(
-            PresentationContractCatalog.Observe(
-                selected.Snapshot,
-                PresentationEvidence.FullySupported with
-                {
-                    BackdropFilterSupported = false,
-                }));
+        var failedGlassObservation = PresentationContractCatalog.Observe(
+            selected.Snapshot,
+            PresentationEvidence.FullySupported with
+            {
+                BackdropFilterSupported = false,
+            });
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            capabilityState.Observe(failedGlassObservation);
+        }
 
         var contractBeforeReconnect = session.PresentationContract;
         var capabilitiesBeforeReconnect = session.Capabilities;
@@ -157,13 +165,16 @@ public sealed class PuppeteerWallpaperSessionTests
         capabilityState.Begin(
             selected.Capabilities,
             continuesCurrentGeneration: false);
-        capabilityState.Observe(
-            PresentationContractCatalog.Observe(
-                selected.Snapshot,
-                PresentationEvidence.FullySupported with
-                {
-                    BackdropFilterSupported = false,
-                }));
+        var failedGlassObservation = PresentationContractCatalog.Observe(
+            selected.Snapshot,
+            PresentationEvidence.FullySupported with
+            {
+                BackdropFilterSupported = false,
+            });
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            capabilityState.Observe(failedGlassObservation);
+        }
         var contractBeforeReconnect = session.PresentationContract;
         var capabilitiesBeforeReconnect = session.Capabilities;
         using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
@@ -499,6 +510,52 @@ public sealed class PuppeteerWallpaperSessionTests
         Assert.Equal(0, unverified.Proxy.PresentationEvidenceProbeCount);
     }
 
+    [Fact]
+    public async Task ApplyToCurrentPagesAsync_ConfirmsRepeatedStructuralMissesBeforeDowngrade()
+    {
+        var endpoint = VerifiedEndpoint();
+        var created = CreatePage("codex-page");
+        var browser = CreateBrowser(created.Page);
+        await using var session = CreatePreparedSession(browser, endpoint);
+        var selected = ContractState(session).Select(
+            PresentationEvidence.FullySupported,
+            finalizeBaselineFallback: false);
+        CapabilityState(session).Begin(
+            selected.Capabilities,
+            continuesCurrentGeneration: false);
+        PageRegistry(session).MarkMutated(created.Page, generation: 1);
+        created.Proxy.PresentationEvidenceJson = JsonSerializer.Serialize(
+            PresentationEvidence.FullySupported with
+            {
+                ShellStructure = false,
+            },
+            PresentationEvidenceSerializerOptions);
+
+        for (var observation = 0; observation < 2; observation++)
+        {
+            var result = await ApplyToCurrentPagesAsync(
+                session,
+                CancellationToken.None,
+                finalizeBaselineFallback: false);
+
+            Assert.Equal(1, result.AppliedCount);
+            Assert.True(session.Capabilities.Glass.IsAvailable);
+            Assert.True(session.Capabilities.Advanced.IsAvailable);
+            Assert.Equal(0, created.Proxy.CapabilityDowngradeEvaluationCount);
+        }
+
+        var confirmed = await ApplyToCurrentPagesAsync(
+            session,
+            CancellationToken.None,
+            finalizeBaselineFallback: false);
+
+        Assert.Equal(1, confirmed.AppliedCount);
+        Assert.False(session.Capabilities.Glass.IsAvailable);
+        Assert.False(session.Capabilities.Advanced.IsAvailable);
+        Assert.Equal(1, created.Proxy.CapabilityDowngradeEvaluationCount);
+        Assert.Equal(3, created.Proxy.PresentationEvidenceProbeCount);
+    }
+
     private static async Task WaitForCancellationThenGateAsync(
         SemaphoreSlim gate,
         CancellationToken cancellationToken)
@@ -586,7 +643,6 @@ public sealed class PuppeteerWallpaperSessionTests
 
     private static WallpaperInjectionOptions InjectionOptions(long generation = 1) => new(
         generation,
-        source: new Uri("http://127.0.0.1:9/wallpaper.png"),
         localMediaPath: Path.Combine(
             Path.GetPathRoot(Environment.SystemDirectory)!,
             "wallpaper.png"),
@@ -631,6 +687,10 @@ public sealed class PuppeteerWallpaperSessionTests
 
         public int PresentationEvidenceProbeCount { get; private set; }
 
+        public int CapabilityDowngradeEvaluationCount { get; private set; }
+
+        public string? PresentationEvidenceJson { get; set; }
+
         protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
         {
             return targetMethod?.Name switch
@@ -639,10 +699,28 @@ public sealed class PuppeteerWallpaperSessionTests
                 "get_Url" => "app://codex/index.html",
                 "GetTitleAsync" => Task.FromResult("Codex"),
                 "CreateCDPSessionAsync" => Task.FromResult(Session),
-                "EvaluateExpressionAsync" => CountUnexpectedPresentationEvidenceProbe(),
+                "EvaluateExpressionAsync" => EvaluateExpression(targetMethod),
                 _ => throw new InvalidOperationException(
                     $"The page test proxy does not implement {targetMethod?.Name}."),
             };
+        }
+
+        private object EvaluateExpression(MethodInfo targetMethod)
+        {
+            var resultType = targetMethod.ReturnType.GenericTypeArguments.SingleOrDefault();
+            if (resultType == typeof(string) && PresentationEvidenceJson is not null)
+            {
+                PresentationEvidenceProbeCount++;
+                return Task.FromResult(PresentationEvidenceJson);
+            }
+
+            if (resultType == typeof(bool) && PresentationEvidenceJson is not null)
+            {
+                CapabilityDowngradeEvaluationCount++;
+                return Task.FromResult(true);
+            }
+
+            return CountUnexpectedPresentationEvidenceProbe();
         }
 
         private object CountUnexpectedPresentationEvidenceProbe()
@@ -758,6 +836,10 @@ public sealed class PuppeteerWallpaperSessionTests
 
     [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "_presentationContractState")]
     private static extern ref PresentationContractState ContractState(
+        PuppeteerWallpaperSession session);
+
+    [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "_pageRegistry")]
+    private static extern ref InjectedPageRegistry PageRegistry(
         PuppeteerWallpaperSession session);
 
     [UnsafeAccessor(

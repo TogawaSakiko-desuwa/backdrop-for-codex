@@ -50,21 +50,33 @@ public sealed class UserFacingErrorMapperTests
     }
 
     [Fact]
-    public void ProjectionIncompatibleSettingsMapToNonRetryableReadOnlyState()
+    public void RuntimeAlreadyRunningErrorUsesLocalizedRecoveryInsteadOfCoreMessage()
     {
-        var mapper = new UserFacingErrorMapper(
+        const string RawRuntimeMessage =
+            "Codex is already running and was not launched by this coordinator.";
+        var runtimeError = new WallpaperRuntimeError(
+            "activation-failed",
+            RawRuntimeMessage,
+            typeof(CodexAlreadyRunningException).FullName);
+        var english = new UserFacingErrorMapper(
             new AppTextProvider(CultureInfo.GetCultureInfo("en")));
+        var chinese = new UserFacingErrorMapper(
+            new AppTextProvider(CultureInfo.GetCultureInfo("zh-Hans")));
 
-        var result = mapper.Map(
-            new BackdropForCodex.Core.Settings.SettingsProjectionException(
-                "sensitive source details"),
-            UserFacingOperation.LoadWallpaperSettings);
+        var englishResult = english.Map(
+            runtimeError,
+            UserFacingOperation.ApplyWallpaper);
+        var chineseResult = chinese.Map(
+            runtimeError,
+            UserFacingOperation.ApplyWallpaper);
 
-        Assert.Equal(UserFacingErrorCode.WallpaperSettingsUnsupportedFeatures, result.Code);
-        Assert.False(result.CanRetry);
+        Assert.Equal(UserFacingErrorCode.CodexAlreadyRunning, englishResult.Code);
+        Assert.Equal("Cannot start Codex safely", englishResult.Title);
+        Assert.Equal("无法安全启动 Codex", chineseResult.Title);
+        Assert.True(englishResult.CanRetry);
         Assert.DoesNotContain(
-            "sensitive source details",
-            $"{result.Message} {result.Recovery}",
+            RawRuntimeMessage,
+            $"{englishResult.Title} {englishResult.Message} {englishResult.Recovery}",
             StringComparison.Ordinal);
     }
 

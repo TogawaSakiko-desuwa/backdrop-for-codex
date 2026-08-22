@@ -1,15 +1,17 @@
 using BackdropForCodex.Core.Codex;
+using BackdropForCodex.Core.Dynamic;
 using BackdropForCodex.Core.Injection;
 using BackdropForCodex.Core.Media;
 using BackdropForCodex.Core.Runtime;
 using BackdropForCodex.Core.Settings;
 using BackdropForCodex.Core.Shortcuts;
+using BackdropForCodex.App.Services.Media;
 
 namespace BackdropForCodex.App.Services.Wallpaper;
 
 public sealed record WallpaperApplyResult(
     RuntimeActivationResult Activation,
-    SettingsV2 SavedDesired,
+    SettingsV3 SavedDesired,
     bool ShortcutReady,
     Exception? ShortcutError = null)
 {
@@ -17,7 +19,7 @@ public sealed record WallpaperApplyResult(
 
     public long Revision => Activation.Revision;
 
-    public SettingsV2? ActiveSnapshot => Activation.ActiveSnapshot;
+    public SettingsV3? ActiveSnapshot => Activation.ActiveSnapshot;
 
     public WallpaperRuntimeSurface Surface => Activation.Surface;
 }
@@ -39,7 +41,7 @@ public interface IWallpaperApplicationService : IAsyncDisposable
     Task<WallpaperWorkspaceState> InitializeAsync(
         CancellationToken cancellationToken = default);
 
-    void ReplaceDraft(SettingsV2 draft);
+    void ReplaceDraft(SettingsV3 draft);
 
     WallpaperProfile CreateProfile(string baseName = "New profile");
 
@@ -59,17 +61,22 @@ public interface IWallpaperApplicationService : IAsyncDisposable
         RuntimeLaunchMode launchMode = RuntimeLaunchMode.ManualApply,
         CancellationToken cancellationToken = default);
 
+    Task<WallpaperApplyResult> ApplyAsync(
+        RuntimeLaunchMode launchMode,
+        WallpaperSourceResolution? expectedSourceResolution,
+        CancellationToken cancellationToken = default);
+
     void CancelLatestApply();
 
-    Task<SettingsV2> SetRiskAcceptanceAsync(
+    Task<SettingsV3> SetRiskAcceptanceAsync(
         bool accepted,
         CancellationToken cancellationToken = default);
 
-    Task<SettingsV2> RemoveRecentMediaAsync(
+    Task<SettingsV3> RemoveRecentMediaAsync(
         Guid mediaId,
         CancellationToken cancellationToken = default);
 
-    Task<SettingsV2> ClearRecentMediaAsync(
+    Task<SettingsV3> ClearRecentMediaAsync(
         CancellationToken cancellationToken = default);
 
     Task SetPausedAsync(bool paused, CancellationToken cancellationToken = default);
@@ -77,10 +84,10 @@ public interface IWallpaperApplicationService : IAsyncDisposable
     Task<RuntimeActivationResult> RestoreOfficialAsync(
         CancellationToken cancellationToken = default);
 
-    Task<SettingsV2> RestoreVersion1BackupAsync(
+    Task<SettingsV3> RestoreVersion1BackupAsync(
         CancellationToken cancellationToken = default);
 
-    Task<SettingsV2> ResetWallpaperSettingsAsync(
+    Task<SettingsV3> ResetWallpaperSettingsAsync(
         CancellationToken cancellationToken = default);
 
     DesktopShortcutWriteResult CreateOrUpdateShortcut();
@@ -102,10 +109,12 @@ public interface IWallpaperApplicationCapabilitySource
 /// </summary>
 public sealed class WallpaperApplicationService :
     IWallpaperApplicationService,
-    IWallpaperApplicationCapabilitySource
+    IWallpaperApplicationCapabilitySource,
+    IDynamicWallpaperCapabilitySource
 {
     private readonly WallpaperWorkspaceCoordinator _workspace;
     private readonly IWallpaperRuntimeCapabilitySource? _capabilitySource;
+    private readonly IDynamicWallpaperCapabilitySource? _dynamicCapabilitySource;
     private int _disposeState;
 
     public WallpaperApplicationService(
@@ -114,6 +123,7 @@ public sealed class WallpaperApplicationService :
     {
         _workspace = workspace ?? throw new ArgumentNullException(nameof(workspace));
         _capabilitySource = capabilitySource;
+        _dynamicCapabilitySource = capabilitySource as IDynamicWallpaperCapabilitySource;
         _workspace.RuntimeStatusChanged += Workspace_RuntimeStatusChanged;
         _workspace.StateChanged += Workspace_StateChanged;
     }
@@ -156,14 +166,28 @@ public sealed class WallpaperApplicationService :
         _capabilitySource?.Compatibility ??
         WallpaperCompatibilitySnapshot.NotEvaluated;
 
-    public static WallpaperApplicationService CreateDefault(string settingsPath)
+    public ValueTask<DynamicWallpaperCapability> ProbeDynamicWallpaperAsync(
+        CancellationToken cancellationToken = default) =>
+        _dynamicCapabilitySource?.ProbeDynamicWallpaperAsync(cancellationToken) ??
+        ValueTask.FromResult(DynamicWallpaperCapability.Unavailable(
+            DynamicWallpaperCapabilityReasonCode.WallpaperEngineUnavailable));
+
+    public static WallpaperApplicationService CreateDefault(string settingsPath) =>
+        CreateDefault(settingsPath, AppWallpaperSources.Registry);
+
+    public static WallpaperApplicationService CreateDefault(
+        string settingsPath,
+        IWallpaperSourceProviderRegistry sourceRegistry)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(settingsPath);
-        var runtime = WallpaperCoordinator.CreateDefault();
+        ArgumentNullException.ThrowIfNull(sourceRegistry);
+        var runtime = WallpaperCoordinator.CreateDefault(
+            sourceRegistry,
+            AppWallpaperSources.WallpaperEngineLocator);
         var workspace = new WallpaperWorkspaceCoordinator(
             new SettingsRepository(settingsPath),
             runtime,
-            new LocalFileWallpaperSourceProvider());
+            sourceRegistry);
         return new WallpaperApplicationService(workspace, runtime);
     }
 
@@ -171,7 +195,7 @@ public sealed class WallpaperApplicationService :
         CancellationToken cancellationToken = default) =>
         _workspace.InitializeAsync(cancellationToken);
 
-    public void ReplaceDraft(SettingsV2 draft) => _workspace.ReplaceDraft(draft);
+    public void ReplaceDraft(SettingsV3 draft) => _workspace.ReplaceDraft(draft);
 
     public WallpaperProfile CreateProfile(string baseName = "New profile") =>
         _workspace.CreateProfile(baseName);
@@ -197,14 +221,20 @@ public sealed class WallpaperApplicationService :
 
     public async Task<WallpaperApplyResult> ApplyAsync(
         RuntimeLaunchMode launchMode = RuntimeLaunchMode.ManualApply,
+        CancellationToken cancellationToken = default) =>
+        await ApplyAsync(launchMode, expectedSourceResolution: null, cancellationToken)
+            .ConfigureAwait(false);
+
+    public async Task<WallpaperApplyResult> ApplyAsync(
+        RuntimeLaunchMode launchMode,
+        WallpaperSourceResolution? expectedSourceResolution,
         CancellationToken cancellationToken = default)
     {
         var activation = await _workspace
-            .ApplyAsync(launchMode, cancellationToken)
+            .ApplyAsync(launchMode, expectedSourceResolution, cancellationToken)
             .ConfigureAwait(false);
 
-        if (activation.Outcome is RuntimeActivationOutcome.Superseded or
-            RuntimeActivationOutcome.Canceled)
+        if (!ShouldCreateShortcut(activation.Outcome))
         {
             return new WallpaperApplyResult(
                 activation,
@@ -230,19 +260,22 @@ public sealed class WallpaperApplicationService :
         }
     }
 
+    internal static bool ShouldCreateShortcut(RuntimeActivationOutcome outcome) =>
+        outcome == RuntimeActivationOutcome.MediaActive;
+
     public void CancelLatestApply() => _workspace.CancelLatestApply();
 
-    public Task<SettingsV2> SetRiskAcceptanceAsync(
+    public Task<SettingsV3> SetRiskAcceptanceAsync(
         bool accepted,
         CancellationToken cancellationToken = default) =>
         _workspace.SetRiskAcceptanceAsync(accepted, cancellationToken);
 
-    public Task<SettingsV2> RemoveRecentMediaAsync(
+    public Task<SettingsV3> RemoveRecentMediaAsync(
         Guid mediaId,
         CancellationToken cancellationToken = default) =>
         _workspace.RemoveRecentMediaAsync(mediaId, cancellationToken);
 
-    public Task<SettingsV2> ClearRecentMediaAsync(
+    public Task<SettingsV3> ClearRecentMediaAsync(
         CancellationToken cancellationToken = default) =>
         _workspace.ClearRecentMediaAsync(cancellationToken);
 
@@ -255,11 +288,11 @@ public sealed class WallpaperApplicationService :
         CancellationToken cancellationToken = default) =>
         _workspace.RestoreOfficialAsync(cancellationToken);
 
-    public Task<SettingsV2> RestoreVersion1BackupAsync(
+    public Task<SettingsV3> RestoreVersion1BackupAsync(
         CancellationToken cancellationToken = default) =>
         _workspace.RestoreVersion1BackupAsync(cancellationToken);
 
-    public Task<SettingsV2> ResetWallpaperSettingsAsync(
+    public Task<SettingsV3> ResetWallpaperSettingsAsync(
         CancellationToken cancellationToken = default) =>
         _workspace.ResetAsync(cancellationToken);
 

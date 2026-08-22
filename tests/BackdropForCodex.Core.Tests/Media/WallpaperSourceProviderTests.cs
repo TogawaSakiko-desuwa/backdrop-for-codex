@@ -6,7 +6,7 @@ namespace BackdropForCodex.Core.Tests.Media;
 public sealed class WallpaperSourceProviderTests
 {
     [Fact]
-    public async Task AcquireLeaseAsyncPinsValidatedFinalFileWithoutNetworkEndpoint()
+    public async Task AcquireDirectMediaLeaseAsyncPinsValidatedFinalFileWithoutNetworkEndpoint()
     {
         var directoryPath = CreateTemporaryDirectory();
         try
@@ -14,7 +14,7 @@ public sealed class WallpaperSourceProviderTests
             var mediaPath = await CreatePngAsync(directoryPath, "private-wallpaper.png");
             var provider = new LocalFileWallpaperSourceProvider();
 
-            var lease = await provider.AcquireLeaseAsync(CreateReference(mediaPath));
+            var lease = await provider.AcquireDirectMediaLeaseAsync(CreateReference(mediaPath));
             try
             {
                 Assert.Equal(Path.GetFullPath(mediaPath), lease.ResolvedPath);
@@ -57,7 +57,7 @@ public sealed class WallpaperSourceProviderTests
     }
 
     [Fact]
-    public async Task AcquireLeaseAsyncValidatesThroughTheSinglePinnedStream()
+    public async Task AcquireDirectMediaLeaseAsyncValidatesThroughTheSinglePinnedStream()
     {
         var directoryPath = CreateTemporaryDirectory();
         try
@@ -66,7 +66,8 @@ public sealed class WallpaperSourceProviderTests
             var inspector = new RecordingStreamInspector();
             var provider = new LocalFileWallpaperSourceProvider(inspector);
 
-            await using var lease = await provider.AcquireLeaseAsync(CreateReference(mediaPath));
+            await using var lease = await provider
+                .AcquireDirectMediaLeaseAsync(CreateReference(mediaPath));
 
             Assert.Equal(1, inspector.CallCount);
             Assert.Equal(MediaKind.Image, lease.Reference.LastKnownKind);
@@ -80,7 +81,7 @@ public sealed class WallpaperSourceProviderTests
     }
 
     [Fact]
-    public async Task ProviderDiscoveryResolutionAndAdvisoryValidationAreExplicitAndPathSafe()
+    public async Task ProviderDiscoveryAndResolutionAreExplicitValidatedAndPathSafe()
     {
         var directoryPath = CreateTemporaryDirectory();
         try
@@ -92,12 +93,19 @@ public sealed class WallpaperSourceProviderTests
 
             var discovered = await provider.DiscoverAsync();
             var resolved = await provider.ResolveAsync(reference);
-            var validated = await provider.ValidateAsync(reference);
 
             Assert.Empty(discovered);
-            Assert.Equal(Path.GetFullPath(mediaPath), resolved.SourceIdentifier);
-            Assert.Equal(MediaKind.Image, validated.Reference.LastKnownKind);
-            Assert.Equal(MediaFormat.Png, validated.Metadata.Format);
+            Assert.Equal(
+                Path.GetFullPath(mediaPath),
+                resolved.CanonicalReference.SourceIdentifier);
+            Assert.Equal(MediaKind.Image, resolved.CanonicalReference.LastKnownKind);
+            Assert.Equal(
+                WallpaperContentKind.Image,
+                resolved.Descriptor.ContentKind);
+            Assert.Equal(
+                WallpaperDeliveryKind.DirectMedia,
+                resolved.Descriptor.DeliveryKind);
+            Assert.Equal(MediaFormat.Png, resolved.DirectMediaMetadata?.Format);
             File.Delete(mediaPath);
             Assert.False(File.Exists(mediaPath));
         }
@@ -108,7 +116,7 @@ public sealed class WallpaperSourceProviderTests
     }
 
     [Fact]
-    public async Task AcquireLeaseAsyncRejectsNetworkAndUnsupportedSources()
+    public async Task AcquireDirectMediaLeaseAsyncRejectsNetworkAndUnsupportedSources()
     {
         var provider = new LocalFileWallpaperSourceProvider();
         var networkReference = CreateReference(@"\\server\share\wallpaper.png");
@@ -119,13 +127,13 @@ public sealed class WallpaperSourceProviderTests
         };
 
         await Assert.ThrowsAsync<MediaValidationException>(
-            () => provider.AcquireLeaseAsync(networkReference).AsTask());
+            () => provider.AcquireDirectMediaLeaseAsync(networkReference).AsTask());
         await Assert.ThrowsAsync<MediaSourceNotSupportedException>(
-            () => provider.AcquireLeaseAsync(workshopReference).AsTask());
+            () => provider.AcquireDirectMediaLeaseAsync(workshopReference).AsTask());
     }
 
     [Fact]
-    public async Task AcquireLeaseAsyncResolvesLocalSymbolicLinkToPinnedTargetWhenAvailable()
+    public async Task AcquireDirectMediaLeaseAsyncResolvesLocalSymbolicLinkToPinnedTargetWhenAvailable()
     {
         var directoryPath = CreateTemporaryDirectory();
         try
@@ -144,9 +152,15 @@ public sealed class WallpaperSourceProviderTests
             }
 
             var provider = new LocalFileWallpaperSourceProvider();
-            await using var lease = await provider.AcquireLeaseAsync(CreateReference(linkPath));
+            var resolution = await provider.ResolveAsync(CreateReference(linkPath));
+            await using var lease = await provider
+                .AcquireDirectMediaLeaseAsync(CreateReference(linkPath));
 
+            Assert.Equal(
+                Path.GetFullPath(targetPath),
+                resolution.CanonicalReference.SourceIdentifier);
             Assert.Equal(Path.GetFullPath(targetPath), lease.ResolvedPath);
+            Assert.Equal(lease.ResolvedPath, lease.Reference.SourceIdentifier);
             Assert.Throws<IOException>(() => File.Delete(targetPath));
         }
         finally
@@ -156,7 +170,7 @@ public sealed class WallpaperSourceProviderTests
     }
 
     [Fact]
-    public async Task AcquireLeaseAsyncAcceptsExtendedLengthLocalDosPath()
+    public async Task AcquireDirectMediaLeaseAsyncAcceptsExtendedLengthLocalDosPath()
     {
         var directoryPath = CreateTemporaryDirectory();
         try
@@ -165,7 +179,8 @@ public sealed class WallpaperSourceProviderTests
             var extendedPath = $@"\\?\{mediaPath}";
             var provider = new LocalFileWallpaperSourceProvider();
 
-            await using var lease = await provider.AcquireLeaseAsync(CreateReference(extendedPath));
+            await using var lease = await provider
+                .AcquireDirectMediaLeaseAsync(CreateReference(extendedPath));
 
             Assert.Equal(Path.GetFullPath(mediaPath), lease.ResolvedPath);
         }
@@ -173,6 +188,34 @@ public sealed class WallpaperSourceProviderTests
         {
             DeleteTemporaryDirectory(directoryPath);
         }
+    }
+
+    [Fact]
+    public async Task LocalFileLeaseRetriesFailedStreamCleanupUntilSuccess()
+    {
+        var stream = new FailOnceDisposable();
+        var reference = CreateReference(@"C:\Wallpapers\retryable.png");
+        var lease = new LocalFileWallpaperSourceProvider.LocalFileMediaLease(
+            reference,
+            reference.SourceIdentifier,
+            new LocalFileIdentity(1, 1),
+            new MediaFileMetadata(
+                MediaFormat.Png,
+                MediaKind.Image,
+                "image/png",
+                ContentLength: 1,
+                PixelWidth: 1,
+                PixelHeight: 1),
+            stream);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => lease.DisposeAsync().AsTask());
+        Assert.Equal(1, stream.DisposeAttempts);
+
+        await lease.DisposeAsync();
+        await lease.DisposeAsync();
+
+        Assert.Equal(2, stream.DisposeAttempts);
     }
 
     [Fact]
@@ -217,6 +260,20 @@ public sealed class WallpaperSourceProviderTests
         SourceIdentifier = mediaPath,
         LastKnownKind = MediaKind.None,
     };
+
+    private sealed class FailOnceDisposable : IDisposable
+    {
+        public int DisposeAttempts { get; private set; }
+
+        public void Dispose()
+        {
+            DisposeAttempts++;
+            if (DisposeAttempts == 1)
+            {
+                throw new InvalidOperationException("Synthetic stream cleanup failure.");
+            }
+        }
+    }
 
     private static async Task<string> CreatePngAsync(string directoryPath, string fileName)
     {

@@ -11,4 +11,5 @@ internal static class InjectionOwnershipContract
     internal const string StyleElementId = "codex-wallpaper-owned-style";
     internal const string FileInputElementId = "codex-wallpaper-owned-file-input";
     internal const string StateProperty = "__codexWallpaperOwnedState_v1";
+    internal const string PendingStreamStateProperty = "__codexWallpaperPendingStream_v1";
 }

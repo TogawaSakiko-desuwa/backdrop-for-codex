@@ -4,7 +4,7 @@ using BackdropForCodex.Core.Media;
 namespace BackdropForCodex.Core.Settings;
 
 /// <summary>
-/// Owns the Settings V2 document, strict V1 migration, and same-directory atomic publication.
+/// Owns the Settings V3 document, strict legacy migration, and same-directory atomic publication.
 /// </summary>
 public sealed class SettingsRepository : ISettingsRepository
 {
@@ -12,8 +12,11 @@ public sealed class SettingsRepository : ISettingsRepository
 
     public const string Version1BackupFileName = "settings.v1.backup.json";
 
+    public const string Version2BackupFileName = "settings.v2.backup.json";
+
     private readonly string _settingsPath;
     private readonly string _version1BackupPath;
+    private readonly string _version2BackupPath;
     private readonly SettingsDocumentCodec _documentCodec;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private int _disposeState;
@@ -30,14 +33,19 @@ public sealed class SettingsRepository : ISettingsRepository
                 "The settings location must have a parent directory.",
                 nameof(settingsPath));
         _version1BackupPath = Path.Combine(directoryPath, Version1BackupFileName);
+        _version2BackupPath = Path.Combine(directoryPath, Version2BackupFileName);
 
         if (string.Equals(
                 _settingsPath,
                 _version1BackupPath,
+                StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(
+                _settingsPath,
+                _version2BackupPath,
                 StringComparison.OrdinalIgnoreCase))
         {
             throw new ArgumentException(
-                "The settings document cannot use the reserved V1 backup name.",
+                "The settings document cannot use a reserved legacy backup name.",
                 nameof(settingsPath));
         }
 
@@ -50,6 +58,15 @@ public sealed class SettingsRepository : ISettingsRepository
         {
             ThrowIfDisposed();
             return File.Exists(_version1BackupPath);
+        }
+    }
+
+    public bool HasVersion2Backup
+    {
+        get
+        {
+            ThrowIfDisposed();
+            return File.Exists(_version2BackupPath);
         }
     }
 
@@ -69,8 +86,8 @@ public sealed class SettingsRepository : ISettingsRepository
         }
     }
 
-    public async Task<SettingsV2> SaveAsync(
-        SettingsV2 settings,
+    public async Task<SettingsV3> SaveAsync(
+        SettingsV3 settings,
         CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
@@ -142,7 +159,8 @@ public sealed class SettingsRepository : ISettingsRepository
 
             try
             {
-                var migrated = SettingsV1Migrator.Migrate(version1);
+                var migrated = SettingsV2Migrator.Migrate(
+                    SettingsV1Migrator.Migrate(version1));
                 await PublishAsync(migrated, cancellationToken).ConfigureAwait(false);
                 return new SettingsLoadResult.Ready(
                     migrated,
@@ -170,7 +188,7 @@ public sealed class SettingsRepository : ISettingsRepository
         }
     }
 
-    public async Task<SettingsV2> ResetAsync(
+    public async Task<SettingsV3> ResetAsync(
         CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
@@ -184,6 +202,7 @@ public sealed class SettingsRepository : ISettingsRepository
             {
                 DeleteFileIfPresent(_settingsPath, clearReadOnly: true);
                 DeleteFileIfPresent(_version1BackupPath, clearReadOnly: true);
+                DeleteFileIfPresent(_version2BackupPath, clearReadOnly: true);
             }
             catch (Exception exception) when (
                 exception is IOException or UnauthorizedAccessException)
@@ -193,7 +212,7 @@ public sealed class SettingsRepository : ISettingsRepository
                     exception);
             }
 
-            return SettingsV2.CreateDefault().Snapshot();
+            return SettingsV3.CreateDefault().Snapshot();
         }
         finally
         {
@@ -217,7 +236,7 @@ public sealed class SettingsRepository : ISettingsRepository
         if (!File.Exists(_settingsPath))
         {
             return new SettingsLoadResult.Ready(
-                SettingsV2.CreateDefault().Snapshot(),
+                SettingsV3.CreateDefault().Snapshot(),
                 MigratedFromVersion1: false);
         }
 
@@ -238,7 +257,7 @@ public sealed class SettingsRepository : ISettingsRepository
         catch (FileNotFoundException)
         {
             return new SettingsLoadResult.Ready(
-                SettingsV2.CreateDefault().Snapshot(),
+                SettingsV3.CreateDefault().Snapshot(),
                 MigratedFromVersion1: false);
         }
         catch (Exception exception) when (
@@ -257,18 +276,19 @@ public sealed class SettingsRepository : ISettingsRepository
             return Recovery(SettingsRecoveryReason.InvalidDocument);
         }
 
-        if (schemaVersion > SettingsV2.CurrentSchemaVersion)
+        if (schemaVersion > SettingsV3.CurrentSchemaVersion)
         {
             return new SettingsLoadResult.FutureReadOnly(
                 schemaVersion,
-                HasVersion1Backup);
+                HasVersion1Backup,
+                HasVersion2Backup);
         }
 
-        if (schemaVersion == SettingsV2.CurrentSchemaVersion)
+        if (schemaVersion == SettingsV3.CurrentSchemaVersion)
         {
             try
             {
-                var settings = _documentCodec.DeserializeVersion2(documentBytes);
+                var settings = _documentCodec.DeserializeVersion3(documentBytes);
                 return new SettingsLoadResult.Ready(
                     settings,
                     MigratedFromVersion1: false);
@@ -279,6 +299,70 @@ public sealed class SettingsRepository : ISettingsRepository
                 MediaReferenceValidationException)
             {
                 return Recovery(SettingsRecoveryReason.InvalidDocument);
+            }
+        }
+
+        if (schemaVersion == SettingsV2.CurrentSchemaVersion)
+        {
+            SettingsV2 version2;
+            try
+            {
+                version2 = _documentCodec.DeserializeVersion2(documentBytes);
+            }
+            catch (Exception exception) when (
+                exception is JsonException or
+                SettingsValidationException or
+                MediaReferenceValidationException)
+            {
+                return Recovery(SettingsRecoveryReason.InvalidDocument);
+            }
+
+            try
+            {
+                await EnsureVersion2BackupAsync(documentBytes, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Version2BackupConflictException)
+            {
+                return Recovery(SettingsRecoveryReason.Version2BackupConflict);
+            }
+            catch (Exception exception) when (
+                exception is IOException or UnauthorizedAccessException)
+            {
+                return Recovery(SettingsRecoveryReason.MigrationFailed);
+            }
+
+            try
+            {
+                var migrated = SettingsV2Migrator.Migrate(version2);
+                await PublishAsync(
+                        migrated,
+                        cancellationToken,
+                        ExpectedDocumentState.Present(documentBytes))
+                    .ConfigureAwait(false);
+                return new SettingsLoadResult.Ready(
+                    migrated,
+                    MigratedFromVersion1: false,
+                    MigratedFromVersion2: true);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception exception) when (
+                exception is IOException or
+                UnauthorizedAccessException or
+                JsonException or
+                SettingsValidationException or
+                MediaReferenceValidationException or
+                ArgumentException or
+                NotSupportedException)
+            {
+                return Recovery(SettingsRecoveryReason.MigrationFailed);
             }
         }
 
@@ -319,7 +403,8 @@ public sealed class SettingsRepository : ISettingsRepository
 
         try
         {
-            var migrated = SettingsV1Migrator.Migrate(version1);
+            var migrated = SettingsV2Migrator.Migrate(
+                SettingsV1Migrator.Migrate(version1));
             await PublishAsync(
                     migrated,
                     cancellationToken,
@@ -347,7 +432,10 @@ public sealed class SettingsRepository : ISettingsRepository
     }
 
     private SettingsLoadResult.RecoveryRequired Recovery(SettingsRecoveryReason reason) =>
-        new(reason, File.Exists(_version1BackupPath));
+        new(
+            reason,
+            File.Exists(_version1BackupPath),
+            File.Exists(_version2BackupPath));
 
     private async Task<ExpectedDocumentState> EnsureExistingDocumentCanBeReplacedAsync(
         CancellationToken cancellationToken)
@@ -363,13 +451,13 @@ public sealed class SettingsRepository : ISettingsRepository
             documentBytes = await ReadDocumentAsync(_settingsPath, cancellationToken)
                 .ConfigureAwait(false);
             var schemaVersion = SettingsDocumentCodec.ReadSchemaVersion(documentBytes);
-            if (schemaVersion != SettingsV2.CurrentSchemaVersion)
+            if (schemaVersion != SettingsV3.CurrentSchemaVersion)
             {
                 throw new SettingsRepositoryException(
-                    "Save refused because the current document is not a writable V2 document.");
+                    "Save refused because the current document is not a writable V3 document.");
             }
 
-            _ = _documentCodec.DeserializeVersion2(documentBytes);
+            _ = _documentCodec.DeserializeVersion3(documentBytes);
             return ExpectedDocumentState.Present(documentBytes);
         }
         catch (OperationCanceledException)
@@ -393,24 +481,55 @@ public sealed class SettingsRepository : ISettingsRepository
         }
     }
 
-    private async Task EnsureVersion1BackupAsync(
+    private Task EnsureVersion1BackupAsync(
         byte[] originalBytes,
+        CancellationToken cancellationToken) =>
+        EnsureLegacyBackupAsync(
+            originalBytes,
+            _version1BackupPath,
+            "V1",
+            innerException => innerException is null
+                ? new Version1BackupConflictException()
+                : new Version1BackupConflictException(innerException),
+            cancellationToken);
+
+    private Task EnsureVersion2BackupAsync(
+        byte[] originalBytes,
+        CancellationToken cancellationToken) =>
+        EnsureLegacyBackupAsync(
+            originalBytes,
+            _version2BackupPath,
+            "V2",
+            innerException => innerException is null
+                ? new Version2BackupConflictException()
+                : new Version2BackupConflictException(innerException),
+            cancellationToken);
+
+    private static async Task EnsureLegacyBackupAsync(
+        byte[] originalBytes,
+        string backupPath,
+        string versionLabel,
+        Func<Exception?, IOException> createConflictException,
         CancellationToken cancellationToken)
     {
-        if (File.Exists(_version1BackupPath))
+        if (File.Exists(backupPath))
         {
-            await VerifyExistingVersion1BackupAsync(originalBytes, cancellationToken)
+            await VerifyExistingLegacyBackupAsync(
+                    originalBytes,
+                    backupPath,
+                    createConflictException,
+                    cancellationToken)
                 .ConfigureAwait(false);
             return;
         }
 
-        var directoryPath = Path.GetDirectoryName(_version1BackupPath)
+        var directoryPath = Path.GetDirectoryName(backupPath)
             ?? throw new SettingsRepositoryException(
-                "The V1 backup location has no parent directory.");
+                $"The {versionLabel} backup location has no parent directory.");
         Directory.CreateDirectory(directoryPath);
         var temporaryPath = Path.Combine(
             directoryPath,
-            $".{Path.GetFileName(_version1BackupPath)}.{Guid.NewGuid():N}.tmp");
+            $".{Path.GetFileName(backupPath)}.{Guid.NewGuid():N}.tmp");
         try
         {
             await using (var stream = new FileStream(
@@ -432,22 +551,26 @@ public sealed class SettingsRepository : ISettingsRepository
                 .ConfigureAwait(false);
             if (!originalBytes.AsSpan().SequenceEqual(verificationBytes))
             {
-                throw new IOException("The V1 backup could not be verified.");
+                throw new IOException($"The {versionLabel} backup could not be verified.");
             }
 
             cancellationToken.ThrowIfCancellationRequested();
             try
             {
-                File.Move(temporaryPath, _version1BackupPath);
+                File.Move(temporaryPath, backupPath);
             }
-            catch (IOException) when (File.Exists(_version1BackupPath))
+            catch (IOException) when (File.Exists(backupPath))
             {
-                await VerifyExistingVersion1BackupAsync(originalBytes, cancellationToken)
+                await VerifyExistingLegacyBackupAsync(
+                        originalBytes,
+                        backupPath,
+                        createConflictException,
+                        cancellationToken)
                     .ConfigureAwait(false);
                 return;
             }
 
-            SetReadOnly(_version1BackupPath);
+            SetReadOnly(backupPath);
         }
         finally
         {
@@ -455,37 +578,39 @@ public sealed class SettingsRepository : ISettingsRepository
         }
     }
 
-    private async Task VerifyExistingVersion1BackupAsync(
+    private static async Task VerifyExistingLegacyBackupAsync(
         byte[] originalBytes,
+        string backupPath,
+        Func<Exception?, IOException> createConflictException,
         CancellationToken cancellationToken)
     {
         byte[] backupBytes;
         try
         {
             backupBytes = await ReadDocumentAsync(
-                    _version1BackupPath,
+                    backupPath,
                     cancellationToken)
                 .ConfigureAwait(false);
         }
         catch (SettingsDocumentTooLargeException exception)
         {
-            throw new Version1BackupConflictException(exception);
+            throw createConflictException(exception);
         }
 
         if (!originalBytes.AsSpan().SequenceEqual(backupBytes))
         {
-            throw new Version1BackupConflictException();
+            throw createConflictException(null);
         }
 
-        SetReadOnly(_version1BackupPath);
+        SetReadOnly(backupPath);
     }
 
     private async Task PublishAsync(
-        SettingsV2 settings,
+        SettingsV3 settings,
         CancellationToken cancellationToken,
         ExpectedDocumentState? expectedDocument = null)
     {
-        var documentBytes = _documentCodec.SerializeVersion2(settings);
+        var documentBytes = _documentCodec.SerializeVersion3(settings);
         var directoryPath = Path.GetDirectoryName(_settingsPath)
             ?? throw new SettingsRepositoryException(
                 "The settings location has no parent directory.");
@@ -637,7 +762,7 @@ public sealed class SettingsRepository : ISettingsRepository
 
         if ((File.GetAttributes(path) & FileAttributes.ReadOnly) == 0)
         {
-            throw new IOException("The V1 backup could not be marked read-only.");
+            throw new IOException("The legacy settings backup could not be marked read-only.");
         }
     }
 
@@ -719,6 +844,18 @@ public sealed class SettingsRepository : ISettingsRepository
 
         internal Version1BackupConflictException(Exception innerException)
             : base("The existing V1 backup does not match the source document.", innerException)
+        {
+        }
+    }
+
+    private sealed class Version2BackupConflictException : IOException
+    {
+        internal Version2BackupConflictException()
+        {
+        }
+
+        internal Version2BackupConflictException(Exception innerException)
+            : base("The existing V2 backup does not match the source document.", innerException)
         {
         }
     }

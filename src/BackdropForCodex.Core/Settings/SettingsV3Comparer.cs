@@ -3,15 +3,15 @@ using BackdropForCodex.Core.Media;
 namespace BackdropForCodex.Core.Settings;
 
 /// <summary>
-/// Defines the three intentionally different equality boundaries used by the V2 workspace.
+/// Defines the three intentionally different equality boundaries used by the V3 workspace.
 /// </summary>
-public static class SettingsV2Comparer
+public static class SettingsV3Comparer
 {
     /// <summary>
-    /// Compares every durable schema-two value. Collection order is significant except for
+    /// Compares every durable schema-three value. Collection order is significant except for
     /// region bindings, whose serialized meaning is a mapping.
     /// </summary>
-    public static bool DurableEquals(SettingsV2? left, SettingsV2? right)
+    public static bool DurableEquals(SettingsV3? left, SettingsV3? right)
     {
         if (ReferenceEquals(left, right))
         {
@@ -40,7 +40,7 @@ public static class SettingsV2Comparer
     /// recent-media ordering, and the deprecated compatibility marker are persisted
     /// independently and therefore do not make the wallpaper draft dirty.
     /// </summary>
-    public static bool UiDirtyEquals(SettingsV2? left, SettingsV2? right)
+    public static bool UiDirtyEquals(SettingsV3? left, SettingsV3? right)
     {
         if (ReferenceEquals(left, right))
         {
@@ -63,7 +63,7 @@ public static class SettingsV2Comparer
     /// identifiers and future-facing settings are deliberately excluded. Any two empty
     /// Global profiles are equivalent because both produce the official Codex background.
     /// </summary>
-    public static bool RuntimeEquivalent(SettingsV2? left, SettingsV2? right)
+    public static bool RuntimeEquivalent(SettingsV3? left, SettingsV3? right)
     {
         if (ReferenceEquals(left, right))
         {
@@ -158,7 +158,7 @@ public static class SettingsV2Comparer
     }
 
     private static bool TryResolveGlobalSurface(
-        SettingsV2 settings,
+        SettingsV3 settings,
         out WallpaperProfile? profile,
         out MediaReference? media)
     {
@@ -195,7 +195,8 @@ public static class SettingsV2Comparer
     private static bool MediaRuntimeEquals(MediaReference left, MediaReference right)
     {
         if (left.SourceKind != right.SourceKind ||
-            left.LastKnownKind != right.LastKnownKind)
+            left.LastKnownKind != right.LastKnownKind ||
+            left.LastKnownContentKind != right.LastKnownContentKind)
         {
             return false;
         }
@@ -211,7 +212,7 @@ public static class SettingsV2Comparer
     }
 
 #pragma warning disable CS0618 // Equality must include the deprecated durable field.
-    private static string? GetLastCompatibilityProfileId(SettingsV2 settings) =>
+    private static string? GetLastCompatibilityProfileId(SettingsV3 settings) =>
         settings.LastCompatibilityProfileId;
 #pragma warning restore CS0618
 }

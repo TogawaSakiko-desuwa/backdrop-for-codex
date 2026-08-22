@@ -9,16 +9,18 @@ using BackdropForCodex.Core.Settings;
 namespace BackdropForCodex.App.ViewModels;
 
 /// <summary>
-/// A path-minimizing projection of a durable wallpaper profile for the profile strip.
-/// The full local path is retained only for the safe thumbnail converter and is never
-/// included in accessible names or other user-facing text.
+/// A source-aware projection of a durable wallpaper profile for the profile strip. Provider
+/// identifiers are retained as immutable references and are never included in accessible names.
+/// A local path is exposed separately only for the current thumbnail converter.
 /// </summary>
 public sealed record WallpaperProfileCardItem
 {
     internal WallpaperProfileCardItem(
         Guid profileId,
         string name,
+        string displayName,
         Guid? mediaId,
+        MediaReference? mediaReference,
         string? previewPath,
         MediaKind mediaKind,
         bool isMissing,
@@ -29,7 +31,9 @@ public sealed record WallpaperProfileCardItem
     {
         ProfileId = profileId;
         Name = name;
+        DisplayName = displayName;
         MediaId = mediaId;
+        _mediaReference = mediaReference?.Snapshot();
         PreviewPath = previewPath;
         MediaKind = mediaKind;
         IsMissing = isMissing;
@@ -43,7 +47,13 @@ public sealed record WallpaperProfileCardItem
 
     public string Name { get; }
 
+    public string DisplayName { get; }
+
     public Guid? MediaId { get; }
+
+    private readonly MediaReference? _mediaReference;
+
+    public MediaReference? MediaReference => _mediaReference?.Snapshot();
 
     /// <summary>
     /// Local path consumed only by <see cref="Converters.MediaThumbnailConverter"/>.
@@ -86,20 +96,22 @@ public sealed class WallpaperProfileCardProjection
         ISafeMediaPreviewService? previewMedia = null)
     {
         _text = text ?? throw new ArgumentNullException(nameof(text));
-        _previewMedia = previewMedia ?? SafeMediaPreviewService.Shared;
+        _previewMedia = previewMedia ?? AppWallpaperSources.Preview;
     }
 
-    public IReadOnlyList<WallpaperProfileCardItem> CreateItems(SettingsV2 settings)
+    public IReadOnlyList<WallpaperProfileCardItem> CreateItems(SettingsV3 settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
         var snapshot = settings.CreateSnapshot();
 
         var mediaById = snapshot.MediaCatalog.ToDictionary(media => media.MediaId);
         var availabilityByMediaId = new Dictionary<Guid, bool>();
+        var globalProfileId = snapshot.RegionBindings[SemanticRegion.Global];
         var items = snapshot.Profiles
             .Select(
                 profile => CreateItem(
                     profile,
+                    profile.ProfileId == globalProfileId,
                     mediaById,
                     availabilityByMediaId))
             .ToArray();
@@ -108,15 +120,22 @@ public sealed class WallpaperProfileCardProjection
 
     private WallpaperProfileCardItem CreateItem(
         WallpaperProfile profile,
+        bool isGlobalProfile,
         Dictionary<Guid, MediaReference> mediaById,
         Dictionary<Guid, bool> availabilityByMediaId)
     {
+        var displayName = isGlobalProfile &&
+            string.Equals(profile.Name, "Global", StringComparison.Ordinal)
+                ? _text.GetStringOrFallback("Profile_DefaultName", "Default")
+                : profile.Name;
         if (profile.MediaId is not { } mediaId)
         {
-            var official = Text("Profile_Official", "Official background");
+            var official = _text.GetStringOrFallback("Profile_Official", "Official background");
             return CreateCard(
                 profile,
+                displayName,
                 mediaId: null,
+                mediaReference: null,
                 previewPath: null,
                 mediaKind: MediaKind.None,
                 isMissing: false,
@@ -129,15 +148,15 @@ public sealed class WallpaperProfileCardProjection
             ? media.SourceIdentifier
             : null;
         var isMissing =
-            previewPath is not null &&
-            !IsAvailable(mediaId, previewPath, availabilityByMediaId);
+            media.LastKnownKind is MediaKind.Image or MediaKind.Video &&
+            !IsAvailable(media, availabilityByMediaId);
         var subtitle = isMissing
-            ? Text("Profile_MediaMissing", "Media missing")
+            ? _text.GetStringOrFallback("Profile_MediaMissing", "Media missing")
             : media.LastKnownKind switch
             {
-                MediaKind.Image => Text("Media_Image", "Image"),
-                MediaKind.Video => Text("Media_Video", "Video"),
-                _ => Text("Profile_Media", "Media"),
+                MediaKind.Image => _text.GetStringOrFallback("Media_Image", "Image"),
+                MediaKind.Video => _text.GetStringOrFallback("Media_Video", "Video"),
+                _ => _text.GetStringOrFallback("Profile_Media", "Media"),
             };
         var mediaDisplayName = previewPath is null
             ? subtitle
@@ -145,7 +164,9 @@ public sealed class WallpaperProfileCardProjection
 
         return CreateCard(
             profile,
+            displayName,
             mediaId,
+            media,
             previewPath,
             media.LastKnownKind,
             isMissing,
@@ -154,43 +175,47 @@ public sealed class WallpaperProfileCardProjection
     }
 
     private bool IsAvailable(
-        Guid mediaId,
-        string previewPath,
+        MediaReference reference,
         Dictionary<Guid, bool> availabilityByMediaId)
     {
+        var mediaId = reference.MediaId;
         if (availabilityByMediaId.TryGetValue(mediaId, out var isAvailable))
         {
             return isAvailable;
         }
 
-        isAvailable = _previewMedia.IsAvailable(previewPath);
+        isAvailable = _previewMedia.IsAvailable(reference);
         availabilityByMediaId.Add(mediaId, isAvailable);
         return isAvailable;
     }
 
     private WallpaperProfileCardItem CreateCard(
         WallpaperProfile profile,
+        string displayName,
         Guid? mediaId,
+        MediaReference? mediaReference,
         string? previewPath,
         MediaKind mediaKind,
         bool isMissing,
         string mediaDisplayName,
         string subtitle)
     {
-        var automationName = Format(
+        var automationName = FormatLocalized(
             "Profile_AutomationName",
             "{0}, {1}",
-            profile.Name,
+            displayName,
             subtitle);
-        var actionsAutomationName = Format(
+        var actionsAutomationName = FormatLocalized(
             "Profile_ActionsAutomationName",
             "More actions for {0}",
-            profile.Name);
+            displayName);
 
         return new WallpaperProfileCardItem(
             profile.ProfileId,
             profile.Name,
+            displayName,
             mediaId,
+            mediaReference,
             previewPath,
             mediaKind,
             isMissing,
@@ -200,17 +225,9 @@ public sealed class WallpaperProfileCardProjection
             actionsAutomationName);
     }
 
-    private string Text(string key, string fallback)
-    {
-        var value = _text.GetString(key);
-        return string.Equals(value, key, StringComparison.Ordinal)
-            ? fallback
-            : value;
-    }
-
-    private string Format(string key, string fallback, params object[] arguments) =>
+    private string FormatLocalized(string key, string fallback, params object[] arguments) =>
         string.Format(
             CultureInfo.CurrentCulture,
-            Text(key, fallback),
+            _text.GetStringOrFallback(key, fallback),
             arguments);
 }

@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using BackdropForCodex.Core.Codex;
+using BackdropForCodex.Core.Dynamic;
 using BackdropForCodex.Core.Runtime;
 
 namespace BackdropForCodex.App.Services.Diagnostics;
@@ -48,7 +49,8 @@ public sealed record DiagnosticCompatibilitySnapshot(
 public sealed record DiagnosticRuntimeSnapshot(
     WallpaperRuntimePhase Phase,
     bool IsActive,
-    bool IsPaused)
+    bool IsPaused,
+    DynamicWallpaperCapabilityReasonCode? DynamicReasonCode = null)
 {
     public static DiagnosticRuntimeSnapshot Idle { get; } = new(
         WallpaperRuntimePhase.Idle,
@@ -88,7 +90,8 @@ public interface IDiagnosticReportService
     DiagnosticRuntimeSnapshot CreateRuntimeSnapshot(
         WallpaperRuntimePhase phase,
         bool isActive,
-        bool isPaused);
+        bool isPaused,
+        WallpaperRuntimeError? runtimeError = null);
 
     DiagnosticCompatibilitySnapshot CreateCompatibilitySnapshot(
         WallpaperCompatibilitySnapshot compatibility);
@@ -118,14 +121,19 @@ public sealed class DiagnosticReportService : IDiagnosticReportService
     public DiagnosticRuntimeSnapshot CreateRuntimeSnapshot(
         WallpaperRuntimePhase phase,
         bool isActive,
-        bool isPaused)
+        bool isPaused,
+        WallpaperRuntimeError? runtimeError = null)
     {
         if (!Enum.IsDefined(phase))
         {
             throw new ArgumentOutOfRangeException(nameof(phase));
         }
 
-        return new DiagnosticRuntimeSnapshot(phase, isActive, isPaused);
+        return new DiagnosticRuntimeSnapshot(
+            phase,
+            isActive,
+            isPaused,
+            runtimeError?.DynamicReasonCode);
     }
 
     public DiagnosticCompatibilitySnapshot CreateCompatibilitySnapshot(

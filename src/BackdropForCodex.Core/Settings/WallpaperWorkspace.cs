@@ -81,9 +81,9 @@ public sealed record WallpaperWorkspaceError
 public sealed class WallpaperWorkspaceState
 {
     internal WallpaperWorkspaceState(
-        SettingsV2 draft,
-        SettingsV2 savedDesired,
-        SettingsV2? activeSnapshot,
+        SettingsV3 draft,
+        SettingsV3 savedDesired,
+        SettingsV3? activeSnapshot,
         WallpaperRuntimeSurface runtimeSurface,
         long latestRevision,
         WallpaperWorkspacePhase phase,
@@ -98,11 +98,11 @@ public sealed class WallpaperWorkspaceState
         Error = error;
     }
 
-    public SettingsV2 Draft { get; }
+    public SettingsV3 Draft { get; }
 
-    public SettingsV2 SavedDesired { get; }
+    public SettingsV3 SavedDesired { get; }
 
-    public SettingsV2? ActiveSnapshot { get; }
+    public SettingsV3? ActiveSnapshot { get; }
 
     public WallpaperRuntimeSurface RuntimeSurface { get; }
 
@@ -113,11 +113,11 @@ public sealed class WallpaperWorkspaceState
     public WallpaperWorkspaceError? Error { get; }
 
     public bool IsDraftDirty =>
-        !SettingsV2Comparer.UiDirtyEquals(Draft, SavedDesired);
+        !SettingsV3Comparer.UiDirtyEquals(Draft, SavedDesired);
 
     public bool IsSavedDesiredActive =>
         ActiveSnapshot is not null &&
-        SettingsV2Comparer.RuntimeEquivalent(SavedDesired, ActiveSnapshot);
+        SettingsV3Comparer.RuntimeEquivalent(SavedDesired, ActiveSnapshot);
 }
 
 /// <summary>
@@ -131,9 +131,9 @@ public sealed class WallpaperWorkspace
     private WallpaperWorkspaceState _state;
 
     public WallpaperWorkspace(
-        SettingsV2 loadedSettings,
+        SettingsV3 loadedSettings,
         WallpaperRuntimeSurface? initialSurface = null,
-        SettingsV2? activeSnapshot = null)
+        SettingsV3? activeSnapshot = null)
     {
         ArgumentNullException.ThrowIfNull(loadedSettings);
         var saved = loadedSettings.CreateSnapshot();
@@ -166,7 +166,7 @@ public sealed class WallpaperWorkspace
     /// <summary>
     /// Captures an additional deep snapshot suitable for an asynchronous Apply request.
     /// </summary>
-    public SettingsV2 CaptureDraft()
+    public SettingsV3 CaptureDraft()
     {
         lock (_stateLock)
         {
@@ -174,7 +174,7 @@ public sealed class WallpaperWorkspace
         }
     }
 
-    public void ReplaceDraft(SettingsV2 draft)
+    public void ReplaceDraft(SettingsV3 draft)
     {
         ArgumentNullException.ThrowIfNull(draft);
         var snapshot = draft.CreateSnapshot();
@@ -190,8 +190,8 @@ public sealed class WallpaperWorkspace
     /// between those two operations.
     /// </summary>
     public bool ReplaceDraftIfUnchanged(
-        SettingsV2 expectedDraft,
-        SettingsV2 replacementDraft)
+        SettingsV3 expectedDraft,
+        SettingsV3 replacementDraft)
     {
         ArgumentNullException.ThrowIfNull(expectedDraft);
         ArgumentNullException.ThrowIfNull(replacementDraft);
@@ -199,7 +199,7 @@ public sealed class WallpaperWorkspace
         var replacementSnapshot = replacementDraft.CreateSnapshot();
         lock (_stateLock)
         {
-            if (!SettingsV2Comparer.DurableEquals(
+            if (!SettingsV3Comparer.DurableEquals(
                     _state.Draft,
                     expectedSnapshot))
             {
@@ -268,7 +268,7 @@ public sealed class WallpaperWorkspace
     /// Records the atomic persistence commit point. A completed older save is still durable
     /// and therefore updates SavedDesired, but cannot replace newer progress or error state.
     /// </summary>
-    public bool CommitSavedDesired(SettingsV2 savedDesired, long revision)
+    public bool CommitSavedDesired(SettingsV3 savedDesired, long revision)
     {
         ArgumentNullException.ThrowIfNull(savedDesired);
         ValidateRevision(revision);
@@ -294,8 +294,8 @@ public sealed class WallpaperWorkspace
     /// The caller supplies the corresponding Draft so unsaved profile edits remain isolated.
     /// </summary>
     public void CommitIndependentSettings(
-        SettingsV2 savedDesired,
-        SettingsV2 draft)
+        SettingsV3 savedDesired,
+        SettingsV3 draft)
     {
         ArgumentNullException.ThrowIfNull(savedDesired);
         ArgumentNullException.ThrowIfNull(draft);
@@ -317,8 +317,8 @@ public sealed class WallpaperWorkspace
     /// persistence operation was awaiting I/O.
     /// </summary>
     internal void CommitIndependentSettings(
-        SettingsV2 savedDesired,
-        Func<SettingsV2, SettingsV2> updateDraft)
+        SettingsV3 savedDesired,
+        Func<SettingsV3, SettingsV3> updateDraft)
     {
         ArgumentNullException.ThrowIfNull(savedDesired);
         ArgumentNullException.ThrowIfNull(updateDraft);
@@ -338,7 +338,7 @@ public sealed class WallpaperWorkspace
     /// Commits an actually active snapshot. Stale revisions are ignored.
     /// </summary>
     public bool CommitActive(
-        SettingsV2 activeSnapshot,
+        SettingsV3 activeSnapshot,
         WallpaperRuntimeSurface runtimeSurface,
         long revision)
     {
@@ -355,7 +355,7 @@ public sealed class WallpaperWorkspace
                 return false;
             }
 
-            if (!SettingsV2Comparer.DurableEquals(
+            if (!SettingsV3Comparer.DurableEquals(
                     snapshot,
                     _state.SavedDesired))
             {
@@ -414,7 +414,7 @@ public sealed class WallpaperWorkspace
     /// observations cannot replace the latest command's progress or structured error.
     /// </summary>
     public void ReconcileRuntimeState(
-        SettingsV2? activeSnapshot,
+        SettingsV3? activeSnapshot,
         WallpaperRuntimeSurface runtimeSurface,
         long observedRevision,
         WallpaperWorkspacePhase phaseWhenLatest = WallpaperWorkspacePhase.Idle,
@@ -582,8 +582,7 @@ public sealed class WallpaperWorkspace
     }
 
     /// <summary>
-    /// Selects a canonical local media reference, reusing its durable identifier when the
-    /// normalized Windows path already exists. Orphaned catalog entries are retained.
+    /// Selects canonical local media while retaining the generalized provider-backed catalog.
     /// </summary>
     public MediaReference SelectLocalMedia(
         Guid profileId,
@@ -599,13 +598,34 @@ public sealed class WallpaperWorkspace
                 "Selected local media must have a validated image or video kind.");
         }
 
+        var displayName = Path.GetFileName(path);
         var candidate = new MediaReference
         {
             MediaId = Guid.CreateVersion7(),
             SourceKind = MediaSourceKind.LocalFile,
             SourceIdentifier = path,
             LastKnownKind = mediaKind,
-        }.Snapshot();
+            LastKnownContentKind = mediaKind == MediaKind.Image
+                ? WallpaperContentKind.Image
+                : WallpaperContentKind.Video,
+            LastKnownDisplayName = string.IsNullOrWhiteSpace(displayName)
+                ? "Wallpaper"
+                : displayName,
+        };
+
+        return SelectMedia(profileId, candidate);
+    }
+
+    /// <summary>
+    /// Selects a canonical provider source, reusing its durable identifier when that source is
+    /// already cataloged. The catalog entry and recents remain intact when its provider later
+    /// becomes unavailable, allowing re-resolution after reinstall or Workshop resubscription.
+    /// </summary>
+    public MediaReference SelectMedia(Guid profileId, MediaReference media)
+    {
+        ValidateProfileId(profileId, nameof(profileId));
+        ArgumentNullException.ThrowIfNull(media);
+        var candidate = SettingsV3.CreateVersion3MediaSnapshot(media);
 
         lock (_stateLock)
         {
@@ -614,11 +634,15 @@ public sealed class WallpaperWorkspace
             var mediaIndex = Array.FindIndex(
                 mediaCatalog,
                 media =>
-                    media.SourceKind == MediaSourceKind.LocalFile &&
+                    media.SourceKind == candidate.SourceKind &&
                     string.Equals(
                         media.SourceIdentifier,
                         candidate.SourceIdentifier,
-                        StringComparison.OrdinalIgnoreCase));
+                        candidate.SourceKind is
+                            MediaSourceKind.LocalFile or
+                            MediaSourceKind.WallpaperEngineLocalProject
+                            ? StringComparison.OrdinalIgnoreCase
+                            : StringComparison.Ordinal));
 
             MediaReference selected;
             if (mediaIndex >= 0)
@@ -626,7 +650,9 @@ public sealed class WallpaperWorkspace
                 selected = mediaCatalog[mediaIndex] with
                 {
                     SourceIdentifier = candidate.SourceIdentifier,
-                    LastKnownKind = mediaKind,
+                    LastKnownKind = candidate.LastKnownKind,
+                    LastKnownContentKind = candidate.LastKnownContentKind,
+                    LastKnownDisplayName = candidate.LastKnownDisplayName,
                 };
                 mediaCatalog[mediaIndex] = selected;
             }
@@ -645,7 +671,7 @@ public sealed class WallpaperWorkspace
                 .Concat(
                     _state.Draft.RecentMediaIds.Where(
                         mediaId => mediaId != selected.MediaId))
-                .Take(SettingsV2.MaximumRecentMediaIds)
+                .Take(SettingsV3.MaximumRecentMediaIds)
                 .ToArray();
 
             ReplaceDraftInsideLock(
@@ -676,9 +702,9 @@ public sealed class WallpaperWorkspace
 
     private static WallpaperWorkspaceState CopyState(
         WallpaperWorkspaceState source,
-        SettingsV2? draft = null,
-        SettingsV2? savedDesired = null,
-        SettingsV2? activeSnapshot = null,
+        SettingsV3? draft = null,
+        SettingsV3? savedDesired = null,
+        SettingsV3? activeSnapshot = null,
         bool replaceActiveSnapshot = false,
         WallpaperRuntimeSurface? runtimeSurface = null,
         long? latestRevision = null,
@@ -694,18 +720,18 @@ public sealed class WallpaperWorkspace
             phase ?? source.Phase,
             replaceError ? error : source.Error);
 
-    private void ReplaceDraftInsideLock(SettingsV2 draft)
+    private void ReplaceDraftInsideLock(SettingsV3 draft)
     {
         var snapshot = draft.CreateSnapshot();
         _state = CopyState(_state, draft: snapshot);
     }
 
-    private static WallpaperProfile FindProfile(SettingsV2 settings, Guid profileId) =>
+    private static WallpaperProfile FindProfile(SettingsV3 settings, Guid profileId) =>
         settings.Profiles.FirstOrDefault(profile => profile.ProfileId == profileId)
         ?? throw new KeyNotFoundException(
             $"Wallpaper profile '{profileId}' was not found.");
 
-    private static int FindProfileIndex(SettingsV2 settings, Guid profileId)
+    private static int FindProfileIndex(SettingsV3 settings, Guid profileId)
     {
         for (var index = 0; index < settings.Profiles.Count; index++)
         {
@@ -795,7 +821,7 @@ public sealed class WallpaperWorkspace
     }
 
     private static void ValidateActiveSurface(
-        SettingsV2? activeSnapshot,
+        SettingsV3? activeSnapshot,
         WallpaperRuntimeSurface runtimeSurface)
     {
         if (activeSnapshot is null)

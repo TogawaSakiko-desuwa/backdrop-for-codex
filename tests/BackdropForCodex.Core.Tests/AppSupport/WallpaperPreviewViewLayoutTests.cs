@@ -1,7 +1,10 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using BackdropForCodex.App.Services.Media;
 using BackdropForCodex.App.Views;
+using BackdropForCodex.Core.Media;
 using Xunit;
 
 namespace BackdropForCodex.Core.Tests.AppSupport;
@@ -9,6 +12,112 @@ namespace BackdropForCodex.Core.Tests.AppSupport;
 [Collection("Wpf")]
 public sealed class WallpaperPreviewViewLayoutTests
 {
+    [Fact]
+    public void WorkshopVideoUsesReferencePreviewBoundaryAndReleasesLease()
+    {
+        StaTest.Run(
+            () =>
+            {
+                var preview = new RecordingPreviewService();
+                var view = new WallpaperPreviewView(preview)
+                {
+                    MediaReference = new MediaReference
+                    {
+                        MediaId = Guid.CreateVersion7(),
+                        SourceKind = MediaSourceKind.WallpaperEngineWorkshopProject,
+                        SourceIdentifier = "123456",
+                        LastKnownKind = MediaKind.Video,
+                    },
+                };
+
+                view.RaiseEvent(
+                    new RoutedEventArgs(FrameworkElement.LoadedEvent, view));
+
+                var acquired = Assert.Single(preview.AcquiredReferences);
+                Assert.Equal(
+                    MediaSourceKind.WallpaperEngineWorkshopProject,
+                    acquired.SourceKind);
+                Assert.Equal("123456", acquired.SourceIdentifier);
+                Assert.Equal(0, preview.PathAcquireCount);
+                Assert.False(preview.LeaseDisposed);
+
+                view.ReleaseMedia();
+
+                Assert.True(preview.LeaseDisposed);
+            });
+    }
+
+    [Fact]
+    public void NonDirectReferenceShowsUnavailableStateWithoutPathPreview()
+    {
+        StaTest.Run(
+            () =>
+            {
+                var preview = new RecordingPreviewService();
+                var view = new WallpaperPreviewView(preview)
+                {
+                    MediaReference = new MediaReference
+                    {
+                        MediaId = Guid.CreateVersion7(),
+                        SourceKind = MediaSourceKind.WallpaperEngineWorkshopProject,
+                        SourceIdentifier = "123456",
+                        LastKnownKind = MediaKind.None,
+                    },
+                };
+
+                view.RaiseEvent(
+                    new RoutedEventArgs(FrameworkElement.LoadedEvent, view));
+
+                Assert.Equal(
+                    Visibility.Visible,
+                    FindElement(view, "UnavailablePreview").Visibility);
+                Assert.Empty(preview.AcquiredReferences);
+                Assert.Equal(0, preview.PathAcquireCount);
+                view.ReleaseMedia();
+            });
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void TypedProviderFailuresShowUnavailableState(bool rendererUnavailable)
+    {
+        StaTest.Run(
+            () =>
+            {
+                var descriptor = new WallpaperSourceDescriptor(
+                    MediaSourceKind.WallpaperEngineWorkshopProject,
+                    "123456",
+                    "Workshop scene",
+                    WallpaperContentKind.Scene,
+                    WallpaperDeliveryKind.WallpaperEngineWindow,
+                    WallpaperDeliveryCapabilities.DynamicFrames);
+                Exception failure = rendererUnavailable
+                    ? new WallpaperRendererUnavailableException(descriptor)
+                    : new WallpaperSourceCapabilityException(
+                        "The provider did not expose direct media capability.");
+                var preview = new ThrowingPreviewService(failure);
+                var view = new WallpaperPreviewView(preview)
+                {
+                    MediaReference = new MediaReference
+                    {
+                        MediaId = Guid.CreateVersion7(),
+                        SourceKind = MediaSourceKind.WallpaperEngineWorkshopProject,
+                        SourceIdentifier = "123456",
+                        LastKnownKind = MediaKind.Video,
+                    },
+                };
+
+                view.RaiseEvent(
+                    new RoutedEventArgs(FrameworkElement.LoadedEvent, view));
+
+                Assert.Equal(
+                    Visibility.Visible,
+                    FindElement(view, "UnavailablePreview").Visibility);
+                view.ReleaseMedia();
+            });
+    }
+
     [Fact]
     public void PreviewHost_FillsItsParentAndMaximizesTheVisibleCanvas()
     {
@@ -269,4 +378,103 @@ public sealed class WallpaperPreviewViewLayoutTests
         Rect HostBounds,
         Rect CardBounds,
         Rect SurfaceBounds);
+
+    private sealed class RecordingPreviewService : ISafeMediaPreviewService
+    {
+        public List<MediaReference> AcquiredReferences { get; } = [];
+
+        public int PathAcquireCount { get; private set; }
+
+        public bool LeaseDisposed { get; private set; }
+
+        public ISafeMediaPreviewLease Acquire(MediaReference reference)
+        {
+            AcquiredReferences.Add(reference.Snapshot());
+            return new RecordingPreviewLease(
+                () => LeaseDisposed = true);
+        }
+
+        public ISafeMediaPreviewLease Acquire(string mediaPath)
+        {
+            _ = mediaPath;
+            PathAcquireCount++;
+            throw new InvalidOperationException(
+                "Provider identifiers must not use the local-path preview overload.");
+        }
+
+        public bool IsAvailable(MediaReference reference)
+        {
+            _ = reference;
+            return true;
+        }
+
+        public bool IsAvailable(string mediaPath)
+        {
+            _ = mediaPath;
+            return true;
+        }
+    }
+
+    private sealed class ThrowingPreviewService(Exception failure)
+        : ISafeMediaPreviewService
+    {
+        public ISafeMediaPreviewLease Acquire(MediaReference reference)
+        {
+            _ = reference;
+            throw failure;
+        }
+
+        public ISafeMediaPreviewLease Acquire(string mediaPath)
+        {
+            _ = mediaPath;
+            throw failure;
+        }
+
+        public bool IsAvailable(MediaReference reference)
+        {
+            _ = reference;
+            return false;
+        }
+
+        public bool IsAvailable(string mediaPath)
+        {
+            _ = mediaPath;
+            return false;
+        }
+    }
+
+    private sealed class RecordingPreviewLease(Action onDispose)
+        : ISafeMediaPreviewLease
+    {
+        private bool _isDisposed;
+
+        public MediaFileMetadata Metadata { get; } =
+            new(MediaFormat.Mp4, MediaKind.Video, "video/mp4", 128);
+
+        public BitmapSource LoadBitmap(int decodePixelWidth)
+        {
+            _ = decodePixelWidth;
+            throw new InvalidOperationException();
+        }
+
+        public Uri CreateVideoSource() =>
+            new("file:///C:/resolved/workshop-preview.mp4");
+
+        public void Dispose()
+        {
+            if (_isDisposed)
+            {
+                return;
+            }
+
+            _isDisposed = true;
+            onDispose();
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            Dispose();
+            return ValueTask.CompletedTask;
+        }
+    }
 }

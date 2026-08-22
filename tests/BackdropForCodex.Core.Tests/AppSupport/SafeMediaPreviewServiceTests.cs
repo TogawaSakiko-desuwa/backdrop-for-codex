@@ -7,10 +7,30 @@ namespace BackdropForCodex.Core.Tests.AppSupport;
 public sealed class SafeMediaPreviewServiceTests
 {
     [Fact]
+    public void ApplicationCompositionSharesOneRegistryWithPreview()
+    {
+        Assert.Same(
+            AppWallpaperSources.Registry,
+            AppWallpaperSources.Preview.SourceRegistry);
+    }
+
+    [Fact]
+    public void ApplicationCompositionRegistersLocalAndWallpaperEngineNamespaces()
+    {
+        Assert.Equal(
+            [
+                MediaSourceKind.LocalFile,
+                MediaSourceKind.WallpaperEngineLocalProject,
+                MediaSourceKind.WallpaperEngineWorkshopProject,
+            ],
+            AppWallpaperSources.Registry.SourceKinds);
+    }
+
+    [Fact]
     public void Acquire_DelegatesToLocalProviderAndDisposesItsPinnedLease()
     {
         var provider = new RecordingSourceProvider();
-        var service = new SafeMediaPreviewService(provider);
+        var service = CreateService(provider);
 
         using (var lease = service.Acquire(@"C:\wallpapers\sky.png"))
         {
@@ -34,7 +54,7 @@ public sealed class SafeMediaPreviewServiceTests
         {
             Failure = new MediaReferenceValidationException("Invalid reference."),
         };
-        var service = new SafeMediaPreviewService(provider);
+        var service = CreateService(provider);
 
         var available = service.IsAvailable(@"C:\wallpapers\sky.png");
 
@@ -42,14 +62,69 @@ public sealed class SafeMediaPreviewServiceTests
     }
 
     [Fact]
-    public void Constructor_RejectsNonLocalProvider()
+    public void IsAvailable_MapsMissingWallpaperEngineProjectToUnavailable()
+    {
+        var provider = new RecordingSourceProvider
+        {
+            SourceKindOverride = MediaSourceKind.WallpaperEngineWorkshopProject,
+            Failure = new WallpaperEngineProjectUnavailableException(
+                MediaSourceKind.WallpaperEngineWorkshopProject,
+                WallpaperEngineProjectUnavailableReason.NotFound),
+        };
+        var service = CreateService(provider);
+        var reference = new MediaReference
+        {
+            MediaId = Guid.CreateVersion7(),
+            SourceKind = MediaSourceKind.WallpaperEngineWorkshopProject,
+            SourceIdentifier = "123456",
+            LastKnownKind = MediaKind.Video,
+        };
+
+        Assert.False(service.IsAvailable(reference));
+    }
+
+    [Fact]
+    public void IsAvailable_ReturnsFalseWhenLocalProviderIsNotRegistered()
     {
         var provider = new RecordingSourceProvider
         {
             SourceKindOverride = MediaSourceKind.WallpaperEngineLocalProject,
         };
+        var service = CreateService(provider);
 
-        Assert.Throws<ArgumentException>(() => new SafeMediaPreviewService(provider));
+        Assert.False(service.IsAvailable(@"C:\wallpapers\sky.png"));
+    }
+
+    [Fact]
+    public void Acquire_MediaReferenceRoutesWorkshopVideoThroughRegisteredProvider()
+    {
+        var provider = new RecordingSourceProvider
+        {
+            SourceKindOverride = MediaSourceKind.WallpaperEngineWorkshopProject,
+            Metadata = new MediaFileMetadata(
+                MediaFormat.Mp4,
+                MediaKind.Video,
+                "video/mp4",
+                128),
+        };
+        var service = CreateService(provider);
+        var reference = new MediaReference
+        {
+            MediaId = Guid.CreateVersion7(),
+            SourceKind = MediaSourceKind.WallpaperEngineWorkshopProject,
+            SourceIdentifier = "123456",
+            LastKnownKind = MediaKind.Video,
+        };
+
+        using var lease = service.Acquire(reference);
+
+        Assert.NotNull(provider.AcquiredReference);
+        Assert.Equal(reference.MediaId, provider.AcquiredReference.MediaId);
+        Assert.Equal(
+            MediaSourceKind.WallpaperEngineWorkshopProject,
+            provider.AcquiredReference.SourceKind);
+        Assert.Equal("123456", provider.AcquiredReference.SourceIdentifier);
+        Assert.Equal(MediaKind.Video, lease.Metadata.Kind);
     }
 
     [Theory]
@@ -89,13 +164,17 @@ public sealed class SafeMediaPreviewServiceTests
                 "image/png",
                 128),
         };
-        var service = new SafeMediaPreviewService(provider);
+        var service = CreateService(provider);
         using var lease = service.Acquire(@"C:\does-not-exist\wallpaper.png");
 
         Assert.Throws<MediaValidationException>(() => lease.LoadBitmap(112));
     }
 
-    private sealed class RecordingSourceProvider : IWallpaperSourceProvider
+    private static SafeMediaPreviewService CreateService(
+        IWallpaperSourceProvider provider) =>
+        new(new WallpaperSourceProviderRegistry([provider]));
+
+    private sealed class RecordingSourceProvider : IDirectMediaSourceProvider
     {
         public MediaSourceKind SourceKindOverride { get; init; } = MediaSourceKind.LocalFile;
 
@@ -110,7 +189,14 @@ public sealed class SafeMediaPreviewServiceTests
 
         public MediaSourceKind SourceKind => SourceKindOverride;
 
-        public ValueTask<IMediaLease> AcquireLeaseAsync(
+        public ValueTask<IReadOnlyList<WallpaperSourceDescriptor>> DiscoverAsync(
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return ValueTask.FromResult<IReadOnlyList<WallpaperSourceDescriptor>>([]);
+        }
+
+        public ValueTask<WallpaperSourceResolution> ResolveAsync(
             MediaReference reference,
             CancellationToken cancellationToken = default)
         {
@@ -120,8 +206,27 @@ public sealed class SafeMediaPreviewServiceTests
                 throw Failure;
             }
 
+            var snapshot = reference.Snapshot();
+            var descriptor = new WallpaperSourceDescriptor(
+                SourceKind,
+                snapshot.SourceIdentifier,
+                "Preview media",
+                Metadata.Kind == MediaKind.Video
+                    ? WallpaperContentKind.Video
+                    : WallpaperContentKind.Image,
+                WallpaperDeliveryKind.DirectMedia,
+                WallpaperDeliveryCapabilities.None);
+            return ValueTask.FromResult(
+                new WallpaperSourceResolution(snapshot, descriptor, Metadata));
+        }
+
+        public ValueTask<IDirectMediaLease> AcquireDirectMediaLeaseAsync(
+            MediaReference reference,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
             AcquiredReference = reference.Snapshot();
-            return ValueTask.FromResult<IMediaLease>(
+            return ValueTask.FromResult<IDirectMediaLease>(
                 new RecordingLease(
                     AcquiredReference,
                     Metadata,
@@ -132,7 +237,7 @@ public sealed class SafeMediaPreviewServiceTests
     private sealed class RecordingLease(
         MediaReference reference,
         MediaFileMetadata metadata,
-        Action onDispose) : IMediaLease
+        Action onDispose) : IDirectMediaLease
     {
         public MediaReference Reference { get; } = reference;
 

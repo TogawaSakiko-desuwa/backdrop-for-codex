@@ -11,7 +11,7 @@ public enum ThemeMode
 }
 
 /// <summary>
-/// Versioned UI-only preferences. Wallpaper settings are owned by the SettingsV2 workspace.
+/// Versioned UI-only preferences. Wallpaper settings are owned by the SettingsV3 workspace.
 /// </summary>
 public sealed record AppPreferencesV1
 {
@@ -22,6 +22,13 @@ public sealed record AppPreferencesV1
     public ThemeMode ThemeMode { get; init; } = ThemeMode.System;
 
     public bool HasShownTrayTip { get; init; }
+
+    /// <summary>
+    /// Records the machine-local acknowledgement that a third-party Web wallpaper may access the
+    /// network from Wallpaper Engine. Backdrop only captures pixels and does not forward scripts,
+    /// pointer input, or Codex content.
+    /// </summary>
+    public bool HasAcknowledgedWebWallpaperPrivacyNotice { get; init; }
 
     public static AppPreferencesV1 CreateDefault() => new();
 
@@ -44,6 +51,12 @@ public sealed record AppPreferencesV1
             throw new AppPreferencesValidationException("ThemeMode is not supported.");
         }
     }
+
+    public override string ToString() =>
+        $"{nameof(AppPreferencesV1)} {{ SchemaVersion = {SchemaVersion}, " +
+        $"ThemeMode = {ThemeMode}, HasShownTrayTip = {HasShownTrayTip}, " +
+        $"HasAcknowledgedWebWallpaperPrivacyNotice = " +
+        $"{HasAcknowledgedWebWallpaperPrivacyNotice} }}";
 }
 
 public sealed class AppPreferencesValidationException : Exception

@@ -52,6 +52,178 @@ public sealed class WallpaperInjectionGenerationMonitorTests
     }
 
     [Fact]
+    public void TryCaptureCompatibility_AtomicallyPublishesOneCoherentObservedGeneration()
+    {
+        var eventSender = new object();
+        var monitor = new WallpaperInjectionGenerationMonitor(
+            healthSource: null,
+            capabilitySource: null,
+            eventSender,
+            _ => Task.CompletedTask);
+        var previous = CompatibilityCapabilities.SecurityRejected();
+        var current = PresentationContractCatalog.CreateFullySupportedCapabilities();
+        var presentation = new PresentationContractSnapshot(
+            PresentationContractCatalog.CodexShellId,
+            ContractMatchState.Matched);
+        var observedEvents = new List<WallpaperInjectionCapabilitiesChangedEventArgs>();
+        var observedSnapshots = new List<WallpaperCompatibilitySnapshot>();
+        monitor.CaptureCapabilities(previous);
+        monitor.BeginCapabilityObservation(generation: 17);
+        monitor.CapabilitiesChanged += (sender, eventArgs) =>
+        {
+            Assert.Same(eventSender, sender);
+            observedEvents.Add(eventArgs);
+            observedSnapshots.Add(monitor.Compatibility);
+        };
+
+        var captured = monitor.TryCaptureCompatibility(
+            generation: 17,
+            presentation,
+            current);
+
+        Assert.True(captured);
+        Assert.Equal(presentation, monitor.Compatibility.Presentation);
+        Assert.Equal(current, monitor.Compatibility.Capabilities);
+        var observed = Assert.Single(observedEvents);
+        Assert.Equal(17, observed.Generation);
+        Assert.Equal(previous, observed.Previous);
+        Assert.Equal(current, observed.Current);
+        Assert.Equal(presentation, observed.PresentationContract);
+        var observedSnapshot = Assert.Single(observedSnapshots);
+        Assert.Equal(presentation, observedSnapshot.Presentation);
+        Assert.Equal(current, observedSnapshot.Capabilities);
+    }
+
+    [Fact]
+    public void TryCaptureCompatibility_IgnoresStaleAndSupersededGenerations()
+    {
+        var monitor = new WallpaperInjectionGenerationMonitor(
+            healthSource: null,
+            capabilitySource: null,
+            new object(),
+            _ => Task.CompletedTask);
+        var initial = CompatibilityCapabilities.SecurityRejected();
+        var accepted = PresentationContractCatalog.CreateFullySupportedCapabilities();
+        var stale = accepted.DowngradeWith(
+            CompatibilityCapabilities.AllUnavailable(
+                CompatibilityCapabilityReasonCode.StructuralProbeFailed));
+        var acceptedPresentation = new PresentationContractSnapshot(
+            PresentationContractCatalog.CodexShellId,
+            ContractMatchState.Matched);
+        var stalePresentation = PresentationContractSnapshot.NotEvaluated;
+        var observedEvents = new List<WallpaperInjectionCapabilitiesChangedEventArgs>();
+        monitor.CaptureCapabilities(initial);
+        monitor.BeginCapabilityObservation(generation: 21);
+        monitor.BeginCapabilityObservation(generation: 22);
+        monitor.CapabilitiesChanged += (_, eventArgs) => observedEvents.Add(eventArgs);
+
+        Assert.False(monitor.TryCaptureCompatibility(
+            generation: 21,
+            stalePresentation,
+            stale));
+        Assert.Equal(initial, monitor.Compatibility.Capabilities);
+        Assert.Equal(
+            PresentationContractSnapshot.NotEvaluated,
+            monitor.Compatibility.Presentation);
+
+        Assert.True(monitor.TryCaptureCompatibility(
+            generation: 22,
+            acceptedPresentation,
+            accepted));
+        Assert.False(monitor.TryCaptureCompatibility(
+            generation: 21,
+            stalePresentation,
+            stale));
+
+        Assert.Equal(accepted, monitor.Compatibility.Capabilities);
+        Assert.Equal(acceptedPresentation, monitor.Compatibility.Presentation);
+        Assert.Single(observedEvents);
+    }
+
+    [Fact]
+    public void TryCaptureCompatibility_LocksPresentationAndOnlyDowngradesWithinGeneration()
+    {
+        var monitor = new WallpaperInjectionGenerationMonitor(
+            healthSource: null,
+            capabilitySource: null,
+            new object(),
+            _ => Task.CompletedTask);
+        var matchedPresentation = new PresentationContractSnapshot(
+            PresentationContractCatalog.CodexShellId,
+            ContractMatchState.Matched);
+        var incomingFallbackPresentation = new PresentationContractSnapshot(
+            PresentationContractCatalog.GlobalBaselineId,
+            ContractMatchState.NoMatchUsingGlobalBaseline);
+        var fullySupported = PresentationContractCatalog.CreateFullySupportedCapabilities();
+        var degraded = PresentationContractCatalog.Observe(
+            matchedPresentation,
+            new PresentationEvidence(
+                GlobalStructure: true,
+                ShellStructure: true,
+                BackdropFilterSupported: false,
+                SelectorHasSupported: true));
+        var observedEvents = new List<WallpaperInjectionCapabilitiesChangedEventArgs>();
+        monitor.BeginCapabilityObservation(generation: 23);
+        monitor.CapabilitiesChanged += (_, eventArgs) => observedEvents.Add(eventArgs);
+
+        Assert.True(monitor.TryCaptureCompatibility(
+            generation: 23,
+            matchedPresentation,
+            fullySupported));
+        Assert.True(monitor.TryCaptureCompatibility(
+            generation: 23,
+            matchedPresentation,
+            degraded));
+        Assert.True(monitor.TryCaptureCompatibility(
+            generation: 23,
+            incomingFallbackPresentation,
+            fullySupported));
+
+        Assert.Equal(matchedPresentation, monitor.Compatibility.Presentation);
+        Assert.Equal(degraded, monitor.Compatibility.Capabilities);
+        Assert.False(monitor.Capabilities.Glass.IsAvailable);
+        Assert.Equal(2, observedEvents.Count);
+        Assert.Equal(fullySupported, observedEvents[1].Previous);
+        Assert.Equal(degraded, observedEvents[1].Current);
+        Assert.Equal(matchedPresentation, observedEvents[1].PresentationContract);
+    }
+
+    [Fact]
+    public void ClearActive_RejectsLateCompatibilityForClearedGenerationWithoutPublishing()
+    {
+        var monitor = new WallpaperInjectionGenerationMonitor(
+            healthSource: null,
+            capabilitySource: null,
+            new object(),
+            _ => Task.CompletedTask);
+        var presentation = new PresentationContractSnapshot(
+            PresentationContractCatalog.CodexShellId,
+            ContractMatchState.Matched);
+        var initial = PresentationContractCatalog.CreateFullySupportedCapabilities();
+        var lateDowngrade = CompatibilityCapabilities.AllUnavailable(
+            CompatibilityCapabilityReasonCode.StructuralProbeFailed);
+        var observedEvents = new List<WallpaperInjectionCapabilitiesChangedEventArgs>();
+        monitor.MarkActive(generation: 24);
+        monitor.BeginCapabilityObservation(generation: 24);
+        monitor.CapabilitiesChanged += (_, eventArgs) => observedEvents.Add(eventArgs);
+        Assert.True(monitor.TryCaptureCompatibility(
+            generation: 24,
+            presentation,
+            initial));
+
+        monitor.ClearActive();
+        var accepted = monitor.TryCaptureCompatibility(
+            generation: 24,
+            presentation,
+            lateDowngrade);
+
+        Assert.False(accepted);
+        Assert.Equal(presentation, monitor.Compatibility.Presentation);
+        Assert.Equal(initial, monitor.Compatibility.Capabilities);
+        Assert.Single(observedEvents);
+    }
+
+    [Fact]
     public void CapabilityObserverFailure_CannotInterruptOtherObservers()
     {
         var source = new FakeInjectionObservationSource();

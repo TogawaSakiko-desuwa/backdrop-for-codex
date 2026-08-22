@@ -1,0 +1,375 @@
+<UserControl x:Class="BackdropForCodex.App.Views.WallpaperRecentsSection"
+             x:ClassModifier="internal"
+             x:Name="Root"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:converters="clr-namespace:BackdropForCodex.App.Converters"
+             xmlns:localization="clr-namespace:BackdropForCodex.App.Services.Localization"
+             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+             Focusable="False"
+             Style="{DynamicResource WorkbenchRootStyle}">
+  <UserControl.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="/BackdropForCodex;component/Themes/WorkbenchTheme.xaml" />
+      </ResourceDictionary.MergedDictionaries>
+
+      <converters:MediaThumbnailConverter x:Key="RecentThumbnailConverter" />
+
+      <Style x:Key="RecentListItemStyle" TargetType="ListBoxItem">
+        <Setter Property="MinHeight" Value="48" />
+        <Setter Property="Margin" Value="4,2" />
+        <Setter Property="Padding" Value="8" />
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="FocusVisualStyle" Value="{DynamicResource WorkbenchFocusVisualStyle}" />
+        <Setter Property="AutomationProperties.Name" Value="{Binding DisplayName}" />
+        <Setter Property="Template">
+          <Setter.Value>
+            <ControlTemplate TargetType="ListBoxItem">
+              <Border x:Name="ItemSurface"
+                      Padding="{TemplateBinding Padding}"
+                      Background="{TemplateBinding Background}"
+                      BorderBrush="{TemplateBinding BorderBrush}"
+                      BorderThickness="{TemplateBinding BorderThickness}"
+                      CornerRadius="{DynamicResource WorkbenchRadius8}"
+                      SnapsToDevicePixels="True">
+                <Grid>
+                  <Border x:Name="SelectionRail"
+                          Width="3"
+                          Margin="0,6,0,6"
+                          HorizontalAlignment="Left"
+                          Background="{DynamicResource AccentFillColorDefaultBrush}"
+                          CornerRadius="2"
+                          Visibility="Collapsed" />
+                  <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                    VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                </Grid>
+              </Border>
+              <ControlTemplate.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                  <Setter TargetName="ItemSurface"
+                          Property="Background"
+                          Value="{DynamicResource ControlFillColorSecondaryBrush}" />
+                </Trigger>
+                <Trigger Property="IsSelected" Value="True">
+                  <Setter TargetName="ItemSurface"
+                          Property="Background"
+                          Value="{DynamicResource ControlFillColorSecondaryBrush}" />
+                  <Setter TargetName="SelectionRail" Property="Visibility" Value="Visible" />
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                  <Setter TargetName="ItemSurface" Property="Opacity" Value="0.55" />
+                </Trigger>
+              </ControlTemplate.Triggers>
+            </ControlTemplate>
+          </Setter.Value>
+        </Setter>
+        <Style.Triggers>
+          <DataTrigger Binding="{Binding IsCompact, ElementName=Root}" Value="True">
+            <Setter Property="Padding" Value="4" />
+          </DataTrigger>
+        </Style.Triggers>
+      </Style>
+
+      <Style x:Key="RecentRemoveButtonStyle"
+             TargetType="ui:Button"
+             BasedOn="{StaticResource WorkbenchIconButtonStyle}">
+        <Setter Property="Opacity" Value="1" />
+        <Setter Property="IsHitTestVisible" Value="True" />
+        <Style.Triggers>
+          <MultiDataTrigger>
+            <MultiDataTrigger.Conditions>
+              <Condition Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType={x:Type ListBoxItem}}}"
+                         Value="False" />
+              <Condition Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType={x:Type ListBoxItem}}}"
+                         Value="False" />
+              <Condition Binding="{Binding IsKeyboardFocusWithin, RelativeSource={RelativeSource AncestorType={x:Type ListBoxItem}}}"
+                         Value="False" />
+            </MultiDataTrigger.Conditions>
+            <Setter Property="Opacity" Value="0" />
+            <Setter Property="IsHitTestVisible" Value="False" />
+            <MultiDataTrigger.EnterActions>
+              <BeginStoryboard>
+                <Storyboard>
+                  <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                   From="1"
+                                   To="0"
+                                   Duration="0:0:0.12" />
+                </Storyboard>
+              </BeginStoryboard>
+            </MultiDataTrigger.EnterActions>
+            <MultiDataTrigger.ExitActions>
+              <BeginStoryboard>
+                <Storyboard>
+                  <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                   From="0"
+                                   To="1"
+                                   Duration="0:0:0.12" />
+                </Storyboard>
+              </BeginStoryboard>
+            </MultiDataTrigger.ExitActions>
+          </MultiDataTrigger>
+        </Style.Triggers>
+      </Style>
+
+      <DataTemplate x:Key="RecentPreviewTemplate">
+        <Border Width="32"
+                Height="32"
+                Background="{DynamicResource ControlFillColorSecondaryBrush}"
+                BorderThickness="0"
+                CornerRadius="{DynamicResource WorkbenchRadius8}"
+                ClipToBounds="True">
+          <Grid>
+            <Image x:Name="RecentThumbnail"
+                   Source="{Binding Path, Converter={StaticResource RecentThumbnailConverter}}"
+                   Stretch="UniformToFill"
+                   IsHitTestVisible="False" />
+            <ui:SymbolIcon Symbol="Image24"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center">
+              <ui:SymbolIcon.Style>
+                <Style TargetType="ui:SymbolIcon">
+                  <Setter Property="Visibility" Value="Collapsed" />
+                  <Style.Triggers>
+                    <MultiDataTrigger>
+                      <MultiDataTrigger.Conditions>
+                        <Condition Binding="{Binding ElementName=RecentThumbnail, Path=Source}"
+                                   Value="{x:Null}" />
+                        <Condition Binding="{Binding Kind}" Value="Image" />
+                        <Condition Binding="{Binding Exists}" Value="True" />
+                      </MultiDataTrigger.Conditions>
+                      <Setter Property="Visibility" Value="Visible" />
+                    </MultiDataTrigger>
+                  </Style.Triggers>
+                </Style>
+              </ui:SymbolIcon.Style>
+            </ui:SymbolIcon>
+            <ui:SymbolIcon Symbol="VideoClip24"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center">
+              <ui:SymbolIcon.Style>
+                <Style TargetType="ui:SymbolIcon">
+                  <Setter Property="Visibility" Value="Collapsed" />
+                  <Style.Triggers>
+                    <MultiDataTrigger>
+                      <MultiDataTrigger.Conditions>
+                        <Condition Binding="{Binding ContentKind}" Value="Video" />
+                        <Condition Binding="{Binding Exists}" Value="True" />
+                      </MultiDataTrigger.Conditions>
+                      <Setter Property="Visibility" Value="Visible" />
+                    </MultiDataTrigger>
+                  </Style.Triggers>
+                </Style>
+              </ui:SymbolIcon.Style>
+            </ui:SymbolIcon>
+            <ui:SymbolIcon Symbol="Apps24"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center">
+              <ui:SymbolIcon.Style>
+                <Style TargetType="ui:SymbolIcon">
+                  <Setter Property="Visibility" Value="Collapsed" />
+                  <Style.Triggers>
+                    <MultiDataTrigger>
+                      <MultiDataTrigger.Conditions>
+                        <Condition Binding="{Binding ContentKind}" Value="Scene" />
+                        <Condition Binding="{Binding Exists}" Value="True" />
+                      </MultiDataTrigger.Conditions>
+                      <Setter Property="Visibility" Value="Visible" />
+                    </MultiDataTrigger>
+                  </Style.Triggers>
+                </Style>
+              </ui:SymbolIcon.Style>
+            </ui:SymbolIcon>
+            <ui:SymbolIcon Symbol="Globe24"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center">
+              <ui:SymbolIcon.Style>
+                <Style TargetType="ui:SymbolIcon">
+                  <Setter Property="Visibility" Value="Collapsed" />
+                  <Style.Triggers>
+                    <MultiDataTrigger>
+                      <MultiDataTrigger.Conditions>
+                        <Condition Binding="{Binding ContentKind}" Value="Web" />
+                        <Condition Binding="{Binding Exists}" Value="True" />
+                      </MultiDataTrigger.Conditions>
+                      <Setter Property="Visibility" Value="Visible" />
+                    </MultiDataTrigger>
+                  </Style.Triggers>
+                </Style>
+              </ui:SymbolIcon.Style>
+            </ui:SymbolIcon>
+            <ui:SymbolIcon Symbol="ErrorCircle24"
+                           Foreground="{DynamicResource SystemFillColorCriticalBrush}"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center">
+              <ui:SymbolIcon.Style>
+                <Style TargetType="ui:SymbolIcon">
+                  <Setter Property="Visibility" Value="Collapsed" />
+                  <Style.Triggers>
+                    <DataTrigger Binding="{Binding Exists}" Value="False">
+                      <Setter Property="Visibility" Value="Visible" />
+                    </DataTrigger>
+                  </Style.Triggers>
+                </Style>
+              </ui:SymbolIcon.Style>
+            </ui:SymbolIcon>
+          </Grid>
+        </Border>
+      </DataTemplate>
+
+      <DataTemplate x:Key="ExpandedRecentTemplate">
+        <Grid>
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="36" />
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="32" />
+          </Grid.ColumnDefinitions>
+          <ContentControl Content="{Binding}"
+                          ContentTemplate="{StaticResource RecentPreviewTemplate}"
+                          IsHitTestVisible="False" />
+          <StackPanel Grid.Column="1"
+                      Margin="8,0,4,0"
+                      VerticalAlignment="Center"
+                      ToolTip="{Binding DisplayName}">
+            <TextBlock Text="{Binding DisplayName}"
+                       FontSize="{DynamicResource WorkbenchTypeBody}"
+                       FontWeight="SemiBold"
+                       TextTrimming="CharacterEllipsis" />
+            <TextBlock Margin="0,2,0,0"
+                       TextTrimming="CharacterEllipsis"
+                       TextWrapping="NoWrap">
+              <TextBlock.Style>
+                <Style TargetType="TextBlock"
+                       BasedOn="{StaticResource WorkbenchCaptionTextStyle}">
+                  <Setter Property="Text" Value="{localization:Loc Media_Image, Fallback=Image}" />
+                  <Style.Triggers>
+                    <DataTrigger Binding="{Binding ContentKind}" Value="Video">
+                      <Setter Property="Text"
+                              Value="{localization:Loc Media_Video, Fallback=Video}" />
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding ContentKind}" Value="Scene">
+                      <Setter Property="Text"
+                              Value="{localization:Loc Media_Scene, Fallback=Scene}" />
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding ContentKind}" Value="Web">
+                      <Setter Property="Text"
+                              Value="{localization:Loc Media_Web, Fallback=Web}" />
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding Exists}" Value="False">
+                      <Setter Property="Text"
+                              Value="{localization:Loc Hint_MissingMediaCompact, Fallback=Missing}" />
+                    </DataTrigger>
+                  </Style.Triggers>
+                </Style>
+              </TextBlock.Style>
+            </TextBlock>
+          </StackPanel>
+          <ui:Button Grid.Column="2"
+                     Width="32"
+                     Height="32"
+                     Padding="0"
+                     Style="{StaticResource RecentRemoveButtonStyle}"
+                     Command="{Binding RemoveRecentCommand, ElementName=Root}"
+                     CommandParameter="{Binding}"
+                     ToolTip="{localization:Loc Action_Remove, Fallback=Remove}"
+                     AutomationProperties.Name="{localization:Loc Action_Remove, Fallback=Remove}">
+            <ui:SymbolIcon Symbol="Dismiss16" />
+          </ui:Button>
+        </Grid>
+      </DataTemplate>
+
+      <DataTemplate x:Key="CompactRecentTemplate">
+        <ContentControl HorizontalAlignment="Center"
+                        Content="{Binding}"
+                        ContentTemplate="{StaticResource RecentPreviewTemplate}"
+                        ToolTip="{Binding DisplayName}" />
+      </DataTemplate>
+    </ResourceDictionary>
+  </UserControl.Resources>
+
+  <StackPanel>
+    <Grid x:Name="ExpandedRecentHeader" Margin="8,0,4,8">
+      <TextBlock Text="{localization:Loc Section_RecentMedia, Fallback='Recent media'}"
+                 Style="{DynamicResource WorkbenchRailSectionHeadingTextStyle}" />
+      <ui:Button Width="28"
+                 Height="28"
+                 Padding="0"
+                 HorizontalAlignment="Right"
+                 VerticalAlignment="Center"
+                 Command="{Binding ClearRecentsCommand, ElementName=Root}"
+                 ToolTip="{localization:Loc Action_ClearRecent, Fallback='Clear recent'}"
+                 AutomationProperties.Name="{localization:Loc Action_ClearRecent, Fallback='Clear recent'}">
+        <ui:Button.Style>
+          <Style TargetType="ui:Button"
+                 BasedOn="{StaticResource WorkbenchIconButtonStyle}">
+            <Style.Triggers>
+              <DataTrigger Binding="{Binding RecentItemsSource.Count, ElementName=Root}"
+                           Value="0">
+                <Setter Property="IsEnabled" Value="False" />
+              </DataTrigger>
+            </Style.Triggers>
+          </Style>
+        </ui:Button.Style>
+        <ui:SymbolIcon Symbol="Broom24" FontSize="15" />
+      </ui:Button>
+    </Grid>
+
+    <Border x:Name="CompactRecentHeader"
+            Height="32"
+            Margin="8,0,8,6"
+            Visibility="Collapsed"
+            ToolTip="{localization:Loc Section_RecentMedia, Fallback='Recent media'}">
+      <ui:SymbolIcon Symbol="History16"
+                     HorizontalAlignment="Center"
+                     VerticalAlignment="Center" />
+    </Border>
+
+    <TextBlock Margin="8,4,8,8"
+               Text="{localization:Loc Hint_NoRecentMedia, Fallback='Your recently used media will appear here.'}">
+      <TextBlock.Style>
+        <Style TargetType="TextBlock"
+               BasedOn="{StaticResource WorkbenchCaptionTextStyle}">
+          <Setter Property="Visibility" Value="Collapsed" />
+          <Style.Triggers>
+            <MultiDataTrigger>
+              <MultiDataTrigger.Conditions>
+                <Condition Binding="{Binding IsCompact, ElementName=Root}" Value="False" />
+                <Condition Binding="{Binding RecentItemsSource.Count, ElementName=Root}" Value="0" />
+              </MultiDataTrigger.Conditions>
+              <Setter Property="Visibility" Value="Visible" />
+            </MultiDataTrigger>
+          </Style.Triggers>
+        </Style>
+      </TextBlock.Style>
+    </TextBlock>
+
+    <ListBox x:Name="RecentList"
+             ItemsSource="{Binding RecentItemsSource, ElementName=Root}"
+             SelectedItem="{Binding SelectedRecentMedia, ElementName=Root, Mode=TwoWay}"
+             IsEnabled="{Binding CanChooseMedia, ElementName=Root}"
+             ItemContainerStyle="{StaticResource RecentListItemStyle}"
+             SelectionMode="Single"
+             VirtualizingPanel.IsVirtualizing="False"
+             AutomationProperties.Name="{localization:Loc Section_RecentMedia, Fallback='Recent media'}"
+             SelectionChanged="RecentList_SelectionChanged"
+             MouseDoubleClick="RecentList_MouseDoubleClick"
+             PreviewKeyDown="RecentList_PreviewKeyDown">
+      <ListBox.Style>
+        <Style TargetType="ListBox"
+               BasedOn="{StaticResource WorkbenchListBoxStyle}">
+          <Setter Property="ItemTemplate" Value="{StaticResource ExpandedRecentTemplate}" />
+          <Style.Triggers>
+            <DataTrigger Binding="{Binding IsCompact, ElementName=Root}" Value="True">
+              <Setter Property="ItemTemplate" Value="{StaticResource CompactRecentTemplate}" />
+            </DataTrigger>
+          </Style.Triggers>
+        </Style>
+      </ListBox.Style>
+    </ListBox>
+  </StackPanel>
+</UserControl>

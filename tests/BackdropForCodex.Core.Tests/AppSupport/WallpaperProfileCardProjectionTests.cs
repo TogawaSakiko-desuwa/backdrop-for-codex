@@ -104,6 +104,41 @@ public sealed class WallpaperProfileCardProjectionTests
     }
 
     [Fact]
+    public void CreateItemsRoutesWorkshopVideoAvailabilityByReference()
+    {
+        var media = new MediaReference
+        {
+            MediaId = Guid.CreateVersion7(),
+            SourceKind = MediaSourceKind.WallpaperEngineWorkshopProject,
+            SourceIdentifier = "123456",
+            LastKnownKind = MediaKind.Video,
+        };
+        var profile = WallpaperProfile.CreateDefault("Workshop") with
+        {
+            MediaId = media.MediaId,
+        };
+        var preview = new RecordingPreviewService(isAvailable: true);
+        var projection = new WallpaperProfileCardProjection(
+            new DictionaryTextProvider(),
+            preview);
+
+        var item = Assert.Single(
+            projection.CreateItems(
+                CreateSettings([profile], [media], profile.ProfileId)));
+
+        Assert.Null(item.PreviewPath);
+        Assert.True(item.IsVideo);
+        Assert.False(item.IsMissing);
+        var itemReference = Assert.IsType<MediaReference>(item.MediaReference);
+        Assert.Equal("123456", itemReference.SourceIdentifier);
+        var probed = Assert.Single(preview.ProbedReferences);
+        Assert.Equal(
+            MediaSourceKind.WallpaperEngineWorkshopProject,
+            probed.SourceKind);
+        Assert.Empty(preview.PathProbeCalls);
+    }
+
+    [Fact]
     public void CreateItemsUsesLocalizedAccessibleLabels()
     {
         var profile = WallpaperProfile.CreateDefault("工作");
@@ -124,6 +159,31 @@ public sealed class WallpaperProfileCardProjectionTests
 
         Assert.Equal("工作，官方背景", item.AutomationName);
         Assert.Equal("工作 的更多操作", item.ActionsAutomationName);
+    }
+
+    [Fact]
+    public void CreateItemsLocalizesTheDefaultProfileWithoutChangingItsStoredName()
+    {
+        var profile = WallpaperProfile.CreateDefault();
+        var text = new DictionaryTextProvider(
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["Profile_DefaultName"] = "默认方案",
+                ["Profile_Official"] = "官方背景",
+                ["Profile_AutomationName"] = "{0}，{1}",
+                ["Profile_ActionsAutomationName"] = "{0} 的更多操作",
+            });
+        var projection = new WallpaperProfileCardProjection(
+            text,
+            new RecordingPreviewService(isAvailable: true));
+
+        var item = Assert.Single(
+            projection.CreateItems(
+                CreateSettings([profile], [], profile.ProfileId)));
+
+        Assert.Equal("Global", item.Name);
+        Assert.Equal("默认方案", item.DisplayName);
+        Assert.Equal("默认方案，官方背景", item.AutomationName);
     }
 
     [Fact]
@@ -176,13 +236,13 @@ public sealed class WallpaperProfileCardProjectionTests
         var projection = new WallpaperProfileCardProjection(
             new DictionaryTextProvider(),
             new RecordingPreviewService(isAvailable: true));
-        var invalid = new SettingsV2();
+        var invalid = new SettingsV3();
 
         Assert.Throws<SettingsValidationException>(
             () => projection.CreateItems(invalid));
     }
 
-    private static SettingsV2 CreateSettings(
+    private static SettingsV3 CreateSettings(
         IReadOnlyList<WallpaperProfile> profiles,
         IReadOnlyList<MediaReference> media,
         Guid globalProfileId) =>
@@ -203,6 +263,7 @@ public sealed class WallpaperProfileCardProjectionTests
             values ?? new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 ["Profile_Official"] = "Official background",
+                ["Profile_DefaultName"] = "Default",
                 ["Profile_Media"] = "Media",
                 ["Profile_MediaMissing"] = "Media missing",
                 ["Profile_AutomationName"] = "{0}, {1}",
@@ -220,12 +281,28 @@ public sealed class WallpaperProfileCardProjectionTests
     {
         public List<string> ProbedPaths { get; } = [];
 
+        public List<string> PathProbeCalls { get; } = [];
+
+        public List<MediaReference> ProbedReferences { get; } = [];
+
+        public ISafeMediaPreviewLease Acquire(MediaReference reference) =>
+            Acquire(reference.SourceIdentifier);
+
         public ISafeMediaPreviewLease Acquire(string mediaPath) =>
             throw new NotSupportedException();
 
         public bool IsAvailable(string mediaPath)
         {
+            PathProbeCalls.Add(mediaPath);
             ProbedPaths.Add(mediaPath);
+            return isAvailable;
+        }
+
+        public bool IsAvailable(MediaReference reference)
+        {
+            var snapshot = reference.Snapshot();
+            ProbedReferences.Add(snapshot);
+            ProbedPaths.Add(snapshot.SourceIdentifier);
             return isAvailable;
         }
     }

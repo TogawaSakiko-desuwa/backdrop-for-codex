@@ -63,6 +63,10 @@ public interface IUserFacingErrorMapper
     UserFacingError Map(
         Exception exception,
         UserFacingOperation operation = UserFacingOperation.General);
+
+    UserFacingError Map(
+        WallpaperRuntimeError runtimeError,
+        UserFacingOperation operation = UserFacingOperation.General);
 }
 
 public sealed class UserFacingErrorMapper : IUserFacingErrorMapper
@@ -81,12 +85,54 @@ public sealed class UserFacingErrorMapper : IUserFacingErrorMapper
         ArgumentNullException.ThrowIfNull(exception);
         var error = Unwrap(exception);
         var code = MapCode(error, operation);
-        return new UserFacingError(
-            code,
-            _text.GetString("Error_Title"),
-            _text.GetString($"Error_{code}_Message"),
-            _text.GetString($"Error_{code}_Recovery"),
-            CanRetry(code));
+        return CreateError(code);
+    }
+
+    public UserFacingError Map(
+        WallpaperRuntimeError runtimeError,
+        UserFacingOperation operation = UserFacingOperation.General)
+    {
+        ArgumentNullException.ThrowIfNull(runtimeError);
+        var code = MapRuntimeCode(runtimeError, operation);
+        return CreateError(code);
+    }
+
+    private UserFacingError CreateError(UserFacingErrorCode code) => new(
+        code,
+        code == UserFacingErrorCode.CodexAlreadyRunning
+            ? _text.GetStringOrFallback(
+                "Error_CodexAlreadyRunning_Title",
+                _text.GetString("Error_Title"))
+            : _text.GetString("Error_Title"),
+        _text.GetString($"Error_{code}_Message"),
+        _text.GetString($"Error_{code}_Recovery"),
+        CanRetry(code));
+
+    private static UserFacingErrorCode MapRuntimeCode(
+        WallpaperRuntimeError error,
+        UserFacingOperation operation)
+    {
+        if (string.Equals(
+                error.ExceptionType,
+                typeof(CodexAlreadyRunningException).FullName,
+                StringComparison.Ordinal))
+        {
+            return UserFacingErrorCode.CodexAlreadyRunning;
+        }
+
+        return error.Code switch
+        {
+            "cdp-risk-not-accepted" => UserFacingErrorCode.RiskAcknowledgementRequired,
+            "media-lease-unavailable" => UserFacingErrorCode.MediaInvalid,
+            _ => operation switch
+            {
+                UserFacingOperation.ApplyWallpaper =>
+                    UserFacingErrorCode.WallpaperApplyFailed,
+                UserFacingOperation.RestoreWallpaper =>
+                    UserFacingErrorCode.WallpaperRestoreFailed,
+                _ => UserFacingErrorCode.Unexpected,
+            },
+        };
     }
 
     private static UserFacingErrorCode MapCode(
@@ -160,11 +206,6 @@ public sealed class UserFacingErrorMapper : IUserFacingErrorMapper
         if (exception is FutureSettingsVersionException)
         {
             return UserFacingErrorCode.WallpaperSettingsFutureVersion;
-        }
-
-        if (exception is SettingsProjectionException)
-        {
-            return UserFacingErrorCode.WallpaperSettingsUnsupportedFeatures;
         }
 
         if (exception is MediaValidationException)

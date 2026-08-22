@@ -10,7 +10,7 @@ public sealed class WallpaperWorkspaceTests
     [Fact]
     public void EditingDraftDoesNotChangeSavedOrActiveState()
     {
-        var loaded = SettingsV2.CreateDefault();
+        var loaded = SettingsV3.CreateDefault();
         var workspace = new WallpaperWorkspace(loaded);
         var saved = workspace.State.SavedDesired;
 
@@ -134,13 +134,17 @@ public sealed class WallpaperWorkspaceTests
         Assert.All(
             workspace.State.Draft.RegionBindings,
             binding => Assert.Equal(replacement.ProfileId, binding.Value));
-        Assert.Equal(media, Assert.Single(workspace.State.Draft.MediaCatalog));
+        var retainedMedia = Assert.Single(workspace.State.Draft.MediaCatalog);
+        Assert.Equal(media.MediaId, retainedMedia.MediaId);
+        Assert.Equal(media.SourceIdentifier, retainedMedia.SourceIdentifier);
+        Assert.Equal(WallpaperContentKind.Image, retainedMedia.LastKnownContentKind);
+        Assert.Equal("orphan-after-delete.png", retainedMedia.LastKnownDisplayName);
     }
 
     [Fact]
     public void DeleteRejectsFinalProfile()
     {
-        var settings = SettingsV2.CreateDefault();
+        var settings = SettingsV3.CreateDefault();
         var workspace = new WallpaperWorkspace(settings);
 
         Assert.Throws<InvalidOperationException>(
@@ -200,6 +204,8 @@ public sealed class WallpaperWorkspaceTests
             MediaKind.Image);
 
         Assert.Equal(selected.MediaId, reused.MediaId);
+        Assert.Equal(WallpaperContentKind.Image, reused.LastKnownContentKind);
+        Assert.Equal("same.png", reused.LastKnownDisplayName);
         Assert.Single(workspace.State.Draft.MediaCatalog);
         Assert.Equal(selected.MediaId, Assert.Single(workspace.State.Draft.RecentMediaIds));
         Assert.All(
@@ -217,9 +223,41 @@ public sealed class WallpaperWorkspaceTests
     }
 
     [Fact]
+    public void SelectMediaReusesStableWorkshopIdentityAndRefreshesLastKnownMetadata()
+    {
+        var workspace = new WallpaperWorkspace(SettingsV3.CreateDefault());
+        var profileId = Assert.Single(workspace.State.Draft.Profiles).ProfileId;
+        var first = new MediaReference
+        {
+            MediaId = Guid.CreateVersion7(),
+            SourceKind = MediaSourceKind.WallpaperEngineWorkshopProject,
+            SourceIdentifier = "00123456",
+            LastKnownContentKind = WallpaperContentKind.Scene,
+            LastKnownDisplayName = "Old title",
+        };
+        var refreshed = first with
+        {
+            MediaId = Guid.CreateVersion7(),
+            SourceIdentifier = "123456",
+            LastKnownDisplayName = "Updated title",
+        };
+
+        var selected = workspace.SelectMedia(profileId, first);
+        var reused = workspace.SelectMedia(profileId, refreshed);
+
+        Assert.Equal(selected.MediaId, reused.MediaId);
+        Assert.Equal("123456", reused.SourceIdentifier);
+        Assert.Equal(WallpaperContentKind.Scene, reused.LastKnownContentKind);
+        Assert.Equal("Updated title", reused.LastKnownDisplayName);
+        Assert.Equal(MediaKind.None, reused.LastKnownKind);
+        Assert.Single(workspace.State.Draft.MediaCatalog);
+        Assert.Equal(reused.MediaId, Assert.Single(workspace.State.Draft.RecentMediaIds));
+    }
+
+    [Fact]
     public void StaleRuntimeTransitionsCannotOverwriteLatestRevision()
     {
-        var workspace = new WallpaperWorkspace(SettingsV2.CreateDefault());
+        var workspace = new WallpaperWorkspace(SettingsV3.CreateDefault());
         var firstSaved = workspace.CaptureDraft();
         workspace.BeginRevision(1);
         workspace.BeginRevision(2);
@@ -246,7 +284,7 @@ public sealed class WallpaperWorkspaceTests
 
         Assert.NotSame(active, workspace.State.ActiveSnapshot);
         Assert.True(
-            SettingsV2Comparer.DurableEquals(
+            SettingsV3Comparer.DurableEquals(
                 active,
                 workspace.State.ActiveSnapshot));
         Assert.Equal(
@@ -258,20 +296,20 @@ public sealed class WallpaperWorkspaceTests
     [Fact]
     public void CaptureDraftIsDeeplyIsolatedFromLaterEdits()
     {
-        var workspace = new WallpaperWorkspace(SettingsV2.CreateDefault());
+        var workspace = new WallpaperWorkspace(SettingsV3.CreateDefault());
 
         var captured = workspace.CaptureDraft();
         workspace.CreateProfile();
 
         Assert.Single(captured.Profiles);
         Assert.Equal(2, workspace.State.Draft.Profiles.Count);
-        Assert.False(SettingsV2Comparer.UiDirtyEquals(captured, workspace.State.Draft));
+        Assert.False(SettingsV3Comparer.UiDirtyEquals(captured, workspace.State.Draft));
     }
 
     [Fact]
     public void ActiveCommitMustUseTheCanonicalSavedSnapshot()
     {
-        var workspace = new WallpaperWorkspace(SettingsV2.CreateDefault());
+        var workspace = new WallpaperWorkspace(SettingsV3.CreateDefault());
         workspace.CreateProfile();
         var unsavedDraft = workspace.CaptureDraft();
         workspace.BeginRevision(1);
@@ -289,7 +327,7 @@ public sealed class WallpaperWorkspaceTests
     [Fact]
     public void IndependentMetadataCommitDoesNotClobberWallpaperDraft()
     {
-        var workspace = new WallpaperWorkspace(SettingsV2.CreateDefault());
+        var workspace = new WallpaperWorkspace(SettingsV3.CreateDefault());
         var created = workspace.CreateProfile();
         var saved = (workspace.State.SavedDesired with
         {
@@ -316,7 +354,7 @@ public sealed class WallpaperWorkspaceTests
     [Fact]
     public void ConditionalDraftReplacementIsAtomicAgainstAChangedDraft()
     {
-        var workspace = new WallpaperWorkspace(SettingsV2.CreateDefault());
+        var workspace = new WallpaperWorkspace(SettingsV3.CreateDefault());
         var expected = workspace.CaptureDraft();
         var replacement = workspace.CreateProfile().ProfileId;
         var canonical = workspace.CaptureDraft();
@@ -331,12 +369,12 @@ public sealed class WallpaperWorkspaceTests
                 profile => profile.ProfileId == replacement).Name);
     }
 
-    private static SettingsV2 CreateSettings(
+    private static SettingsV3 CreateSettings(
         IReadOnlyList<WallpaperProfile> profiles,
         IReadOnlyList<MediaReference>? mediaCatalog = null,
         Guid? globalProfileId = null,
         IReadOnlyDictionary<SemanticRegion, Guid>? bindings = null) =>
-        new SettingsV2
+        new SettingsV3
         {
             Profiles = profiles,
             MediaCatalog = mediaCatalog ?? Array.Empty<MediaReference>(),

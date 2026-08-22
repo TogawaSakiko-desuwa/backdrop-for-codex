@@ -11,33 +11,79 @@ using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace BackdropForCodex.App.ViewModels;
 
-public sealed record RecentMediaItem(
-    string Path,
-    string DisplayName,
-    MediaKind Kind,
-    bool Exists)
+public sealed record RecentMediaItem
 {
-    public Guid MediaId { get; init; }
+    private readonly MediaReference _reference;
+
+    public RecentMediaItem(
+        MediaReference reference,
+        string displayName,
+        bool exists)
+    {
+        ArgumentNullException.ThrowIfNull(reference);
+        _reference = reference.Snapshot();
+        DisplayName = displayName;
+        Exists = exists;
+    }
+
+    public MediaReference Reference => _reference.Snapshot();
+
+    public Guid MediaId => _reference.MediaId;
+
+    /// <summary>
+    /// Local thumbnail compatibility path. External provider identifiers intentionally do not
+    /// flow through path-based thumbnail conversion.
+    /// </summary>
+    public string? Path => _reference.SourceKind == MediaSourceKind.LocalFile
+        ? _reference.SourceIdentifier
+        : null;
+
+    public string DisplayName { get; }
+
+    public MediaKind Kind => _reference.LastKnownKind;
+
+    public WallpaperContentKind ContentKind =>
+        _reference.LastKnownContentKind switch
+        {
+            WallpaperContentKind.Image or
+            WallpaperContentKind.Video or
+            WallpaperContentKind.Scene or
+            WallpaperContentKind.Web => _reference.LastKnownContentKind,
+            _ => Kind switch
+            {
+                MediaKind.Image => WallpaperContentKind.Image,
+                MediaKind.Video => WallpaperContentKind.Video,
+                _ => WallpaperContentKind.Unknown,
+            },
+        };
+
+    public bool Exists { get; }
 }
 
 public sealed record WallpaperSettingsInitializationResult(
-    SettingsV2 Settings,
+    SettingsV3 Settings,
     Exception? Error);
 
 /// <summary>
-/// Projects the canonical V2 workspace into settings-management UI state.
+/// Projects the canonical V3 workspace into settings-management UI state.
 /// Persistence and activation remain serialized by <see cref="IWallpaperApplicationService"/>.
 /// </summary>
-public sealed class SettingsManagementViewModel : ObservableObject, IDisposable
+public sealed class SettingsManagementViewModel
+    : ObservableObject,
+      IDisposable,
+      IWallpaperEngineInstallationSelectionService
 {
     private readonly IWallpaperApplicationService _wallpaper;
     private readonly IAppPreferencesStore _preferencesStore;
     private readonly WallpaperEditorViewModel _editor;
     private readonly ISafeMediaPreviewService _previewMedia;
+    private readonly IWallpaperSourceProviderRegistry _sourceRegistry;
+    private readonly WallpaperEngineInstallationPreferenceCoordinator?
+        _wallpaperEngineInstallationPreferences;
     private readonly SynchronizationContext? _uiContext;
     private readonly SemaphoreSlim _preferencesMutationGate = new(1, 1);
     private WallpaperConfigurationState _configurationState =
-        WallpaperConfigurationState.FromPersisted(SettingsV2.CreateDefault());
+        WallpaperConfigurationState.FromPersisted(SettingsV3.CreateDefault());
     private AppPreferencesV1 _preferences = AppPreferencesV1.CreateDefault();
     private bool _hasProtectedSettings;
     private bool _hasVersion1Backup;
@@ -47,13 +93,24 @@ public sealed class SettingsManagementViewModel : ObservableObject, IDisposable
         IWallpaperApplicationService wallpaper,
         IAppPreferencesStore preferencesStore,
         WallpaperEditorViewModel editor,
-        ISafeMediaPreviewService? previewMedia = null)
+        ISafeMediaPreviewService? previewMedia = null,
+        IWallpaperSourceProviderRegistry? sourceRegistry = null,
+        IWallpaperEngineInstallationPreferenceManager?
+            wallpaperEngineInstallationPreferenceManager = null)
     {
         _wallpaper = wallpaper ?? throw new ArgumentNullException(nameof(wallpaper));
         _preferencesStore =
             preferencesStore ?? throw new ArgumentNullException(nameof(preferencesStore));
         _editor = editor ?? throw new ArgumentNullException(nameof(editor));
-        _previewMedia = previewMedia ?? SafeMediaPreviewService.Shared;
+        _previewMedia = previewMedia ?? AppWallpaperSources.Preview;
+        _sourceRegistry = sourceRegistry ??
+            (_previewMedia as SafeMediaPreviewService)?.SourceRegistry ??
+            AppWallpaperSources.Registry;
+        _wallpaperEngineInstallationPreferences =
+            wallpaperEngineInstallationPreferenceManager is null
+                ? null
+                : new WallpaperEngineInstallationPreferenceCoordinator(
+                    wallpaperEngineInstallationPreferenceManager);
         _uiContext = SynchronizationContext.Current;
         _editor.DraftChanged += Editor_DraftChanged;
         _wallpaper.WorkspaceChanged += Wallpaper_WorkspaceChanged;
@@ -77,9 +134,9 @@ public sealed class SettingsManagementViewModel : ObservableObject, IDisposable
         }
     }
 
-    public SettingsV2 SavedDesired => ConfigurationState.SavedDesired;
+    public SettingsV3 SavedDesired => ConfigurationState.SavedDesired;
 
-    public SettingsV2? ActiveSnapshot => ConfigurationState.ActiveSnapshot;
+    public SettingsV3? ActiveSnapshot => ConfigurationState.ActiveSnapshot;
 
     public bool IsActive => ConfigurationState.IsRuntimeActive;
 
@@ -96,6 +153,8 @@ public sealed class SettingsManagementViewModel : ObservableObject, IDisposable
             {
                 OnPropertyChanged(nameof(ThemeMode));
                 OnPropertyChanged(nameof(HasShownTrayTip));
+                OnPropertyChanged(nameof(HasAcknowledgedWebWallpaperPrivacyNotice));
+                OnPropertyChanged(nameof(HasPreferredWallpaperEngineInstallation));
             }
         }
     }
@@ -103,6 +162,13 @@ public sealed class SettingsManagementViewModel : ObservableObject, IDisposable
     public ThemeMode ThemeMode => Preferences.ThemeMode;
 
     public bool HasShownTrayTip => Preferences.HasShownTrayTip;
+
+    public bool HasAcknowledgedWebWallpaperPrivacyNotice =>
+        Preferences.HasAcknowledgedWebWallpaperPrivacyNotice;
+
+    public bool HasPreferredWallpaperEngineInstallation =>
+        _wallpaperEngineInstallationPreferences?
+            .HasPreferredWallpaperEngineInstallation == true;
 
     public bool HasProtectedSettings
     {
@@ -125,7 +191,7 @@ public sealed class SettingsManagementViewModel : ObservableObject, IDisposable
         }
     }
 
-    public void SetPersistedSettings(SettingsV2 settings, bool synchronizeEditor)
+    public void SetPersistedSettings(SettingsV3 settings, bool synchronizeEditor)
     {
         ArgumentNullException.ThrowIfNull(settings);
         ConfigurationState =
@@ -137,13 +203,13 @@ public sealed class SettingsManagementViewModel : ObservableObject, IDisposable
         }
     }
 
-    public void ApplySavedSettingsToEditor(SettingsV2 settings)
+    public void ApplySavedSettingsToEditor(SettingsV3 settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
         _editor.ApplySettings(settings);
     }
 
-    public void SetActive(SettingsV2 settings)
+    public void SetActive(SettingsV3 settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
         ConfigurationState = ConfigurationState.WithActive(
@@ -164,9 +230,12 @@ public sealed class SettingsManagementViewModel : ObservableObject, IDisposable
             .ConfigureAwait(true);
         try
         {
-            Preferences = await _preferencesStore
+            var loaded = await _preferencesStore
                 .LoadAsync(cancellationToken)
                 .ConfigureAwait(true);
+            _wallpaperEngineInstallationPreferences?.ApplyLoadedPreferences(loaded);
+            Preferences = loaded;
+            OnPropertyChanged(nameof(HasPreferredWallpaperEngineInstallation));
         }
         finally
         {
@@ -174,8 +243,13 @@ public sealed class SettingsManagementViewModel : ObservableObject, IDisposable
         }
     }
 
-    public void UseDefaultPreferences() =>
-        Preferences = AppPreferencesV1.CreateDefault();
+    public void UseDefaultPreferences()
+    {
+        var preferences = AppPreferencesV1.CreateDefault();
+        _wallpaperEngineInstallationPreferences?.ApplyLoadedPreferences(preferences);
+        Preferences = preferences;
+        OnPropertyChanged(nameof(HasPreferredWallpaperEngineInstallation));
+    }
 
     public Task SetThemeModeAsync(
         ThemeMode themeMode,
@@ -191,6 +265,68 @@ public sealed class SettingsManagementViewModel : ObservableObject, IDisposable
                 current => current with { HasShownTrayTip = true },
                 cancellationToken);
 
+    public Task AcknowledgeWebWallpaperPrivacyNoticeAsync(
+        CancellationToken cancellationToken) =>
+        Preferences.HasAcknowledgedWebWallpaperPrivacyNotice
+            ? Task.CompletedTask
+            : UpdatePreferencesAsync(
+                current => current with
+                {
+                    HasAcknowledgedWebWallpaperPrivacyNotice = true,
+                },
+                cancellationToken);
+
+    public async Task SelectWallpaperEngineInstallationAsync(
+        string selectedPath,
+        CancellationToken cancellationToken)
+    {
+        if (_wallpaperEngineInstallationPreferences is null)
+        {
+            throw new InvalidOperationException(
+                "Wallpaper Engine installation selection is not configured for this host.");
+        }
+
+        await _preferencesMutationGate
+            .WaitAsync(cancellationToken)
+            .ConfigureAwait(true);
+        try
+        {
+            Preferences = await _wallpaperEngineInstallationPreferences
+                .SelectAsync(Preferences, selectedPath, cancellationToken)
+                .ConfigureAwait(true);
+            OnPropertyChanged(nameof(HasPreferredWallpaperEngineInstallation));
+        }
+        finally
+        {
+            _ = _preferencesMutationGate.Release();
+        }
+    }
+
+    public async Task ClearWallpaperEngineInstallationAsync(
+        CancellationToken cancellationToken)
+    {
+        if (_wallpaperEngineInstallationPreferences is null)
+        {
+            throw new InvalidOperationException(
+                "Wallpaper Engine installation selection is not configured for this host.");
+        }
+
+        await _preferencesMutationGate
+            .WaitAsync(cancellationToken)
+            .ConfigureAwait(true);
+        try
+        {
+            Preferences = await _wallpaperEngineInstallationPreferences
+                .ClearAsync(Preferences, cancellationToken)
+                .ConfigureAwait(true);
+            OnPropertyChanged(nameof(HasPreferredWallpaperEngineInstallation));
+        }
+        finally
+        {
+            _ = _preferencesMutationGate.Release();
+        }
+    }
+
     public async Task ResetPreferencesAsync(CancellationToken cancellationToken)
     {
         await _preferencesMutationGate
@@ -201,6 +337,10 @@ public sealed class SettingsManagementViewModel : ObservableObject, IDisposable
             await _preferencesStore
                 .ResetAsync(cancellationToken)
                 .ConfigureAwait(true);
+            var preferences = AppPreferencesV1.CreateDefault();
+            _wallpaperEngineInstallationPreferences?.ApplyLoadedPreferences(preferences);
+            Preferences = preferences;
+            OnPropertyChanged(nameof(HasPreferredWallpaperEngineInstallation));
         }
         finally
         {
@@ -220,13 +360,13 @@ public sealed class SettingsManagementViewModel : ObservableObject, IDisposable
         catch (Exception exception)
         {
             SetProtectionFrom(exception);
-            var settings = SettingsV2.CreateDefault();
+            var settings = SettingsV3.CreateDefault();
             RefreshRecents(settings);
             return new WallpaperSettingsInitializationResult(settings, exception);
         }
     }
 
-    public async Task<SettingsV2> LoadWallpaperSettingsAsync(
+    public async Task<SettingsV3> LoadWallpaperSettingsAsync(
         CancellationToken cancellationToken)
     {
         try
@@ -246,8 +386,8 @@ public sealed class SettingsManagementViewModel : ObservableObject, IDisposable
         }
     }
 
-    public async Task<SettingsV2> SaveRiskAcceptanceAsync(
-        SettingsV2 baseline,
+    public async Task<SettingsV3> SaveRiskAcceptanceAsync(
+        SettingsV3 baseline,
         bool accepted,
         CancellationToken cancellationToken)
     {
@@ -257,8 +397,8 @@ public sealed class SettingsManagementViewModel : ObservableObject, IDisposable
             .ConfigureAwait(true);
     }
 
-    public async Task<SettingsV2> RemoveRecentAsync(
-        SettingsV2 baseline,
+    public async Task<SettingsV3> RemoveRecentAsync(
+        SettingsV3 baseline,
         string mediaPath,
         CancellationToken cancellationToken)
     {
@@ -282,8 +422,26 @@ public sealed class SettingsManagementViewModel : ObservableObject, IDisposable
         return saved;
     }
 
-    public async Task<SettingsV2> ClearRecentsAsync(
-        SettingsV2 baseline,
+    public async Task<SettingsV3> RemoveRecentAsync(
+        SettingsV3 baseline,
+        Guid mediaId,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(baseline);
+        if (baseline.FindMedia(mediaId) is null)
+        {
+            return baseline.CreateSnapshot();
+        }
+
+        var saved = await _wallpaper
+            .RemoveRecentMediaAsync(mediaId, cancellationToken)
+            .ConfigureAwait(true);
+        RefreshRecents(saved);
+        return saved;
+    }
+
+    public async Task<SettingsV3> ClearRecentsAsync(
+        SettingsV3 baseline,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(baseline);
@@ -294,7 +452,7 @@ public sealed class SettingsManagementViewModel : ObservableObject, IDisposable
         return saved;
     }
 
-    public async Task<SettingsV2> ResetWallpaperSettingsAsync(
+    public async Task<SettingsV3> ResetWallpaperSettingsAsync(
         CancellationToken cancellationToken)
     {
         var saved = await _wallpaper
@@ -305,7 +463,7 @@ public sealed class SettingsManagementViewModel : ObservableObject, IDisposable
         return saved;
     }
 
-    public async Task<SettingsV2> RestoreVersion1BackupAsync(
+    public async Task<SettingsV3> RestoreVersion1BackupAsync(
         CancellationToken cancellationToken)
     {
         var restored = await _wallpaper
@@ -316,12 +474,12 @@ public sealed class SettingsManagementViewModel : ObservableObject, IDisposable
         return restored;
     }
 
-    public void RefreshRecents(SettingsV2 settings)
+    public void RefreshRecents(SettingsV3 settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
         var snapshot = settings.CreateSnapshot();
         Recents.Clear();
-        foreach (var mediaId in snapshot.RecentMediaIds.Take(SettingsV2.MaximumRecentMediaIds))
+        foreach (var mediaId in snapshot.RecentMediaIds.Take(SettingsV3.MaximumRecentMediaIds))
         {
             var media = snapshot.FindMedia(mediaId);
             if (media is null)
@@ -329,16 +487,25 @@ public sealed class SettingsManagementViewModel : ObservableObject, IDisposable
                 continue;
             }
 
-            var path = media.SourceIdentifier;
+            // V3 keeps Scene/Web identities durable even when their project is temporarily
+            // unavailable. Unknown and application content never enters an activation path.
+            if (media.LastKnownKind == MediaKind.None &&
+                !IsSupportedDynamicReference(media))
+            {
+                continue;
+            }
+
+            if (!_sourceRegistry.TryGet(media.SourceKind, out _))
+            {
+                continue;
+            }
+
             Recents.Add(
                 new RecentMediaItem(
-                    path,
-                    Path.GetFileName(path),
-                    media.LastKnownKind,
-                    _previewMedia.IsAvailable(path))
-                {
-                    MediaId = media.MediaId,
-                });
+                    media,
+                    GetRecentDisplayName(media),
+                    media.LastKnownKind is not (MediaKind.Image or MediaKind.Video) ||
+                    _previewMedia.IsAvailable(media)));
         }
     }
 
@@ -381,16 +548,13 @@ public sealed class SettingsManagementViewModel : ObservableObject, IDisposable
     {
         HasProtectedSettings =
             exception is SettingsRecoveryRequiredException or
-                FutureSettingsVersionException or
-                SettingsProjectionException;
+                FutureSettingsVersionException;
         HasVersion1Backup = exception switch
         {
             SettingsRecoveryRequiredException recovery =>
                 recovery.HasVersion1Backup,
             FutureSettingsVersionException future =>
                 future.HasVersion1Backup,
-            SettingsProjectionException projection =>
-                projection.HasVersion1Backup,
             _ => false,
         };
     }
@@ -460,4 +624,33 @@ public sealed class SettingsManagementViewModel : ObservableObject, IDisposable
     private sealed record WorkspaceUpdate(
         SettingsManagementViewModel Owner,
         WallpaperWorkspaceState State);
+
+    private static string GetRecentDisplayName(MediaReference media)
+    {
+        if (!string.IsNullOrWhiteSpace(media.LastKnownDisplayName))
+        {
+            return media.LastKnownDisplayName;
+        }
+
+        if (media.SourceKind is MediaSourceKind.LocalFile or
+            MediaSourceKind.WallpaperEngineLocalProject)
+        {
+            var fileName = Path.GetFileName(media.SourceIdentifier);
+            if (!string.IsNullOrWhiteSpace(fileName))
+            {
+                return fileName;
+            }
+        }
+
+        return media.SourceKind == MediaSourceKind.WallpaperEngineWorkshopProject
+            ? $"Workshop {media.SourceIdentifier}"
+            : media.SourceIdentifier;
+    }
+
+    private static bool IsSupportedDynamicReference(MediaReference media) =>
+        (media.SourceKind is
+            MediaSourceKind.WallpaperEngineLocalProject or
+            MediaSourceKind.WallpaperEngineWorkshopProject) &&
+        media.LastKnownContentKind is
+            WallpaperContentKind.Scene or WallpaperContentKind.Web;
 }

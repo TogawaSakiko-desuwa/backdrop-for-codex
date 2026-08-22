@@ -15,10 +15,22 @@ using Wpf.Ui.Appearance;
 
 namespace BackdropForCodex.App.Views;
 
+/// <summary>
+/// Renders media through the safe preview boundary and translates direct manipulation into
+/// normalized wallpaper focus requests.
+/// </summary>
 public sealed partial class WallpaperPreviewView : UserControl
 {
     internal const double PreviewDesignWidth = 960;
     internal const double PreviewDesignHeight = 540;
+    internal const double IdleFocusIndicatorOpacity = 0.58;
+
+    public static readonly DependencyProperty MediaReferenceProperty =
+        DependencyProperty.Register(
+            nameof(MediaReference),
+            typeof(MediaReference),
+            typeof(WallpaperPreviewView),
+            new PropertyMetadata(null, PreviewMediaPropertyChanged));
 
     public static readonly DependencyProperty MediaPathProperty =
         DependencyProperty.Register(
@@ -85,7 +97,9 @@ public sealed partial class WallpaperPreviewView : UserControl
 
     private readonly DispatcherTimer _focusFadeTimer;
     private readonly ISafeMediaPreviewService _previewMedia;
+    private readonly IWallpaperThumbnailPreviewService _thumbnailPreview;
     private ISafeMediaPreviewLease? _previewLease;
+    private CancellationTokenSource? _thumbnailCancellation;
     private bool _glassClipUpdatePending;
     private bool _isDraggingFocus;
     private bool _isThemeSubscribed;
@@ -95,18 +109,27 @@ public sealed partial class WallpaperPreviewView : UserControl
     private bool _reducedMotion;
     private double _previewMediaWidth;
     private double _previewMediaHeight;
-    private string? _previewPath;
+    private MediaReference? _previewReference;
     private MediaKind _previewKind;
 
     public WallpaperPreviewView()
-        : this(SafeMediaPreviewService.Shared)
+        : this(AppWallpaperSources.Preview, AppWallpaperSources.Thumbnails)
     {
     }
 
     public WallpaperPreviewView(ISafeMediaPreviewService previewMedia)
+        : this(previewMedia, AppWallpaperSources.Thumbnails)
+    {
+    }
+
+    public WallpaperPreviewView(
+        ISafeMediaPreviewService previewMedia,
+        IWallpaperThumbnailPreviewService thumbnailPreview)
     {
         _previewMedia =
             previewMedia ?? throw new ArgumentNullException(nameof(previewMedia));
+        _thumbnailPreview = thumbnailPreview ??
+            throw new ArgumentNullException(nameof(thumbnailPreview));
         InitializeComponent();
         PreviewCard.Width = PreviewDesignWidth;
         PreviewCard.Height = PreviewDesignHeight;
@@ -121,6 +144,16 @@ public sealed partial class WallpaperPreviewView : UserControl
 
     public event EventHandler<WallpaperFocusChangeRequestedEventArgs>? FocusChangeRequested;
 
+    public MediaReference? MediaReference
+    {
+        get => ((MediaReference?)GetValue(MediaReferenceProperty))?.Snapshot();
+        set => SetValue(MediaReferenceProperty, value?.Snapshot());
+    }
+
+    /// <summary>
+    /// Compatibility surface for local-file callers. Production bindings use
+    /// <see cref="MediaReference"/> so provider identifiers are never interpreted as paths.
+    /// </summary>
     public string? MediaPath
     {
         get => (string?)GetValue(MediaPathProperty);
@@ -200,7 +233,7 @@ public sealed partial class WallpaperPreviewView : UserControl
         DisconnectThemeNotifications();
         _focusFadeTimer.Stop();
         StopAndClearPreview();
-        _previewPath = null;
+        _previewReference = null;
         _previewKind = MediaKind.None;
     }
 
@@ -231,7 +264,10 @@ public sealed partial class WallpaperPreviewView : UserControl
         {
             preview.EndFocusDrag();
             preview.HideFocusIndicator();
+            return;
         }
+
+        preview.ShowIdleFocusIndicator();
     }
 
     private static void PlaybackPropertyChanged(
@@ -301,27 +337,51 @@ public sealed partial class WallpaperPreviewView : UserControl
 
     private void RefreshMedia()
     {
-        var path = MediaPath;
-        var kind = MediaKind;
-        if (string.Equals(_previewPath, path, StringComparison.OrdinalIgnoreCase) &&
+        MediaReference? reference;
+        try
+        {
+            reference = CreateRequestedReference();
+        }
+        catch (Exception exception) when (IsControlledPreviewException(exception))
+        {
+            _previewReference = null;
+            _previewKind = MediaKind.None;
+            ShowPreviewUnavailable();
+            return;
+        }
+
+        var kind = reference?.LastKnownKind ?? MediaKind.None;
+        if (Equals(_previewReference, reference) &&
             _previewKind == kind)
         {
             return;
         }
 
-        _previewPath = path;
+        _previewReference = reference;
         _previewKind = kind;
         StopAndClearPreview();
-        if (path is null ||
-            kind is not (MediaKind.Image or MediaKind.Video))
+        if (reference is null)
         {
+            return;
+        }
+
+        if (kind is not (MediaKind.Image or MediaKind.Video))
+        {
+            if (reference.LastKnownContentKind is
+                WallpaperContentKind.Scene or WallpaperContentKind.Web)
+            {
+                BeginStaticThumbnailPreview(reference);
+                return;
+            }
+
+            ShowPreviewUnavailable();
             return;
         }
 
         ISafeMediaPreviewLease? pendingLease = null;
         try
         {
-            pendingLease = _previewMedia.Acquire(path);
+            pendingLease = _previewMedia.Acquire(reference);
             if (pendingLease.Metadata.Kind != kind)
             {
                 throw new MediaValidationException(
@@ -353,7 +413,12 @@ public sealed partial class WallpaperPreviewView : UserControl
             _previewMediaHeight = bitmap.PixelHeight;
             _previewMediaReady = true;
             ApplyPreviewLayout();
+            ShowIdleFocusIndicator();
             UpdatePreviewThemeOverlay();
+        }
+        catch (Exception exception) when (IsUnavailablePreviewException(exception))
+        {
+            ShowPreviewUnavailable();
         }
         catch (Exception exception) when (IsControlledPreviewException(exception))
         {
@@ -455,6 +520,7 @@ public sealed partial class WallpaperPreviewView : UserControl
         if (_previewMediaReady)
         {
             ApplyPreviewLayout();
+            ShowIdleFocusIndicator();
         }
 
         if (_reducedMotion)
@@ -499,8 +565,11 @@ public sealed partial class WallpaperPreviewView : UserControl
             return;
         }
 
+        var layoutKind = StaticPreviewPill.Visibility == Visibility.Visible
+            ? MediaKind.Image
+            : _previewKind;
         var plan = MediaPreviewLayout.CalculateForMedia(
-            _previewKind,
+            layoutKind,
             MediaViewport.ActualWidth,
             MediaViewport.ActualHeight,
             _previewMediaWidth,
@@ -587,6 +656,15 @@ public sealed partial class WallpaperPreviewView : UserControl
 
     private void StopAndClearPreview()
     {
+        var thumbnailCancellation = Interlocked.Exchange(
+            ref _thumbnailCancellation,
+            null);
+        if (thumbnailCancellation is not null)
+        {
+            thumbnailCancellation.Cancel();
+            thumbnailCancellation.Dispose();
+        }
+
         try
         {
             VideoPreview.Stop();
@@ -607,6 +685,8 @@ public sealed partial class WallpaperPreviewView : UserControl
         VideoPreview.Visibility = Visibility.Collapsed;
         PreviewThemeOverlay.Visibility = Visibility.Collapsed;
         EmptyPreview.Visibility = Visibility.Visible;
+        UnavailablePreview.Visibility = Visibility.Collapsed;
+        StaticPreviewPill.Visibility = Visibility.Collapsed;
         _previewMediaWidth = 0;
         _previewMediaHeight = 0;
         _previewMediaReady = false;
@@ -618,8 +698,105 @@ public sealed partial class WallpaperPreviewView : UserControl
     private void ShowPreviewFailure()
     {
         StopAndClearPreview();
-        _previewPath = null;
+        _previewReference = null;
         _previewKind = MediaKind.None;
+    }
+
+    private void ShowPreviewUnavailable()
+    {
+        StopAndClearPreview();
+        EmptyPreview.Visibility = Visibility.Collapsed;
+        UnavailablePreview.Visibility = Visibility.Visible;
+    }
+
+    private void BeginStaticThumbnailPreview(MediaReference reference)
+    {
+        var cancellation = new CancellationTokenSource();
+        _thumbnailCancellation = cancellation;
+        EmptyPreview.Visibility = Visibility.Collapsed;
+        UnavailablePreview.Visibility = Visibility.Visible;
+        _ = LoadStaticThumbnailPreviewAsync(reference, cancellation);
+    }
+
+    private async Task LoadStaticThumbnailPreviewAsync(
+        MediaReference reference,
+        CancellationTokenSource cancellation)
+    {
+        try
+        {
+            var bitmap = await _thumbnailPreview
+                .LoadAsync(reference, decodePixelWidth: 240, cancellation.Token)
+                .ConfigureAwait(true);
+            if (bitmap is null ||
+                cancellation.IsCancellationRequested ||
+                !ReferenceEquals(
+                    Volatile.Read(ref _thumbnailCancellation),
+                    cancellation) ||
+                !Equals(_previewReference, reference))
+            {
+                return;
+            }
+
+            ImagePreview.Source = bitmap;
+            ImagePreview.Visibility = Visibility.Visible;
+            EmptyPreview.Visibility = Visibility.Collapsed;
+            UnavailablePreview.Visibility = Visibility.Collapsed;
+            StaticPreviewPill.Visibility = Visibility.Visible;
+            PreviewThemeOverlay.Visibility = Visibility.Visible;
+            _previewMediaWidth = bitmap.PixelWidth;
+            _previewMediaHeight = bitmap.PixelHeight;
+            _previewMediaReady = true;
+            ApplyPreviewLayout();
+            UpdatePreviewThemeOverlay();
+        }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+        {
+        }
+        catch (Exception exception) when (
+            IsUnavailablePreviewException(exception) ||
+            IsControlledPreviewException(exception) ||
+            exception is WallpaperEngineProjectUnavailableException)
+        {
+            if (ReferenceEquals(
+                    Volatile.Read(ref _thumbnailCancellation),
+                    cancellation))
+            {
+                ShowPreviewUnavailable();
+            }
+        }
+        finally
+        {
+            if (ReferenceEquals(
+                    Interlocked.CompareExchange(
+                        ref _thumbnailCancellation,
+                        null,
+                        cancellation),
+                    cancellation))
+            {
+                cancellation.Dispose();
+            }
+        }
+    }
+
+    private MediaReference? CreateRequestedReference()
+    {
+        if (GetValue(MediaReferenceProperty) is MediaReference reference)
+        {
+            return reference.Snapshot();
+        }
+
+        if (MediaPath is not { } path)
+        {
+            return null;
+        }
+
+        return new MediaReference
+        {
+            MediaId = Guid.CreateVersion7(),
+            SourceKind = MediaSourceKind.LocalFile,
+            SourceIdentifier = path,
+            LastKnownKind = MediaKind,
+        }.Snapshot();
     }
 
     private static void DisposePreviewLease(ISafeMediaPreviewLease? lease)
@@ -756,7 +933,7 @@ public sealed partial class WallpaperPreviewView : UserControl
 
     private void ShowFocusIndicator(bool scheduleFade)
     {
-        if (!CanAdjustFocus)
+        if (!HasAdjustablePreview())
         {
             HideFocusIndicator();
             return;
@@ -772,6 +949,20 @@ public sealed partial class WallpaperPreviewView : UserControl
         }
     }
 
+    private void ShowIdleFocusIndicator()
+    {
+        if (!HasAdjustablePreview())
+        {
+            HideFocusIndicator();
+            return;
+        }
+
+        _focusFadeTimer.Stop();
+        FocusIndicator.BeginAnimation(OpacityProperty, null);
+        FocusIndicator.Opacity = IdleFocusIndicatorOpacity;
+        UpdateFocusIndicatorPosition();
+    }
+
     private void HideFocusIndicator()
     {
         _focusFadeTimer.Stop();
@@ -784,9 +975,15 @@ public sealed partial class WallpaperPreviewView : UserControl
         _ = sender;
         _ = e;
         _focusFadeTimer.Stop();
-        if (!SystemParameters.ClientAreaAnimation)
+        if (!HasAdjustablePreview())
         {
             HideFocusIndicator();
+            return;
+        }
+
+        if (!SystemParameters.ClientAreaAnimation)
+        {
+            ShowIdleFocusIndicator();
             return;
         }
 
@@ -794,7 +991,7 @@ public sealed partial class WallpaperPreviewView : UserControl
             OpacityProperty,
             new DoubleAnimation(
                 fromValue: FocusIndicator.Opacity,
-                toValue: 0,
+                toValue: IdleFocusIndicatorOpacity,
                 duration: TimeSpan.FromMilliseconds(260))
             {
                 EasingFunction = new QuadraticEase
@@ -803,6 +1000,11 @@ public sealed partial class WallpaperPreviewView : UserControl
                 },
             });
     }
+
+    private bool HasAdjustablePreview() =>
+        CanAdjustFocus &&
+        _previewMediaReady &&
+        _previewKind is MediaKind.Image or MediaKind.Video;
 
     private void UpdateFocusIndicatorPosition()
     {
@@ -842,6 +1044,10 @@ public sealed partial class WallpaperPreviewView : UserControl
         MediaReferenceValidationException or
         COMException or
         SecurityException;
+
+    private static bool IsUnavailablePreviewException(Exception exception) => exception is
+        WallpaperRendererUnavailableException or
+        WallpaperSourceCapabilityException;
 }
 
 public sealed class WallpaperFocusChangeRequestedEventArgs(double focusX, double focusY)

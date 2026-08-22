@@ -1,10 +1,18 @@
 using System.Globalization;
+using System.Collections.ObjectModel;
 using System.Windows;
+using System.Windows.Automation;
+using System.Windows.Automation.Peers;
+using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using BackdropForCodex.App;
 using BackdropForCodex.App.Converters;
 using BackdropForCodex.App.Services.Diagnostics;
+using BackdropForCodex.App.Services.Localization;
+using BackdropForCodex.App.ViewModels;
 using BackdropForCodex.App.Views;
 using Xunit;
 
@@ -13,6 +21,96 @@ namespace BackdropForCodex.Core.Tests.AppSupport;
 [Collection("Wpf")]
 public sealed class MainWindowLayoutTests
 {
+    private static readonly string[] MetricIconNames =
+    [
+        "FitMetricIcon",
+        "FocusMetricIcon",
+        "PanelOpacityMetricIcon",
+        "BlurMetricIcon",
+        "DarkOverlayMetricIcon",
+        "LightOverlayMetricIcon",
+    ];
+
+    [Fact]
+    public void EditorPanes_UseTheEditorAsTheirDirectDataContext()
+    {
+        StaTest.Run(
+            () =>
+            {
+                var fixture = MainWindowViewModelTests.CreateLayoutFixture();
+                MainWindow? window = null;
+                try
+                {
+                    window = new MainWindow(
+                        fixture.ViewModel,
+                        fixture.Text,
+                        new DiagnosticReportService())
+                    {
+                        WindowStartupLocation = WindowStartupLocation.Manual,
+                        Left = -10000,
+                        Top = -10000,
+                        ShowActivated = false,
+                    };
+                    window.Show();
+                    window.Dispatcher.Invoke(
+                        static () => { },
+                        DispatcherPriority.ApplicationIdle);
+
+                    Assert.Same(fixture.ViewModel, window.DataContext);
+                    Assert.Same(
+                        fixture.ViewModel.Editor,
+                        FindElement(window, "PreviewView").DataContext);
+                    Assert.Same(
+                        fixture.ViewModel.Editor,
+                        FindElement(window, "InspectorPane").DataContext);
+                }
+                finally
+                {
+                    if (window is null)
+                    {
+                        fixture.ViewModel.Dispose();
+                    }
+                    else
+                    {
+                        window.CloseForShutdown();
+                    }
+                }
+            });
+    }
+
+    [Fact]
+    public void AspectRatioDecorator_AppliesRatioToTheDecoratedContentBox()
+    {
+        StaTest.Run(
+            () =>
+            {
+                var frame = new Border
+                {
+                    Padding = new Thickness(8),
+                    BorderThickness = new Thickness(1),
+                };
+                var contentInset = CombinedFrameInset(frame);
+                var decorator = new AspectRatioDecorator
+                {
+                    Ratio = 16d / 9d,
+                    ContentInset = contentInset,
+                    Child = frame,
+                };
+                var available = new Size(978, 700);
+
+                decorator.Measure(available);
+                decorator.Arrange(new Rect(new Point(), available));
+
+                var contentWidth =
+                    frame.ActualWidth - contentInset.Left - contentInset.Right;
+                var contentHeight =
+                    frame.ActualHeight - contentInset.Top - contentInset.Bottom;
+                Assert.Equal(960, contentWidth, precision: 6);
+                Assert.Equal(540, contentHeight, precision: 6);
+                Assert.Equal(16d / 9d, contentWidth / contentHeight, precision: 6);
+            });
+    }
+
     [Fact]
     public void PreviewSurface_MaximizesTheRealFullscreenPreviewPane()
     {
@@ -21,6 +119,21 @@ public sealed class MainWindowLayoutTests
             {
                 AssertPreviewSurfaceLayout(width: 2048, height: 1224);
                 AssertPreviewSurfaceLayout(width: 1200, height: 760);
+            });
+    }
+
+    [Fact]
+    public void InspectorUsesOneFluentMetricIconForEveryCalibrationRow()
+    {
+        StaTest.Run(
+            () =>
+            {
+                var inspector = new WallpaperInspectorView();
+
+                Assert.All(
+                    MetricIconNames,
+                    name => Assert.IsType<Wpf.Ui.Controls.SymbolIcon>(
+                        inspector.FindName(name)));
             });
     }
 
@@ -36,6 +149,554 @@ public sealed class MainWindowLayoutTests
         bool expected)
     {
         Assert.Equal(expected, MainWindow.UsesStackedLayout(width));
+    }
+
+    [Theory]
+    [InlineData(959.999, false)]
+    [InlineData(960, true)]
+    [InlineData(1100, true)]
+    [InlineData(1279.999, true)]
+    [InlineData(1280, false)]
+    [InlineData(1600, false)]
+    public void UsesCompactRail_HonorsWorkbenchBoundaries(
+        double width,
+        bool expected)
+    {
+        Assert.Equal(expected, MainWindow.UsesCompactRail(width));
+    }
+
+    [Fact]
+    public void WindowSizing_YieldsToAWorkAreaShorterThanTheDesignedMinimum()
+    {
+        var minimum = MainWindow.ResolveMinimumWindowSize(960, 500);
+        var initial = MainWindow.ResolveInitialWindowSize(960, 500);
+
+        Assert.Equal(new Size(640, 500), minimum);
+        Assert.Equal(new Size(960, 500), initial);
+    }
+
+    [Fact]
+    public void Workbench_UsesExpandedCompactAndMobileModes()
+    {
+        StaTest.Run(
+            () =>
+            {
+                var fixture = MainWindowViewModelTests.CreateLayoutFixture();
+                MainWindow? window = null;
+                try
+                {
+                    window = new MainWindow(
+                        fixture.ViewModel,
+                        fixture.Text,
+                        new DiagnosticReportService())
+                    {
+                        WindowStartupLocation = WindowStartupLocation.Manual,
+                        Left = -10000,
+                        Top = -10000,
+                        ShowActivated = false,
+                    };
+                    window.Show();
+                    window.Dispatcher.Invoke(
+                        static () => { },
+                        DispatcherPriority.ApplicationIdle);
+                    ApplyResponsiveLayout(window, width: 1440);
+                    var workbench = Assert.IsType<Grid>(
+                        FindElement(window, "WorkbenchSurface"));
+                    var library = Assert.IsType<WallpaperLibraryView>(
+                        FindElement(window, "LibraryPane"));
+                    var preview = FindElement(window, "PreviewPane");
+                    var inspector = Assert.IsType<Border>(
+                        FindElement(window, "InspectorHost"));
+                    var mobileToolbar = FindElement(window, "MobileToolbar");
+                    var footerCommandBar = Assert.IsType<Border>(
+                        FindElement(window, "FooterCommandBar"));
+                    var statusMessage = Assert.IsType<TextBlock>(
+                        FindElement(window, "StatusMessageText"));
+                    var pauseAction = Assert.IsAssignableFrom<Wpf.Ui.Controls.Button>(
+                        FindElement(window, "PauseActionButton"));
+                    var restoreAction = Assert.IsAssignableFrom<Wpf.Ui.Controls.Button>(
+                        FindElement(window, "RestoreActionButton"));
+                    var applyAction = Assert.IsAssignableFrom<Wpf.Ui.Controls.Button>(
+                        FindElement(window, "ApplyActionButton"));
+                    Assert.Equal(
+                        new GridLength(WallpaperLibraryView.ExpandedWidth),
+                        workbench.ColumnDefinitions[0].Width);
+                    Assert.False(library.IsCompact);
+                    Assert.Equal(Visibility.Visible, preview.Visibility);
+                    Assert.Equal(Visibility.Visible, inspector.Visibility);
+                    Assert.Equal(new Thickness(1, 0, 0, 0), inspector.BorderThickness);
+                    Assert.Equal(Visibility.Collapsed, mobileToolbar.Visibility);
+                    Assert.Equal(2, Assert.IsType<Grid>(footerCommandBar.Child).RowDefinitions.Count);
+                    Assert.Equal(Visibility.Visible, statusMessage.Visibility);
+                    Assert.Equal(
+                        Wpf.Ui.Controls.ControlAppearance.Transparent,
+                        pauseAction.Appearance);
+                    Assert.Equal(new Thickness(0), pauseAction.BorderThickness);
+                    Assert.Equal(
+                        Wpf.Ui.Controls.ControlAppearance.Secondary,
+                        restoreAction.Appearance);
+                    Assert.Equal(
+                        Wpf.Ui.Controls.ControlAppearance.Primary,
+                        applyAction.Appearance);
+                    Assert.Equal(FontWeights.SemiBold, applyAction.FontWeight);
+                    Assert.True(applyAction.MinHeight >= 44);
+
+                    ApplyResponsiveLayout(window, width: 1024);
+                    Assert.Equal(
+                        new GridLength(WallpaperLibraryView.CompactWidth),
+                        workbench.ColumnDefinitions[0].Width);
+                    Assert.True(library.IsCompact);
+                    Assert.Equal(Visibility.Visible, inspector.Visibility);
+
+                    ArrangeWindow(window, width: 820, height: 700);
+                    Assert.True(MainWindow.UsesStackedLayout(window.ActualWidth));
+                    Assert.Equal(
+                        new GridLength(0),
+                        workbench.ColumnDefinitions[0].Width);
+                    Assert.False(library.IsCompact);
+                    Assert.Equal(Visibility.Collapsed, library.Visibility);
+                    Assert.Equal(Visibility.Visible, mobileToolbar.Visibility);
+                    Assert.Equal(Visibility.Visible, preview.Visibility);
+                    Assert.Equal(Visibility.Collapsed, inspector.Visibility);
+                    Assert.Equal(new Thickness(0), inspector.BorderThickness);
+                    Assert.Equal(Visibility.Collapsed, statusMessage.Visibility);
+                    var previewMode = FindElement(window, "PreviewModeButton");
+                    var adjustMode = FindElement(window, "AdjustModeButton");
+                    var previewModeIndicator = FindElement(
+                        window,
+                        "PreviewModeIndicator");
+                    var adjustModeIndicator = FindElement(
+                        window,
+                        "AdjustModeIndicator");
+                    Assert.Equal(
+                        Wpf.Ui.Controls.ControlAppearance.Transparent,
+                        Assert.IsAssignableFrom<Wpf.Ui.Controls.Button>(previewMode).Appearance);
+                    Assert.Equal(
+                        Wpf.Ui.Controls.ControlAppearance.Transparent,
+                        Assert.IsAssignableFrom<Wpf.Ui.Controls.Button>(adjustMode).Appearance);
+                    Assert.Equal(Visibility.Visible, previewModeIndicator.Visibility);
+                    Assert.Equal(Visibility.Collapsed, adjustModeIndicator.Visibility);
+                    Assert.Equal(
+                        "Selected",
+                        AutomationProperties.GetItemStatus(previewMode));
+                    Assert.Equal(
+                        "Not selected",
+                        AutomationProperties.GetItemStatus(adjustMode));
+
+                    adjustMode.RaiseEvent(
+                        new RoutedEventArgs(Button.ClickEvent));
+                    ApplyResponsiveLayout(window, width: 820);
+                    Assert.Equal(Visibility.Collapsed, preview.Visibility);
+                    Assert.Equal(Visibility.Visible, inspector.Visibility);
+                    Assert.Equal(
+                        "Not selected",
+                        AutomationProperties.GetItemStatus(previewMode));
+                    Assert.Equal(
+                        "Selected",
+                        AutomationProperties.GetItemStatus(adjustMode));
+                    Assert.Equal(Visibility.Collapsed, previewModeIndicator.Visibility);
+                    Assert.Equal(Visibility.Visible, adjustModeIndicator.Visibility);
+
+                    FindElement(window, "LibraryDrawerButton").RaiseEvent(
+                        new RoutedEventArgs(Button.ClickEvent));
+                    ApplyResponsiveLayout(window, width: 820);
+                    Assert.Equal(Visibility.Visible, library.Visibility);
+                    Assert.Equal(
+                        Visibility.Visible,
+                        FindElement(window, "LibraryScrim").Visibility);
+
+                    var escape = new KeyEventArgs(
+                        Keyboard.PrimaryDevice,
+                        PresentationSource.FromVisual(window)!,
+                        Environment.TickCount,
+                        Key.Escape)
+                    {
+                        RoutedEvent = Keyboard.PreviewKeyDownEvent,
+                    };
+                    window.RaiseEvent(escape);
+                    ApplyResponsiveLayout(window, width: 820);
+                    Assert.True(escape.Handled);
+                    Assert.Equal(Visibility.Collapsed, library.Visibility);
+                    Assert.Equal(
+                        Visibility.Collapsed,
+                        FindElement(window, "LibraryScrim").Visibility);
+                }
+                finally
+                {
+                    if (window is null)
+                    {
+                        fixture.ViewModel.Dispose();
+                    }
+                    else
+                    {
+                        window.CloseForShutdown();
+                    }
+                }
+            });
+    }
+
+    [Theory]
+    [InlineData(640)]
+    [InlineData(800)]
+    public void MobileFooter_StacksStatusAboveActionsWithoutOverlap(double width)
+    {
+        StaTest.Run(
+            () =>
+            {
+                var fixture = MainWindowViewModelTests.CreateLayoutFixture();
+                MainWindow? window = null;
+                try
+                {
+                    window = CreateWindow(fixture);
+                    ArrangeWindow(window, width, height: 700);
+
+                    var footer = FindElement(window, "FooterCommandBar");
+                    var status = FindElement(window, "FooterStatusHost");
+                    var actions = FindElement(window, "FooterActions");
+                    var statusBounds = GetBounds(status, footer);
+                    var actionBounds = GetBounds(actions, footer);
+
+                    Assert.True(
+                        statusBounds.Bottom <= actionBounds.Top,
+                        $"Status bottom {statusBounds.Bottom:F2} overlapped " +
+                        $"actions top {actionBounds.Top:F2} at {width:F0} DIP.");
+                    Assert.True(actions.ActualWidth <= footer.ActualWidth);
+                }
+                finally
+                {
+                    CloseWindow(window, fixture);
+                }
+            });
+    }
+
+    [Fact]
+    public void WallpaperEngineLibraryModalLayer_CoversTheWindowAndContainsFocus()
+    {
+        StaTest.Run(
+            () =>
+            {
+                var fixture = MainWindowViewModelTests.CreateLayoutFixture();
+                MainWindow? window = null;
+                try
+                {
+                    window = CreateWindow(fixture);
+                    ArrangeWindow(window, width: 1200, height: 760);
+
+                    var root = Assert.IsType<Grid>(FindElement(window, "RootLayout"));
+                    var modalLayer = Assert.IsType<Grid>(
+                        FindElement(window, "WallpaperEngineLibraryModalLayer"));
+                    modalLayer.Visibility = Visibility.Visible;
+                    window.UpdateLayout();
+
+                    Assert.Same(root, VisualTreeHelper.GetParent(modalLayer));
+                    Assert.Equal(0, Grid.GetRow(modalLayer));
+                    Assert.Equal(3, Grid.GetRowSpan(modalLayer));
+                    Assert.True(Panel.GetZIndex(modalLayer) > 0);
+                    Assert.True(FocusManager.GetIsFocusScope(modalLayer));
+                    Assert.Equal(
+                        KeyboardNavigationMode.Cycle,
+                        KeyboardNavigation.GetTabNavigation(modalLayer));
+                    Assert.Equal(
+                        KeyboardNavigationMode.Cycle,
+                        KeyboardNavigation.GetControlTabNavigation(modalLayer));
+                    Assert.Equal(
+                        KeyboardNavigationMode.Contained,
+                        KeyboardNavigation.GetDirectionalNavigation(modalLayer));
+                    AssertRectEqual(
+                        new Rect(root.RenderSize),
+                        GetBounds(modalLayer, root));
+
+                    AssertHitIsInsideModalLayer(root, modalLayer, new Point(8, 8));
+                    AssertHitIsInsideModalLayer(
+                        root,
+                        modalLayer,
+                        new Point(8, root.ActualHeight - 8));
+                }
+                finally
+                {
+                    CloseWindow(window, fixture);
+                }
+            });
+    }
+
+    [Fact]
+    public void MobilePaneSelection_RemainsBoundToDynamicThemeResources()
+    {
+        StaTest.Run(
+            () =>
+            {
+                var fixture = MainWindowViewModelTests.CreateLayoutFixture();
+                MainWindow? window = null;
+                try
+                {
+                    window = CreateWindow(fixture);
+                    var firstBrush = new SolidColorBrush(Colors.Crimson);
+                    var secondBrush = new SolidColorBrush(Colors.CornflowerBlue);
+                    window.Resources["ControlFillColorSecondaryBrush"] = firstBrush;
+                    ArrangeWindow(window, width: 800, height: 700);
+                    var previewMode = Assert.IsAssignableFrom<Control>(
+                        FindElement(window, "PreviewModeButton"));
+                    Assert.Same(firstBrush, previewMode.Background);
+
+                    window.Resources["ControlFillColorSecondaryBrush"] = secondBrush;
+                    window.Dispatcher.Invoke(static () => { }, DispatcherPriority.ApplicationIdle);
+
+                    Assert.Same(secondBrush, previewMode.Background);
+                }
+                finally
+                {
+                    CloseWindow(window, fixture);
+                }
+            });
+    }
+
+    [Fact]
+    public void HighContrastState_UpdatesEveryStageSurfaceFromTheWindowProperty()
+    {
+        StaTest.Run(
+            () =>
+            {
+                var fixture = MainWindowViewModelTests.CreateLayoutFixture();
+                MainWindow? window = null;
+                try
+                {
+                    window = CreateWindow(fixture);
+                    window.Resources.MergedDictionaries.Add(
+                        new ResourceDictionary
+                        {
+                            Source = new Uri(
+                                "/BackdropForCodex;component/Themes/WorkbenchTheme.xaml",
+                                UriKind.Relative),
+                        });
+                    var highContrastProperty = typeof(MainWindow).GetProperty(
+                        "IsWorkbenchHighContrast");
+                    Assert.NotNull(highContrastProperty);
+                    highContrastProperty.SetValue(window, true);
+                    window.UpdateLayout();
+
+                    var stage = Assert.IsType<Grid>(FindElement(window, "PreviewPane"));
+                    var header = Assert.IsType<Border>(
+                        FindElement(window, "PreviewStageHeader"));
+                    var frame = Assert.IsType<Border>(
+                        FindElement(window, "CalibrationFrame"));
+
+                    Assert.Same(SystemColors.WindowBrush, stage.Background);
+                    Assert.Same(SystemColors.WindowBrush, header.Background);
+                    Assert.Same(SystemColors.WindowTextBrush, header.BorderBrush);
+                    Assert.Same(SystemColors.WindowBrush, frame.Background);
+                    Assert.Same(SystemColors.WindowTextBrush, frame.BorderBrush);
+                }
+                finally
+                {
+                    CloseWindow(window, fixture);
+                }
+            });
+    }
+
+    [Fact]
+    public void FooterStatus_UsesOnePoliteLiveRegionWithAnAutomationPeer()
+    {
+        StaTest.Run(
+            () =>
+            {
+                var fixture = MainWindowViewModelTests.CreateLayoutFixture();
+                MainWindow? window = null;
+                try
+                {
+                    window = CreateWindow(fixture);
+                    var liveRegion = Assert.IsType<StatusBar>(
+                        FindElement(window, "StatusLiveRegion"));
+
+                    Assert.Equal(
+                        AutomationLiveSetting.Polite,
+                        AutomationProperties.GetLiveSetting(liveRegion));
+                    Assert.NotNull(
+                        UIElementAutomationPeer.CreatePeerForElement(liveRegion));
+                    Assert.Equal(
+                        AutomationLiveSetting.Off,
+                        AutomationProperties.GetLiveSetting(
+                            FindElement(window, "ActiveStatusSurface")));
+
+                    fixture.ViewModel.ShowUnexpectedError(
+                        new InvalidOperationException("Simulated status failure."));
+                    window.Dispatcher.Invoke(static () => { }, DispatcherPriority.ContextIdle);
+                    Assert.Equal(
+                        fixture.ViewModel.StatusTitle,
+                        AutomationProperties.GetName(liveRegion));
+                    Assert.Equal(
+                        fixture.ViewModel.StatusMessage,
+                        AutomationProperties.GetHelpText(liveRegion));
+
+                    fixture.ViewModel.IsStatusOpen = false;
+                    window.Dispatcher.Invoke(static () => { }, DispatcherPriority.ContextIdle);
+                    Assert.Equal(
+                        fixture.ViewModel.FooterStatusText,
+                        AutomationProperties.GetName(liveRegion));
+                }
+                finally
+                {
+                    CloseWindow(window, fixture);
+                }
+            });
+    }
+
+    [Fact]
+    public void SettingsFirstUseDoesNotClaimRiskAcknowledgementWasRevoked()
+    {
+        StaTest.Run(
+            () =>
+            {
+                var fixture = MainWindowViewModelTests.CreateLayoutFixture();
+                try
+                {
+                    var text = new AppTextProvider(
+                        CultureInfo.GetCultureInfo("zh-Hans"));
+                    var content = new SettingsDialogContent(fixture.ViewModel, text);
+                    var state = Assert.IsType<TextBlock>(content.FindName("RiskStateText"));
+
+                    Assert.Equal(text.GetString("Risk_NotAcknowledged"), state.Text);
+                    Assert.NotEqual(text.GetString("Risk_Revoked"), state.Text);
+                }
+                finally
+                {
+                    fixture.ViewModel.Dispose();
+                }
+            });
+    }
+
+    [Fact]
+    public void FooterStatusLayout_ShowsOnlyTheCurrentOperationSurface()
+    {
+        StaTest.Run(
+            () =>
+            {
+                var fixture = MainWindowViewModelTests.CreateLayoutFixture();
+                MainWindow? window = null;
+                try
+                {
+                    window = CreateWindow(fixture);
+                    var passive = FindElement(window, "PassiveWorkspaceStatus");
+                    var active = FindElement(window, "ActiveStatusSurface");
+
+                    fixture.ViewModel.IsStatusOpen = true;
+                    window.Dispatcher.Invoke(static () => { }, DispatcherPriority.DataBind);
+                    Assert.Equal(Visibility.Collapsed, passive.Visibility);
+                    Assert.Equal(Visibility.Visible, active.Visibility);
+
+                    fixture.ViewModel.IsStatusOpen = false;
+                    window.Dispatcher.Invoke(static () => { }, DispatcherPriority.DataBind);
+                    Assert.Equal(Visibility.Visible, passive.Visibility);
+                    Assert.Equal(Visibility.Collapsed, active.Visibility);
+                }
+                finally
+                {
+                    CloseWindow(window, fixture);
+                }
+            });
+    }
+
+    [Fact]
+    public void MobileDrawerActivation_RestoresFocusToItsOpener()
+    {
+        StaTest.Run(
+            () =>
+            {
+                var fixture = MainWindowViewModelTests.CreateLayoutFixture();
+                MainWindow? window = null;
+                try
+                {
+                    window = CreateWindow(fixture, showActivated: true);
+                    ArrangeWindow(window, width: 800, height: 700);
+                    var opener = Assert.IsAssignableFrom<Control>(
+                        FindElement(window, "LibraryDrawerButton"));
+                    var library = Assert.IsType<WallpaperLibraryView>(
+                        FindElement(window, "LibraryPane"));
+                    opener.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    window.UpdateLayout();
+                    Assert.Equal(Visibility.Visible, library.Visibility);
+
+                    library.RaiseEvent(
+                        new RoutedEventArgs(
+                            WallpaperLibraryView.SelectedProfileChangedEvent,
+                            library));
+                    window.Dispatcher.Invoke(static () => { }, DispatcherPriority.Input);
+
+                    Assert.Equal(Visibility.Collapsed, library.Visibility);
+                    Assert.True(opener.IsKeyboardFocusWithin);
+                }
+                finally
+                {
+                    CloseWindow(window, fixture);
+                }
+            });
+    }
+
+    [Fact]
+    public void CompactRail_ExposesRecentRemoveAndClearCommands()
+    {
+        StaTest.Run(
+            () =>
+            {
+                var fixture = MainWindowViewModelTests.CreateLayoutFixture();
+                MainWindow? window = null;
+                try
+                {
+                    window = CreateWindow(fixture);
+                    ArrangeWindow(window, width: 1200, height: 760);
+                    var library = Assert.IsType<WallpaperLibraryView>(
+                        FindElement(window, "LibraryPane"));
+                    var recent = new RecentMediaItem(
+                        new BackdropForCodex.Core.Media.MediaReference
+                        {
+                            MediaId = Guid.CreateVersion7(),
+                            SourceKind = BackdropForCodex.Core.Media.MediaSourceKind.LocalFile,
+                            SourceIdentifier = @"C:\wallpapers\recent.png",
+                            LastKnownKind = BackdropForCodex.Core.Media.MediaKind.Image,
+                        },
+                        "recent.png",
+                        true);
+                    var removeCommand = new RecordingCommand();
+                    var clearCommand = new RecordingCommand();
+                    library.RecentItemsSource = new ObservableCollection<RecentMediaItem>
+                    {
+                        recent,
+                    };
+                    library.RemoveRecentCommand = removeCommand;
+                    library.ClearRecentsCommand = clearCommand;
+                    window.UpdateLayout();
+                    var menu = Assert.IsType<ContextMenu>(library.ContextMenu);
+                    var commands = menu.Items.OfType<MenuItem>().ToArray();
+                    var removeItem = Assert.Single(
+                        commands,
+                        item => AutomationProperties.GetAutomationId(item) ==
+                            "RemoveSelectedRecentMenuItem");
+                    var clearItem = Assert.Single(
+                        commands,
+                        item => AutomationProperties.GetAutomationId(item) ==
+                            "ClearRecentsMenuItem");
+                    var recentList = Assert.IsType<ListBox>(
+                        FindVisualElement(library, "RecentList"));
+                    var recentContainer = Assert.IsType<ListBoxItem>(
+                        recentList.ItemContainerGenerator.ContainerFromItem(recent));
+                    window.PrepareLibraryContextMenu(recentContainer);
+                    menu.PlacementTarget = library;
+                    removeItem.GetBindingExpression(MenuItem.CommandProperty)?.UpdateTarget();
+                    clearItem.GetBindingExpression(MenuItem.CommandProperty)?.UpdateTarget();
+
+                    Assert.True(library.IsCompact);
+                    Assert.Same(recent, removeItem.CommandParameter);
+                    Assert.Same(removeCommand, removeItem.Command);
+                    Assert.Same(clearCommand, clearItem.Command);
+                    removeItem.Command.Execute(removeItem.CommandParameter);
+                    clearItem.Command.Execute(parameter: null);
+                    Assert.Same(recent, removeCommand.LastParameter);
+                    Assert.Equal(1, clearCommand.ExecutionCount);
+                }
+                finally
+                {
+                    CloseWindow(window, fixture);
+                }
+            });
     }
 
     [Theory]
@@ -76,6 +737,13 @@ public sealed class MainWindowLayoutTests
                 Top = -10000,
                 ShowActivated = false,
             };
+            window.Resources.MergedDictionaries.Add(
+                new ResourceDictionary
+                {
+                    Source = new Uri(
+                        "/BackdropForCodex;component/Themes/WorkbenchTheme.xaml",
+                        UriKind.Relative),
+                });
             window.Show();
             window.Width = width;
             window.Height = height;
@@ -87,17 +755,39 @@ public sealed class MainWindowLayoutTests
             var previewPane = FindElement(window, "PreviewPane");
             var previewView = FindElement(window, "PreviewView");
             var previewHost = FindElement(previewView, "PreviewHost");
+            var aspectFrame = Assert.IsType<AspectRatioDecorator>(
+                FindElement(window, "PreviewAspectFrame"));
+            var calibrationFrame = Assert.IsType<Border>(
+                FindElement(window, "CalibrationFrame"));
             var previewCard = FindElement(previewView, "PreviewCard");
             var previewSurface =
                 FindElement(previewView, "PreviewSurface");
             var hostBounds = GetBounds(previewHost, previewPane);
+            var calibrationBounds = GetBounds(calibrationFrame, previewPane);
             var cardBounds = GetBounds(previewCard, previewPane);
             var surfaceBounds =
                 GetBounds(previewSurface, previewPane);
+            var frameInset = CombinedFrameInset(calibrationFrame);
+            var dpi = VisualTreeHelper.GetDpi(window);
+            Assert.Equal(new Thickness(8), calibrationFrame.Padding);
+            Assert.Equal(new Thickness(1), calibrationFrame.BorderThickness);
+            Assert.Equal(frameInset, aspectFrame.ContentInset);
+            Assert.InRange(
+                Math.Abs(
+                    (calibrationBounds.Width - hostBounds.Width) -
+                    (frameInset.Left + frameInset.Right)),
+                0,
+                (1 / dpi.DpiScaleX) + 0.000001);
+            Assert.InRange(
+                Math.Abs(
+                    (calibrationBounds.Height - hostBounds.Height) -
+                    (frameInset.Top + frameInset.Bottom)),
+                0,
+                (1 / dpi.DpiScaleY) + 0.000001);
             Assert.True(
-                hostBounds.Width >= previewPane.ActualWidth * 0.99,
-                $"PreviewHost width {hostBounds.Width:F2} did not fill " +
-                $"PreviewPane width {previewPane.ActualWidth:F2}.");
+                calibrationBounds.Width >= previewPane.ActualWidth * 0.9,
+                $"Calibration frame width {calibrationBounds.Width:F2} used too little " +
+                $"of PreviewPane width {previewPane.ActualWidth:F2}.");
             var expectedScale = Math.Min(
                 hostBounds.Width /
                 WallpaperPreviewView.PreviewDesignWidth,
@@ -150,7 +840,7 @@ public sealed class MainWindowLayoutTests
                 hostBounds,
                 surfaceBounds,
                 expectedScale,
-                VisualTreeHelper.GetDpi(window),
+                dpi,
                 previewHost.UseLayoutRounding);
         }
         finally
@@ -163,6 +853,68 @@ public sealed class MainWindowLayoutTests
             {
                 window.CloseForShutdown();
             }
+        }
+    }
+
+    private static void ArrangeWindow(
+        MainWindow window,
+        double width,
+        double height)
+    {
+        window.Width = width;
+        window.Height = height;
+        window.Dispatcher.Invoke(
+            static () => { },
+            DispatcherPriority.ApplicationIdle);
+        window.UpdateLayout();
+    }
+
+    private static void ApplyResponsiveLayout(MainWindow window, double width)
+    {
+        window.UpdateResponsiveLayout(width);
+        window.Dispatcher.Invoke(
+            static () => { },
+            DispatcherPriority.DataBind);
+        window.UpdateLayout();
+    }
+
+    private static Thickness CombinedFrameInset(Border frame) =>
+        new(
+            frame.Padding.Left + frame.BorderThickness.Left,
+            frame.Padding.Top + frame.BorderThickness.Top,
+            frame.Padding.Right + frame.BorderThickness.Right,
+            frame.Padding.Bottom + frame.BorderThickness.Bottom);
+
+    private static MainWindow CreateWindow(
+        (MainWindowViewModel ViewModel, IAppTextProvider Text) fixture,
+        bool showActivated = false)
+    {
+        var window = new MainWindow(
+            fixture.ViewModel,
+            fixture.Text,
+            new DiagnosticReportService())
+        {
+            WindowStartupLocation = WindowStartupLocation.Manual,
+            Left = -10000,
+            Top = -10000,
+            ShowActivated = showActivated,
+        };
+        window.Show();
+        window.Dispatcher.Invoke(static () => { }, DispatcherPriority.ApplicationIdle);
+        return window;
+    }
+
+    private static void CloseWindow(
+        MainWindow? window,
+        (MainWindowViewModel ViewModel, IAppTextProvider Text) fixture)
+    {
+        if (window is null)
+        {
+            fixture.ViewModel.Dispose();
+        }
+        else
+        {
+            window.CloseForShutdown();
         }
     }
 
@@ -211,11 +963,50 @@ public sealed class MainWindowLayoutTests
         string name) =>
         Assert.IsAssignableFrom<FrameworkElement>(root.FindName(name));
 
+    private static FrameworkElement? FindVisualElement(
+        DependencyObject root,
+        string name)
+    {
+        for (var index = 0; index < VisualTreeHelper.GetChildrenCount(root); index++)
+        {
+            var child = VisualTreeHelper.GetChild(root, index);
+            if (child is FrameworkElement element && element.Name == name)
+            {
+                return element;
+            }
+
+            if (FindVisualElement(child, name) is { } descendant)
+            {
+                return descendant;
+            }
+        }
+
+        return null;
+    }
+
     private static Rect GetBounds(
         FrameworkElement element,
         Visual ancestor) =>
         element.TransformToAncestor(ancestor).TransformBounds(
             new Rect(element.RenderSize));
+
+    private static void AssertHitIsInsideModalLayer(
+        UIElement root,
+        DependencyObject modalLayer,
+        Point point)
+    {
+        var hit = Assert.IsAssignableFrom<DependencyObject>(
+            root.InputHitTest(point));
+        for (var current = hit; current is not null; current = VisualTreeHelper.GetParent(current))
+        {
+            if (ReferenceEquals(current, modalLayer))
+            {
+                return;
+            }
+        }
+
+        Assert.Fail($"Hit at {point} escaped the Wallpaper Engine modal layer.");
+    }
 
     private static void AssertRectEqual(Rect expected, Rect actual)
     {
@@ -223,5 +1014,25 @@ public sealed class MainWindowLayoutTests
         Assert.Equal(expected.Y, actual.Y, precision: 6);
         Assert.Equal(expected.Width, actual.Width, precision: 6);
         Assert.Equal(expected.Height, actual.Height, precision: 6);
+    }
+
+    private sealed class RecordingCommand : ICommand
+    {
+        public event EventHandler? CanExecuteChanged;
+
+        public int ExecutionCount { get; private set; }
+
+        public object? LastParameter { get; private set; }
+
+        public bool CanExecute(object? parameter) => true;
+
+        public void Execute(object? parameter)
+        {
+            ExecutionCount++;
+            LastParameter = parameter;
+        }
+
+        public void RaiseCanExecuteChanged() =>
+            CanExecuteChanged?.Invoke(this, EventArgs.Empty);
     }
 }

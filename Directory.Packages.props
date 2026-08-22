@@ -7,6 +7,7 @@
     <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.0" />
     <PackageVersion Include="PuppeteerSharp" Version="25.3.4" />
+    <PackageVersion Include="Vortice.MediaFoundation" Version="3.8.3" />
     <PackageVersion Include="WPF-UI" Version="4.3.0" />
     <PackageVersion Include="WPF-UI.Tray" Version="4.3.0" />
   </ItemGroup>

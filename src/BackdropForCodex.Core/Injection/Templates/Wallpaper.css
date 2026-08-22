@@ -1,0 +1,538 @@
+    :root {
+      --codex-wallpaper-glass-dark: rgba(__BFC_GLASS_RED__, __BFC_GLASS_GREEN__, __BFC_GLASS_BLUE__, __BFC_GLASS_OPACITY__);
+      --codex-wallpaper-glass-light: color-mix(
+        in srgb,
+        var(--color-token-main-surface-primary, rgb(255 255 255))
+          __BFC_GLASS_OPACITY_PERCENT__%,
+        transparent);
+      --codex-wallpaper-glass: light-dark(
+        var(--codex-wallpaper-glass-light),
+        var(--codex-wallpaper-glass-dark));
+      --codex-wallpaper-home-suggestion-opacity: __BFC_GLASS_OPACITY_PERCENT__%;
+      --codex-wallpaper-home-suggestion-hover-opacity: __BFC_HOME_HOVER_OPACITY_PERCENT__%;
+      --codex-wallpaper-blur: __BFC_GLASS_BLUR_PIXELS__px;
+      --codex-wallpaper-saturation: __BFC_GLASS_SATURATION__;
+      --codex-wallpaper-border-dark: rgb(255 255 255 / 0.14);
+      --codex-wallpaper-border-light: rgb(0 0 0 / 0.14);
+      --codex-wallpaper-border: light-dark(
+        var(--codex-wallpaper-border-light),
+        var(--codex-wallpaper-border-dark));
+      --codex-wallpaper-activity-dark: rgba(16, 18, 24, 0.58);
+      --codex-wallpaper-activity-light: color-mix(
+        in srgb,
+        var(--color-token-main-surface-primary, rgb(255 255 255)) 58%,
+        transparent);
+      --codex-wallpaper-activity: light-dark(
+        var(--codex-wallpaper-activity-light),
+        var(--codex-wallpaper-activity-dark));
+      --codex-wallpaper-activity-border-dark: rgb(255 255 255 / 0.06);
+      --codex-wallpaper-activity-border-light: rgb(0 0 0 / 0.06);
+      --codex-wallpaper-activity-border: light-dark(
+        var(--codex-wallpaper-activity-border-light),
+        var(--codex-wallpaper-activity-border-dark));
+      --codex-wallpaper-radius: 16px;
+      --codex-wallpaper-conversation-inline-padding: 16px;
+      --codex-wallpaper-overlay: light-dark(
+        rgb(255 255 255 / __BFC_LIGHT_OVERLAY__),
+        rgb(0 0 0 / __BFC_DARK_OVERLAY__));
+      --codex-wallpaper-contrast-fallback-overlay-dark: rgb(0 0 0 / 0.84);
+      --codex-wallpaper-contrast-fallback-overlay-light: rgb(255 255 255 / 0.94);
+      --codex-wallpaper-contrast-fallback-overlay: light-dark(
+        var(--codex-wallpaper-contrast-fallback-overlay-light),
+        var(--codex-wallpaper-contrast-fallback-overlay-dark));
+    }
+    :root:is(.dark, .electron-dark, [data-theme="dark"]) {
+      --codex-wallpaper-glass: var(--codex-wallpaper-glass-dark);
+      --codex-wallpaper-border: var(--codex-wallpaper-border-dark);
+      --codex-wallpaper-activity: var(--codex-wallpaper-activity-dark);
+      --codex-wallpaper-activity-border:
+        var(--codex-wallpaper-activity-border-dark);
+      --codex-wallpaper-overlay: rgb(0 0 0 / __BFC_DARK_OVERLAY__);
+      --codex-wallpaper-contrast-fallback-overlay:
+        var(--codex-wallpaper-contrast-fallback-overlay-dark);
+    }
+    :root:is(.light, .electron-light, [data-theme="light"]) {
+      --codex-wallpaper-glass: var(--codex-wallpaper-glass-light);
+      --codex-wallpaper-border: var(--codex-wallpaper-border-light);
+      --codex-wallpaper-activity: var(--codex-wallpaper-activity-light);
+      --codex-wallpaper-activity-border:
+        var(--codex-wallpaper-activity-border-light);
+      --codex-wallpaper-overlay: rgb(255 255 255 / __BFC_LIGHT_OVERLAY__);
+      --codex-wallpaper-contrast-fallback-overlay:
+        var(--codex-wallpaper-contrast-fallback-overlay-light);
+    }
+    #__BFC_ROOT_ID__ {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      overflow: hidden;
+      pointer-events: none;
+      background: transparent;
+      contain: strict;
+    }
+    #__BFC_ROOT_ID__ > img,
+    #__BFC_ROOT_ID__ > video {
+      position: absolute;
+      inset: 0;
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: __BFC_OBJECT_FIT__;
+      object-position:
+        __BFC_FOCUS_X_PERCENT__%
+        __BFC_FOCUS_Y_PERCENT__%;
+      opacity: __BFC_MEDIA_OPACITY__;
+    }
+    #__BFC_ROOT_ID__ > [data-codex-wallpaper-overlay] {
+      position: absolute;
+      inset: 0;
+      background-color: var(--codex-wallpaper-overlay);
+      pointer-events: none;
+    }
+    #__BFC_ROOT_ID__[data-codex-wallpaper-contrast-fallback="true"]
+      > [data-codex-wallpaper-overlay] {
+      background-color: var(--codex-wallpaper-contrast-fallback-overlay);
+    }
+    @media (forced-colors: none) {
+      html,
+      body {
+        background: transparent !important;
+      }
+      body > #root {
+        position: relative;
+        z-index: 1;
+        background: transparent !important;
+      }
+      /*
+       * Electron mounts browser guests beside #root. Keep both the current host
+       * and its legacy predecessor above the app stacking context without
+       * changing guest rendering, visibility, or input behavior.
+       */
+      body > [data-browser-sidebar-webview-host-root],
+      body > [data-browser-sidebar-webview][data-app-shell-focus-area] {
+        z-index: 2 !important;
+      }
+      body main {
+        background: transparent !important;
+        -webkit-backdrop-filter: none !important;
+        backdrop-filter: none !important;
+      }
+      /* codex-wallpaper-glass:start */
+      __BFC_GLASS_BODY_SELECTOR__ [role="main"]:has([data-home-ambient-suggestions])
+        section[class~="group/home-suggestions"]
+        button[type="button"][aria-labelledby] {
+        background-color: color-mix(in srgb, var(--color-token-main-surface-primary) var(--codex-wallpaper-home-suggestion-opacity), transparent) !important;
+        -webkit-backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
+        backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
+      }
+      __BFC_GLASS_BODY_SELECTOR__ [role="main"]:has([data-home-ambient-suggestions])
+        section[class~="group/home-suggestions"]
+        button[type="button"][aria-labelledby]:not(:disabled):is(:hover, :focus-visible) {
+        background-color: color-mix(in srgb, var(--color-token-main-surface-primary) var(--codex-wallpaper-home-suggestion-hover-opacity), transparent) !important;
+        -webkit-backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
+        backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
+      }
+      /*
+       * Plugin browse keeps its search control surfaced, but the full-width
+       * sticky shell and its 32px fade must not form a second dark band.
+       */
+      __BFC_GLASS_BODY_SELECTOR__ [class~="sticky"][class~="z-30"][class~="bg-token-main-surface-primary"]:has([id="plugins-page-search"]) {
+        background-color: transparent !important;
+        -webkit-backdrop-filter: none !important;
+        backdrop-filter: none !important;
+        border-color: transparent;
+      }
+      __BFC_GLASS_BODY_SELECTOR__ [class~="sticky"][class~="z-30"][class~="bg-token-main-surface-primary"]:has([id="plugins-page-search"])::after {
+        background-image: none !important;
+      }
+      /*
+       * Scheduled tasks keeps its search control surfaced, but the full-width
+       * sticky shell and its 32px fade must not form a second dark band.
+       */
+      __BFC_GLASS_BODY_SELECTOR__ [class~="sticky"][class~="z-30"][class~="bg-token-main-surface-primary"]:has([id="scheduled-page-search"]) {
+        background-color: transparent !important;
+        -webkit-backdrop-filter: none !important;
+        backdrop-filter: none !important;
+        border-color: transparent;
+      }
+      __BFC_GLASS_BODY_SELECTOR__ [class~="sticky"][class~="z-30"][class~="bg-token-main-surface-primary"]:has([id="scheduled-page-search"])::after {
+        background-image: none !important;
+      }
+      /*
+       * Sites has an opaque route root around the shared page chrome. Glass
+       * that root once, then clear only its nested search shell.
+       */
+      __BFC_GLASS_BODY_SELECTOR__ [class~="flex"][class~="h-full"][class~="min-h-0"][class~="flex-col"][class~="bg-token-main-surface-primary"]:has([id="appgen-site-search"]) {
+        background-color: var(--codex-wallpaper-glass) !important;
+        -webkit-backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
+        backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
+        border-color: var(--codex-wallpaper-border);
+      }
+      __BFC_GLASS_BODY_SELECTOR__ [class~="flex"][class~="h-full"][class~="min-h-0"][class~="flex-col"][class~="bg-token-main-surface-primary"]:has([id="appgen-site-search"])
+        [class~="sticky"][class~="z-30"][class~="bg-token-main-surface-primary"]:has([id="appgen-site-search"]) {
+        background-color: transparent !important;
+      }
+      __BFC_GLASS_BODY_SELECTOR__ [class~="flex"][class~="h-full"][class~="min-h-0"][class~="flex-col"][class~="bg-token-main-surface-primary"]:has([id="appgen-site-search"])
+        [class~="sticky"][class~="z-30"][class~="bg-token-main-surface-primary"]:has([id="appgen-site-search"])::after {
+        background-image: none !important;
+      }
+      /*
+       * Pull requests renders an opaque list plus a persistent detail outlet
+       * inside the reviewed right-panel aside. Glass the list and the outlet's
+       * outer shell once, preserve its divider, and clear only the two full-size
+       * inner primary surfaces. Ordinary right-panel tabs fail the DetailPanel
+       * presence guard; diff, editor, code, and review cards remain surfaced.
+       */
+      __BFC_GLASS_BODY_SELECTOR__ [class~="flex"][class~="h-full"][class~="min-h-0"][class~="w-full"][class~="flex-col"][class~="bg-token-main-surface-primary"]:has([id="pull-request-inbox-search"]),
+      __BFC_GLASS_BODY_SELECTOR__ main:has([id="pull-request-inbox-search"])
+        aside[data-app-shell-focus-area="right-panel"]:has(
+          section[class~="h-full"][class~="min-h-0"][class~="min-w-0"][class~="bg-token-main-surface-primary"]
+          > div[class~="@container/app-shell-detail-panel"][class~="flex"][class~="h-full"][class~="min-h-0"][class~="flex-col"][class~="bg-token-main-surface-primary"]
+        )
+        > div[class~="absolute"][class~="inset-0"][class~="min-h-0"][class~="min-w-0"][class~="overflow-hidden"]
+        > div[class~="absolute"][class~="top-0"][class~="bottom-0"][class~="left-0"][class~="min-w-0"][class~="bg-token-main-surface-primary"] {
+        background-color: var(--codex-wallpaper-glass) !important;
+        -webkit-backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
+        backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
+        border-color: var(--codex-wallpaper-border);
+      }
+      __BFC_GLASS_BODY_SELECTOR__ main:has([id="pull-request-inbox-search"])
+        aside[data-app-shell-focus-area="right-panel"]:has(
+          section[class~="h-full"][class~="min-h-0"][class~="min-w-0"][class~="bg-token-main-surface-primary"]
+          > div[class~="@container/app-shell-detail-panel"][class~="flex"][class~="h-full"][class~="min-h-0"][class~="flex-col"][class~="bg-token-main-surface-primary"]
+        )
+        > div[class~="absolute"][class~="inset-0"][class~="min-h-0"][class~="min-w-0"][class~="overflow-hidden"]
+        > div[class~="absolute"][class~="top-0"][class~="bottom-0"][class~="left-0"][class~="min-w-0"][class~="bg-token-main-surface-primary"]
+        > div[class~="h-full"][class~="min-h-0"][class~="min-w-0"][class~="overflow-hidden"]
+        > div[class~="h-full"]
+        > section[class~="h-full"][class~="min-h-0"][class~="min-w-0"][class~="bg-token-main-surface-primary"],
+      __BFC_GLASS_BODY_SELECTOR__ main:has([id="pull-request-inbox-search"])
+        aside[data-app-shell-focus-area="right-panel"]:has(
+          section[class~="h-full"][class~="min-h-0"][class~="min-w-0"][class~="bg-token-main-surface-primary"]
+          > div[class~="@container/app-shell-detail-panel"][class~="flex"][class~="h-full"][class~="min-h-0"][class~="flex-col"][class~="bg-token-main-surface-primary"]
+        )
+        > div[class~="absolute"][class~="inset-0"][class~="min-h-0"][class~="min-w-0"][class~="overflow-hidden"]
+        > div[class~="absolute"][class~="top-0"][class~="bottom-0"][class~="left-0"][class~="min-w-0"][class~="bg-token-main-surface-primary"]
+        > div[class~="h-full"][class~="min-h-0"][class~="min-w-0"][class~="overflow-hidden"]
+        > div[class~="h-full"]
+        > section[class~="h-full"][class~="min-h-0"][class~="min-w-0"][class~="bg-token-main-surface-primary"]
+        > div[class~="@container/app-shell-detail-panel"][class~="flex"][class~="h-full"][class~="min-h-0"][class~="flex-col"][class~="bg-token-main-surface-primary"] {
+        background-color: transparent !important;
+      }
+      __BFC_GLASS_BODY_SELECTOR__ [class~="flex"][class~="h-full"][class~="min-h-0"][class~="w-full"][class~="flex-col"][class~="bg-token-main-surface-primary"]:has([id="pull-request-inbox-search"])
+        [class~="sticky"][class~="z-30"][class~="bg-token-main-surface-primary"]:has([id="pull-request-inbox-search"]) {
+        background-color: transparent !important;
+      }
+      __BFC_GLASS_BODY_SELECTOR__ [class~="flex"][class~="h-full"][class~="min-h-0"][class~="w-full"][class~="flex-col"][class~="bg-token-main-surface-primary"]:has([id="pull-request-inbox-search"])
+        [class~="sticky"][class~="z-30"][class~="bg-token-main-surface-primary"]:has([id="pull-request-inbox-search"])::after {
+        background-image: none !important;
+      }
+      /*
+       * Settings renders its opaque Electron surface inside the reviewed
+       * app-shell viewport stack. Anchor through the settings navigation and
+       * exact current wrappers so the outer main and nested cards stay native.
+       */
+      __BFC_GLASS_BODY_SELECTOR__ [class~="relative"][class~="isolate"][class~="flex"][class~="max-h-full"][class~="min-h-0"][class~="w-full"][class~="flex-1"]:has([class~="app-shell-left-panel"] [data-settings-panel-slug])
+        > main[data-app-shell-main-surface="default"]
+        > [class~="relative"][class~="isolate"][class~="flex"][class~="min-h-0"][class~="flex-1"][class~="overflow-hidden"]
+        > [data-app-shell-main-content-layout][data-app-shell-right-panel-full-width]
+        > [data-app-shell-thread-edge-divider]
+        > [class~="relative"][class~="flex"][class~="min-h-0"][class~="flex-1"]
+        > [class~="h-full"][class~="min-h-0"][class~="min-w-0"][class~="flex-1"]
+        > [class~="h-full"][class~="min-w-0"][class~="overflow-visible"]
+        > div[class~="flex"][class~="h-full"][class~="min-h-0"][class~="flex-col"][class~="electron:overflow-hidden"][class~="electron:bg-token-main-surface-primary"][class~="electron:elevation-prominent"][class~="windows:rounded-tl-lg"] {
+        background-color: var(--codex-wallpaper-glass) !important;
+        -webkit-backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
+        backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
+        border-color: var(--codex-wallpaper-border);
+      }
+      /*
+       * Keyboard shortcuts reuses the shared sticky search shell. Require the
+       * active settings route and its text search before clearing only that shell;
+       * the search control, shortcut rows, and capture controls remain native.
+       */
+      __BFC_GLASS_BODY_SELECTOR__:has([class~="app-shell-left-panel"] [data-settings-panel-slug="keyboard-shortcuts"][aria-current="page"])
+        [class~="sticky"][class~="z-30"][class~="bg-token-main-surface-primary"]:has(input[type="text"]) {
+        background-color: transparent !important;
+        -webkit-backdrop-filter: none !important;
+        backdrop-filter: none !important;
+        border-color: transparent;
+      }
+      __BFC_GLASS_BODY_SELECTOR__:has([class~="app-shell-left-panel"] [data-settings-panel-slug="keyboard-shortcuts"][aria-current="page"])
+        [class~="sticky"][class~="z-30"][class~="bg-token-main-surface-primary"]:has(input[type="text"])::after {
+        background-image: none !important;
+      }
+      /* codex-wallpaper-glass:end */
+      /*
+       * The reviewed right-panel shell owns the opaque theme surface. Glass that
+       * shell once so the tab strip and every right-side detail share one layer.
+       */
+      /* codex-wallpaper-glass:start */
+      __BFC_GLASS_BODY_SELECTOR__ aside[data-app-shell-focus-area="right-panel"]
+        > div:has([role="tabpanel"][data-app-shell-tab-panel-controller="right"])
+        > div[class~="bg-token-main-surface-primary"] {
+        background-color: var(--codex-wallpaper-glass) !important;
+        -webkit-backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
+        backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
+        border-color: var(--codex-wallpaper-border);
+      }
+      /*
+       * Before a right-side tool is opened, the reviewed launcher has no
+       * tab-panel controller. Glass its outer shell once and clear only the
+       * primary chrome nested under the tabs root. Launcher action cards use
+       * other surface tokens and retain their native opaque backgrounds.
+       */
+      __BFC_GLASS_BODY_SELECTOR__ aside[data-app-shell-focus-area="right-panel"]:not(:has([data-app-shell-tab-panel-controller]))
+        > div
+        > div[class~="bg-token-main-surface-primary"]:has([data-app-shell-tabs="true"]) {
+        background-color: var(--codex-wallpaper-glass) !important;
+        -webkit-backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
+        backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
+        border-color: var(--codex-wallpaper-border);
+      }
+      __BFC_GLASS_BODY_SELECTOR__ aside[data-app-shell-focus-area="right-panel"]
+        [data-app-shell-tabs="true"][class~="bg-token-main-surface-primary"]:has([role="tabpanel"][data-app-shell-tab-panel-controller="right"]),
+      __BFC_GLASS_BODY_SELECTOR__ aside[data-app-shell-focus-area="right-panel"]
+        [data-app-shell-tabs="true"][class~="bg-token-main-surface-primary"]:has([role="tabpanel"][data-app-shell-tab-panel-controller="right"])
+        > [class~="bg-token-main-surface-primary"]:has([data-app-shell-tab-strip-controller="right"]) {
+        background-color: transparent !important;
+      }
+      __BFC_GLASS_BODY_SELECTOR__ aside[data-app-shell-focus-area="right-panel"]
+        [data-app-shell-tabs="true"][class~="bg-token-main-surface-primary"]:not(:has([data-app-shell-tab-panel-controller])),
+      __BFC_GLASS_BODY_SELECTOR__ aside[data-app-shell-focus-area="right-panel"]
+        [data-app-shell-tabs="true"]:not(:has([data-app-shell-tab-panel-controller]))
+        [class~="bg-token-main-surface-primary"] {
+        background-color: transparent !important;
+      }
+      /* codex-wallpaper-glass:end */
+      /*
+       * Clear only the audited file-layout and Markdown shells. Editor, diff,
+       * code, table, and Popcorn content surfaces keep their theme backgrounds.
+       */
+      /* codex-wallpaper-advanced:start */
+      __BFC_ADVANCED_BODY_SELECTOR__ [role="tabpanel"][data-app-shell-tab-panel-controller="right"]
+        > [class~="bg-token-main-surface-primary"],
+      __BFC_ADVANCED_BODY_SELECTOR__ [role="tabpanel"][data-app-shell-tab-panel-controller="right"]
+        [class~="relative"][class~="rounded-lg"][class~="bg-token-main-surface-primary"]:has(:is(.markdown, [class^="_markdownContent_"], [class*=" _markdownContent_"])) {
+        background-color: transparent !important;
+      }
+      /* codex-wallpaper-advanced:end */
+      /* codex-wallpaper-glass:start */
+      html[data-codex-window-type="electron"][data-codex-window-chrome="application-menu"]
+        __BFC_GLASS_BODY_SELECTOR__ > #root > div > div:has(> [role="menubar"][data-orientation="horizontal"]) {
+        background-color: var(--codex-wallpaper-glass) !important;
+        -webkit-backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation)) !important;
+        backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation)) !important;
+        border-color: var(--codex-wallpaper-border);
+      }
+      __BFC_GLASS_BODY_SELECTOR__ header[data-app-shell-application-menu-bar][data-app-shell-header-edge-scroll] {
+        background: transparent !important;
+        -webkit-backdrop-filter: none !important;
+        backdrop-filter: none !important;
+      }
+      __BFC_GLASS_BODY_SELECTOR__ header[data-app-shell-application-menu-bar][data-app-shell-header-edge-scroll]
+        > [data-testid="app-shell-header-context-menu-surface"] {
+        background: transparent !important;
+        -webkit-backdrop-filter: none !important;
+        backdrop-filter: none !important;
+        border-color: transparent !important;
+      }
+      __BFC_GLASS_BODY_SELECTOR__ :is(
+        aside:not([data-app-shell-focus-area="right-panel"]),
+        [role="dialog"],
+        [data-codex-wallpaper-glass]) {
+        background-color: var(--codex-wallpaper-glass) !important;
+        -webkit-backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
+        backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
+        border-color: var(--codex-wallpaper-border);
+      }
+      __BFC_GLASS_BODY_SELECTOR__ :is(
+        aside:not([data-app-shell-focus-area="right-panel"]),
+        [role="dialog"],
+        [data-codex-wallpaper-glass]) :is(nav, header) {
+        background: transparent !important;
+        -webkit-backdrop-filter: none !important;
+        backdrop-filter: none !important;
+      }
+      /* codex-wallpaper-glass:end */
+      /* codex-wallpaper-advanced:start */
+      __BFC_ADVANCED_BODY_SELECTOR__ main
+        [data-app-shell-main-content-top-fade] {
+        background-image: none !important;
+      }
+      __BFC_ADVANCED_BODY_SELECTOR__ main .thread-scroll-container
+        [class~="bg-gradient-to-t"][class~="from-token-main-surface-primary"][class~="via-token-main-surface-primary"] {
+        background: transparent !important;
+      }
+      /*
+       * The in-progress changed-files summary is rendered above the composer
+       * in a portal with its own primary-to-transparent fade. Remove only that
+       * reviewed fade; the summary button and composer chrome stay surfaced.
+       */
+      __BFC_ADVANCED_BODY_SELECTOR__ main [data-codex-composer-root] [data-above-composer-portal]
+        > [data-in-progress-fixed-content]
+        > [class~="absolute"][class~="inset-x-0"][class~="bottom-1"][class~="flex"][class~="min-h-7"][class~="items-center"][class~="justify-center"][class~="gap-2"][class~="pb-1"]
+        > [class~="pointer-events-none"][class~="absolute"][class~="inset-x-0"][class~="-bottom-1"][class~="h-7"][class~="bg-gradient-to-t"][class~="from-token-main-surface-primary"][class~="to-transparent"] {
+        background-image: none !important;
+      }
+      __BFC_ADVANCED_BODY_SELECTOR__ main [data-response-annotation-conversation][data-response-annotation-target],
+      __BFC_ADVANCED_BODY_SELECTOR__ main [data-content-search-unit-key]
+        > h4[class~="sr-only"][class~="select-none"]
+        + div[class~="group"][class~="flex"][class~="min-w-0"][class~="flex-col"]:not([data-response-annotation-target]):has(> [data-selected-text-overlay-target]),
+      __BFC_ADVANCED_BODY_SELECTOR__ main [data-content-search-unit-key]
+        > div[class~="group"][class~="flex"][class~="min-w-0"][class~="flex-col"]:not([data-response-annotation-target]):has(
+          > [data-selected-text-overlay-target][data-markdown-text-style="assistant-message"]
+        ),
+      __BFC_ADVANCED_BODY_SELECTOR__ main [data-user-message-bubble="true"] {
+        background-color: var(--codex-wallpaper-glass) !important;
+        -webkit-backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
+        backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
+        border: 1px solid var(--codex-wallpaper-border);
+        border-radius: var(--codex-wallpaper-radius);
+        box-sizing: border-box;
+        box-shadow: 0 8px 28px rgb(0 0 0 / 0.18);
+      }
+      __BFC_ADVANCED_BODY_SELECTOR__ main [data-response-annotation-conversation][data-response-annotation-target],
+      __BFC_ADVANCED_BODY_SELECTOR__ main [data-content-search-unit-key]
+        > h4[class~="sr-only"][class~="select-none"]
+        + div[class~="group"][class~="flex"][class~="min-w-0"][class~="flex-col"]:not([data-response-annotation-target]):has(> [data-selected-text-overlay-target]),
+      __BFC_ADVANCED_BODY_SELECTOR__ main [data-content-search-unit-key]
+        > div[class~="group"][class~="flex"][class~="min-w-0"][class~="flex-col"]:not([data-response-annotation-target]):has(
+          > [data-selected-text-overlay-target][data-markdown-text-style="assistant-message"]
+        ) {
+        padding: 12px var(--codex-wallpaper-conversation-inline-padding);
+      }
+      /*
+       * Markdown tables intentionally escape the normal thread column through
+       * a centered wide-block scroller. Keep that native layout and scrollbar,
+       * but let one assistant glass layer cover the reviewed wide-table span.
+       */
+      __BFC_ADVANCED_BODY_SELECTOR__ main :is(
+        [data-response-annotation-conversation][data-response-annotation-target],
+        [data-content-search-unit-key]
+          > h4[class~="sr-only"][class~="select-none"]
+          + div[class~="group"][class~="flex"][class~="min-w-0"][class~="flex-col"]:not([data-response-annotation-target]):has(> [data-selected-text-overlay-target]),
+        [data-content-search-unit-key]
+          > div[class~="group"][class~="flex"][class~="min-w-0"][class~="flex-col"]:not([data-response-annotation-target]):has(
+            > [data-selected-text-overlay-target][data-markdown-text-style="assistant-message"]
+          )
+      ):has(
+        :is(
+          :is([class^="_tableContainer_"], [class*=" _tableContainer_"]):is([class^="_tableWideBlock_"], [class*=" _tableWideBlock_"])
+            > :is([class^="_tableScroller_"], [class*=" _tableScroller_"])
+            > :is([class^="_tableWrapper_"], [class*=" _tableWrapper_"])
+            > table:is([class^="_table_"], [class*=" _table_"]),
+          [data-markdown-table="true"][data-wide-block]
+            > :is([class^="_TableScroller_"], [class*=" _TableScroller_"])
+            > :is([class^="_TableWrapper_"], [class*=" _TableWrapper_"])
+            > table:is([class^="_Table_"], [class*=" _Table_"])
+        )
+      ) {
+        --codex-wallpaper-wide-table-glass-width: min(
+          calc(
+            var(--markdown-wide-block-max-width, 56rem) + 8rem +
+            (var(--thread-content-margin, 24px) * 2)
+          ),
+          max(
+            calc(
+              100% + (var(--thread-content-margin, 24px) * 2) -
+              (var(--codex-wallpaper-conversation-inline-padding, 16px) * 2)
+            ),
+            calc(
+              100cqi - (var(--padding-toolbar, 1rem) * 2) -
+              (var(--spacing, 0.25rem) * 18) -
+              (var(--thread-wide-block-inline-shift, 0px) * 2)
+            )
+          )
+        );
+        position: relative;
+        isolation: isolate;
+        background-color: transparent !important;
+        -webkit-backdrop-filter: none;
+        backdrop-filter: none;
+        border-color: transparent;
+        box-shadow: none;
+      }
+      __BFC_ADVANCED_BODY_SELECTOR__ main :is(
+        [data-response-annotation-conversation][data-response-annotation-target],
+        [data-content-search-unit-key]
+          > h4[class~="sr-only"][class~="select-none"]
+          + div[class~="group"][class~="flex"][class~="min-w-0"][class~="flex-col"]:not([data-response-annotation-target]):has(> [data-selected-text-overlay-target]),
+        [data-content-search-unit-key]
+          > div[class~="group"][class~="flex"][class~="min-w-0"][class~="flex-col"]:not([data-response-annotation-target]):has(
+            > [data-selected-text-overlay-target][data-markdown-text-style="assistant-message"]
+          )
+      ):has(
+        :is(
+          :is([class^="_tableContainer_"], [class*=" _tableContainer_"]):is([class^="_tableWideBlock_"], [class*=" _tableWideBlock_"])
+            > :is([class^="_tableScroller_"], [class*=" _tableScroller_"])
+            > :is([class^="_tableWrapper_"], [class*=" _tableWrapper_"])
+            > table:is([class^="_table_"], [class*=" _table_"]),
+          [data-markdown-table="true"][data-wide-block]
+            > :is([class^="_TableScroller_"], [class*=" _TableScroller_"])
+            > :is([class^="_TableWrapper_"], [class*=" _TableWrapper_"])
+            > table:is([class^="_Table_"], [class*=" _Table_"])
+        )
+      )::before {
+        content: "";
+        position: absolute;
+        z-index: -1;
+        inset-block: 0;
+        left: 50%;
+        width: var(--codex-wallpaper-wide-table-glass-width);
+        transform: translateX(-50%);
+        pointer-events: none;
+        box-sizing: border-box;
+        background-color: var(--codex-wallpaper-glass) !important;
+        -webkit-backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
+        backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
+        border: 1px solid var(--codex-wallpaper-border);
+        border-radius: var(--codex-wallpaper-radius);
+        box-shadow: 0 8px 28px rgb(0 0 0 / 0.18);
+      }
+      /*
+       * The native RTL wide block grows toward physical left because its
+       * reviewed layout uses margin-left. Anchor glass to the same right edge.
+       */
+      __BFC_ADVANCED_BODY_SELECTOR__ main :is(
+        [data-response-annotation-conversation][data-response-annotation-target],
+        [data-content-search-unit-key]
+          > h4[class~="sr-only"][class~="select-none"]
+          + div[class~="group"][class~="flex"][class~="min-w-0"][class~="flex-col"]:not([data-response-annotation-target]):has(> [data-selected-text-overlay-target]),
+        [data-content-search-unit-key]
+          > div[class~="group"][class~="flex"][class~="min-w-0"][class~="flex-col"]:not([data-response-annotation-target]):has(
+            > [data-selected-text-overlay-target][data-markdown-text-style="assistant-message"]
+          )
+      ):has(
+        :is(
+          :is([class^="_tableContainer_"], [class*=" _tableContainer_"]):is([class^="_tableWideBlock_"], [class*=" _tableWideBlock_"])
+            > :is([class^="_tableScroller_"], [class*=" _tableScroller_"])
+            > :is([class^="_tableWrapper_"], [class*=" _tableWrapper_"])
+            > table:is([class^="_table_"], [class*=" _table_"]),
+          [data-markdown-table="true"][data-wide-block]
+            > :is([class^="_TableScroller_"], [class*=" _TableScroller_"])
+            > :is([class^="_TableWrapper_"], [class*=" _TableWrapper_"])
+            > table:is([class^="_Table_"], [class*=" _Table_"])
+        )
+      ):dir(rtl)::before {
+        left: auto;
+        right: calc(
+          var(--codex-wallpaper-conversation-inline-padding, 16px) -
+          var(--thread-content-margin, 24px)
+        );
+        transform: none;
+      }
+      __BFC_ADVANCED_BODY_SELECTOR__ main [data-local-conversation-item-target-ids] {
+        background-color: var(--codex-wallpaper-activity) !important;
+        border: 1px solid var(--codex-wallpaper-activity-border);
+        border-radius: 10px;
+        box-sizing: border-box;
+        padding: 4px 8px;
+      }
+      /* codex-wallpaper-advanced:end */
+    }
+    @media (forced-colors: active) {
+      #__BFC_ROOT_ID__ {
+        display: none !important;
+      }
+    }

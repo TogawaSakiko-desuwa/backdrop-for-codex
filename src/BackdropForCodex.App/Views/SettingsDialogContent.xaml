@@ -41,7 +41,7 @@
             <ui:Card Margin="0,0,0,12">
               <StackPanel Margin="16">
                 <TextBlock Style="{StaticResource SectionHeadingStyle}"
-                           Text="{localization:Loc Risk_Title, Fallback='Local Codex debugging'}" />
+                           Text="{localization:Loc Settings_RiskTitle, Fallback='Local Codex debugging'}" />
                 <TextBlock Margin="0,4,0,8"
                            Style="{StaticResource CaptionTextStyle}"
                            Text="{localization:Loc Settings_RiskDescription, Fallback='Review or revoke the local debugging acknowledgement.'}" />
@@ -61,20 +61,20 @@
                            Text="{localization:Loc Settings_RecoveryTitle, Fallback='Settings recovery'}" />
                 <TextBlock Margin="0,5,0,12"
                            Style="{StaticResource CaptionTextStyle}"
-                           Text="{localization:Loc Settings_RecoveryDescription, Fallback='A preserved read-only V1 backup is available. Restore it by migrating a fresh Settings V2 document; the backup itself remains unchanged.'}" />
+                           Text="{localization:Loc Settings_RecoveryDescription, Fallback='A protected backup from an earlier version is available. Restoring it replaces the current settings; the original backup remains unchanged.'}" />
                 <ui:Button x:Name="RestoreBackupButton"
                            HorizontalAlignment="Left"
-                           Content="{localization:Loc Action_RestoreBackup, Fallback='Restore V1 backup'}"
+                           Content="{localization:Loc Action_RestoreBackup, Fallback='Restore earlier backup'}"
                            Click="RestoreBackupButton_Click" />
               </StackPanel>
             </ui:Card>
             <ui:Card>
               <StackPanel Margin="16">
                 <TextBlock Style="{StaticResource SectionHeadingStyle}"
-                           Text="{localization:Loc Section_SafetyPrivacy, Fallback='Privacy'}" />
+                           Text="{localization:Loc Section_Privacy, Fallback='Privacy'}" />
                 <TextBlock Margin="0,4,0,0"
                            Style="{StaticResource CaptionTextStyle}"
-                           Text="{localization:Loc Settings_PrivacyDescription, Fallback='Media stays on this device. A verified local CDP session binds the leased file to an owned page input; no media HTTP server is used.'}" />
+                     Text="{localization:Loc Settings_PrivacyDescription, Fallback='Backdrop uses no media HTTP server. Local files stay on this device. Scene and Web projects run only inside Wallpaper Engine and may play sound. Backdrop does not enumerate, mute, or change Wallpaper Engine audio sessions, and sends no audio into Codex. Third-party Web wallpapers may access the network. Backdrop sends only captured pixels into Codex and never exposes Codex content to the wallpaper.'}" />
               </StackPanel>
             </ui:Card>
           </StackPanel>
@@ -110,7 +110,7 @@
                            Text="{localization:Loc Diagnostics_Title, Fallback='Diagnostic report'}" />
                 <TextBlock Margin="0,5,0,12"
                            Style="{StaticResource CaptionTextStyle}"
-                           Text="{localization:Loc Diagnostics_Description, Fallback='Create an allow-listed local report to help investigate compatibility and runtime failures.'}" />
+                           Text="{localization:Loc Diagnostics_Description, Fallback='Create a local report to help investigate compatibility and wallpaper connection problems.'}" />
                 <ui:Button HorizontalAlignment="Left"
                            Content="{localization:Loc Diagnostics_Export, Fallback='Export diagnostic report'}"
                            Click="DiagnosticExportButton_Click" />
@@ -127,7 +127,7 @@
                 <TextBlock Margin="0,4,0,0" Text="PuppeteerSharp 25.3.4 — MIT" />
                 <TextBlock Margin="0,8,0,0"
                            Style="{StaticResource CaptionTextStyle}"
-                           Text="See THIRD_PARTY_NOTICES.md in the source distribution for full notices." />
+                           Text="{localization:Loc Settings_ThirdPartyNotices, Fallback='Full notices are included in THIRD_PARTY_NOTICES.md.'}" />
               </StackPanel>
             </ui:Card>
             <ui:Card>
@@ -137,10 +137,10 @@
                            Text="{localization:Loc Section_DangerZone, Fallback='Danger zone'}" />
                 <TextBlock Margin="0,5,0,12"
                            Style="{StaticResource CaptionTextStyle}"
-                           Text="{localization:Loc Settings_ResetDescription, Fallback='Restore the official background and permanently delete all app-owned state, including any preserved V1 migration backup.'}" />
+                           Text="{localization:Loc Settings_ResetSummary, Fallback='Restore the official background and permanently delete all app settings, recent media, acknowledgements, preferences, shortcuts, and protected backups.'}" />
                 <ui:Button HorizontalAlignment="Left"
                            Appearance="Danger"
-                           Content="{localization:Loc Action_Reset, Fallback='Reset app'}"
+                           Content="{localization:Loc Action_ResetApp, Fallback='Reset app'}"
                            Click="ResetButton_Click" />
               </StackPanel>
             </ui:Card>

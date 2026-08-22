@@ -127,7 +127,8 @@ public sealed record WallpaperProfile
 }
 
 /// <summary>
-/// Version two of the durable settings contract.
+/// Frozen version-two migration contract. Production state and all new publications use
+/// <see cref="SettingsV3"/>; this type exists only to validate legacy input before migration.
 /// </summary>
 public sealed record SettingsV2
 {
@@ -160,20 +161,6 @@ public sealed record SettingsV2
         "Do not use this property for runtime behavior.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
     public string? LastCompatibilityProfileId { get; init; }
-
-    public static SettingsV2 CreateDefault()
-    {
-        var profile = WallpaperProfile.CreateDefault();
-        return new SettingsV2
-        {
-            Profiles = new ReadOnlyCollection<WallpaperProfile>([profile]),
-            RegionBindings = new ReadOnlyDictionary<SemanticRegion, Guid>(
-                new Dictionary<SemanticRegion, Guid>
-                {
-                    [SemanticRegion.Global] = profile.ProfileId,
-                }),
-        };
-    }
 
     public WallpaperProfile ResolveProfile(SemanticRegion region)
     {
@@ -237,7 +224,7 @@ public sealed record SettingsV2
     /// Callers may safely retain the returned value even when the source collections
     /// were backed by mutable arrays, lists, or dictionaries.
     /// </summary>
-    public SettingsV2 CreateSnapshot()
+    internal SettingsV2 Snapshot()
     {
         Validate();
 
@@ -262,8 +249,6 @@ public sealed record SettingsV2
         snapshot.Validate();
         return snapshot;
     }
-
-    internal SettingsV2 Snapshot() => CreateSnapshot();
 
     private HashSet<Guid> ValidateProfiles(List<string> errors)
     {

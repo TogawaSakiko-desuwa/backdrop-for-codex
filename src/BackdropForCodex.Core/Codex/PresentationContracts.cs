@@ -166,6 +166,76 @@ public static class PresentationContractCatalog
     internal static CompatibilityCapabilities CreateFullySupportedCapabilities() =>
         ObserveMatchedShell(PresentationEvidence.FullySupported);
 
+    internal static void ValidateDynamicCompatibility(
+        PresentationContractSnapshot presentation,
+        CompatibilityCapabilities capabilities,
+        string presentationParameterName,
+        string capabilitiesParameterName)
+    {
+        ArgumentNullException.ThrowIfNull(presentation);
+        ArgumentNullException.ThrowIfNull(capabilities);
+        ArgumentException.ThrowIfNullOrWhiteSpace(presentationParameterName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(capabilitiesParameterName);
+
+        if (!Enum.IsDefined(presentation.MatchState))
+        {
+            throw new ArgumentException(
+                "The presentation contract has an unknown match state.",
+                presentationParameterName);
+        }
+
+        switch (presentation.MatchState)
+        {
+            case ContractMatchState.Matched:
+                if (string.IsNullOrWhiteSpace(presentation.ActiveContractId) ||
+                    string.Equals(
+                        presentation.ActiveContractId,
+                        GlobalBaselineId,
+                        StringComparison.Ordinal))
+                {
+                    throw new ArgumentException(
+                        "A matched presentation requires a non-baseline contract identifier.",
+                        presentationParameterName);
+                }
+
+                break;
+            case ContractMatchState.NoMatchUsingGlobalBaseline:
+            case ContractMatchState.AmbiguousUsingGlobalBaseline:
+                if (!string.Equals(
+                        presentation.ActiveContractId,
+                        GlobalBaselineId,
+                        StringComparison.Ordinal))
+                {
+                    throw new ArgumentException(
+                        "A global fallback must identify the reviewed global baseline contract.",
+                        presentationParameterName);
+                }
+
+                if (capabilities.RegionRecognition.IsAvailable ||
+                    capabilities.GlassStyle.IsAvailable ||
+                    capabilities.Audio.IsAvailable ||
+                    capabilities.AdvancedSurfaces.IsAvailable)
+                {
+                    throw new ArgumentException(
+                        "A global fallback cannot enable presentation-specific capabilities.",
+                        capabilitiesParameterName);
+                }
+
+                break;
+            default:
+                throw new ArgumentException(
+                    "A successful dynamic activation requires a finalized presentation contract.",
+                    presentationParameterName);
+        }
+
+        if (!capabilities.CanInjectGlobalWallpaper)
+        {
+            throw new ArgumentException(
+                "A successful dynamic activation requires the global wallpaper capability.",
+                capabilitiesParameterName);
+        }
+    }
+
     private static CompatibilityCapabilities ObserveMatchedShell(
         PresentationEvidence evidence)
     {

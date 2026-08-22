@@ -1,0 +1,313 @@
+<UserControl x:Class="BackdropForCodex.App.Views.WallpaperProfilesSection"
+             x:ClassModifier="internal"
+             x:Name="Root"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:converters="clr-namespace:BackdropForCodex.App.Converters"
+             xmlns:localization="clr-namespace:BackdropForCodex.App.Services.Localization"
+             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+             xmlns:views="clr-namespace:BackdropForCodex.App.Views"
+             Focusable="False"
+             Style="{DynamicResource WorkbenchRootStyle}">
+  <UserControl.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="/BackdropForCodex;component/Themes/WorkbenchTheme.xaml" />
+      </ResourceDictionary.MergedDictionaries>
+
+      <converters:MediaThumbnailConverter x:Key="ProfileThumbnailConverter" />
+
+      <ContextMenu x:Key="ProfileActionsMenu"
+                   x:Shared="False"
+                   DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+        <MenuItem Header="{localization:Loc Action_DuplicateProfile, Fallback=Duplicate}"
+                  Command="{Binding PlacementTarget.Tag.DuplicateProfileCommand, RelativeSource={RelativeSource AncestorType={x:Type ContextMenu}}}"
+                  CommandParameter="{Binding}" />
+        <MenuItem Header="{localization:Loc Action_RenameProfile, Fallback=Rename}"
+                  Command="{Binding PlacementTarget.Tag.RenameProfileCommand, RelativeSource={RelativeSource AncestorType={x:Type ContextMenu}}}"
+                  CommandParameter="{Binding}" />
+        <Separator />
+        <MenuItem Header="{localization:Loc Action_DeleteProfile, Fallback=Delete}"
+                  Command="{Binding PlacementTarget.Tag.DeleteProfileCommand, RelativeSource={RelativeSource AncestorType={x:Type ContextMenu}}}"
+                  CommandParameter="{Binding}" />
+      </ContextMenu>
+
+      <Style x:Key="ProfileListItemStyle" TargetType="ListBoxItem">
+        <Setter Property="MinHeight" Value="48" />
+        <Setter Property="Margin" Value="4,2" />
+        <Setter Property="Padding" Value="8" />
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="FocusVisualStyle" Value="{DynamicResource WorkbenchFocusVisualStyle}" />
+        <Setter Property="AutomationProperties.Name" Value="{Binding AutomationName}" />
+        <Setter Property="Tag"
+                Value="{Binding RelativeSource={RelativeSource AncestorType={x:Type views:WallpaperProfilesSection}}}" />
+        <Setter Property="ContextMenu" Value="{StaticResource ProfileActionsMenu}" />
+        <EventSetter Event="ContextMenuOpening" Handler="ProfileItem_ContextMenuOpening" />
+        <Setter Property="Template">
+          <Setter.Value>
+            <ControlTemplate TargetType="ListBoxItem">
+              <Border x:Name="ItemSurface"
+                      Padding="{TemplateBinding Padding}"
+                      Background="{TemplateBinding Background}"
+                      BorderBrush="{TemplateBinding BorderBrush}"
+                      BorderThickness="{TemplateBinding BorderThickness}"
+                      CornerRadius="{DynamicResource WorkbenchRadius8}"
+                      SnapsToDevicePixels="True">
+                <Grid>
+                  <Border x:Name="SelectionRail"
+                          Width="3"
+                          Margin="0,6,0,6"
+                          HorizontalAlignment="Left"
+                          Background="{DynamicResource AccentFillColorDefaultBrush}"
+                          CornerRadius="2"
+                          Visibility="Collapsed" />
+                  <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                    VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                </Grid>
+              </Border>
+              <ControlTemplate.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                  <Setter TargetName="ItemSurface"
+                          Property="Background"
+                          Value="{DynamicResource ControlFillColorSecondaryBrush}" />
+                </Trigger>
+                <Trigger Property="IsSelected" Value="True">
+                  <Setter TargetName="ItemSurface"
+                          Property="Background"
+                          Value="{DynamicResource ControlFillColorSecondaryBrush}" />
+                  <Setter TargetName="SelectionRail" Property="Visibility" Value="Visible" />
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                  <Setter TargetName="ItemSurface" Property="Opacity" Value="0.55" />
+                </Trigger>
+              </ControlTemplate.Triggers>
+            </ControlTemplate>
+          </Setter.Value>
+        </Setter>
+        <Style.Triggers>
+          <DataTrigger Binding="{Binding IsCompact, ElementName=Root}" Value="True">
+            <Setter Property="Padding" Value="4" />
+          </DataTrigger>
+        </Style.Triggers>
+      </Style>
+
+      <Style x:Key="ProfileActionsButtonStyle"
+             TargetType="ui:Button"
+             BasedOn="{StaticResource WorkbenchIconButtonStyle}">
+        <Setter Property="Opacity" Value="0.28" />
+        <Style.Triggers>
+          <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType={x:Type ListBoxItem}}}"
+                       Value="True">
+            <Setter Property="Opacity" Value="1" />
+          </DataTrigger>
+          <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType={x:Type ListBoxItem}}}"
+                       Value="True">
+            <Setter Property="Opacity" Value="1" />
+          </DataTrigger>
+          <DataTrigger Binding="{Binding IsKeyboardFocusWithin, RelativeSource={RelativeSource AncestorType={x:Type ListBoxItem}}}"
+                       Value="True">
+            <Setter Property="Opacity" Value="1" />
+          </DataTrigger>
+        </Style.Triggers>
+      </Style>
+
+      <DataTemplate x:Key="ProfilePreviewTemplate">
+        <Border Width="32"
+                Height="32"
+                Background="{DynamicResource ControlFillColorSecondaryBrush}"
+                BorderThickness="0"
+                CornerRadius="{DynamicResource WorkbenchRadius8}"
+                ClipToBounds="True">
+          <Grid>
+            <Image Source="{Binding PreviewPath, Converter={StaticResource ProfileThumbnailConverter}}"
+                   Stretch="UniformToFill"
+                   IsHitTestVisible="False">
+              <Image.Style>
+                <Style TargetType="Image">
+                  <Setter Property="Visibility" Value="Collapsed" />
+                  <Style.Triggers>
+                    <DataTrigger Binding="{Binding IsImagePreviewAvailable}" Value="True">
+                      <Setter Property="Visibility" Value="Visible" />
+                    </DataTrigger>
+                  </Style.Triggers>
+                </Style>
+              </Image.Style>
+            </Image>
+            <ui:SymbolIcon Symbol="Image24"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center">
+              <ui:SymbolIcon.Style>
+                <Style TargetType="ui:SymbolIcon">
+                  <Setter Property="Visibility" Value="Visible" />
+                  <Style.Triggers>
+                    <DataTrigger Binding="{Binding IsImagePreviewAvailable}" Value="True">
+                      <Setter Property="Visibility" Value="Collapsed" />
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding IsVideo}" Value="True">
+                      <Setter Property="Visibility" Value="Collapsed" />
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding IsMissing}" Value="True">
+                      <Setter Property="Visibility" Value="Collapsed" />
+                    </DataTrigger>
+                  </Style.Triggers>
+                </Style>
+              </ui:SymbolIcon.Style>
+            </ui:SymbolIcon>
+            <ui:SymbolIcon Symbol="VideoClip24"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center">
+              <ui:SymbolIcon.Style>
+                <Style TargetType="ui:SymbolIcon">
+                  <Setter Property="Visibility" Value="Collapsed" />
+                  <Style.Triggers>
+                    <MultiDataTrigger>
+                      <MultiDataTrigger.Conditions>
+                        <Condition Binding="{Binding IsVideo}" Value="True" />
+                        <Condition Binding="{Binding IsMissing}" Value="False" />
+                      </MultiDataTrigger.Conditions>
+                      <Setter Property="Visibility" Value="Visible" />
+                    </MultiDataTrigger>
+                  </Style.Triggers>
+                </Style>
+              </ui:SymbolIcon.Style>
+            </ui:SymbolIcon>
+            <ui:SymbolIcon Symbol="ErrorCircle24"
+                           Foreground="{DynamicResource SystemFillColorCriticalBrush}"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center">
+              <ui:SymbolIcon.Style>
+                <Style TargetType="ui:SymbolIcon">
+                  <Setter Property="Visibility" Value="Collapsed" />
+                  <Style.Triggers>
+                    <DataTrigger Binding="{Binding IsMissing}" Value="True">
+                      <Setter Property="Visibility" Value="Visible" />
+                    </DataTrigger>
+                  </Style.Triggers>
+                </Style>
+              </ui:SymbolIcon.Style>
+            </ui:SymbolIcon>
+          </Grid>
+        </Border>
+      </DataTemplate>
+
+      <DataTemplate x:Key="ExpandedProfileTemplate">
+        <Grid>
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="36" />
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="32" />
+          </Grid.ColumnDefinitions>
+          <ContentControl Content="{Binding}"
+                          ContentTemplate="{StaticResource ProfilePreviewTemplate}"
+                          IsHitTestVisible="False" />
+          <StackPanel Grid.Column="1"
+                      Margin="8,0,4,0"
+                      VerticalAlignment="Center"
+                      ToolTip="{Binding MediaDisplayName}">
+              <TextBlock Text="{Binding DisplayName}"
+                       FontSize="{DynamicResource WorkbenchTypeBody}"
+                       FontWeight="SemiBold"
+                       TextTrimming="CharacterEllipsis" />
+            <TextBlock Margin="0,2,0,0"
+                       Text="{Binding Subtitle}"
+                       Style="{DynamicResource WorkbenchCaptionTextStyle}"
+                       TextTrimming="CharacterEllipsis"
+                       TextWrapping="NoWrap" />
+          </StackPanel>
+          <ui:Button Grid.Column="2"
+                     Width="32"
+                     Height="32"
+                     Padding="0"
+                     Style="{StaticResource ProfileActionsButtonStyle}"
+                     Tag="{Binding RelativeSource={RelativeSource AncestorType={x:Type views:WallpaperProfilesSection}}}"
+                     ContextMenu="{StaticResource ProfileActionsMenu}"
+                     ToolTip="{Binding ActionsAutomationName}"
+                     AutomationProperties.Name="{Binding ActionsAutomationName}"
+                     Click="ProfileActions_Click">
+            <ui:SymbolIcon Symbol="MoreHorizontal24" />
+          </ui:Button>
+        </Grid>
+      </DataTemplate>
+
+      <DataTemplate x:Key="CompactProfileTemplate">
+        <ContentControl HorizontalAlignment="Center"
+                        Content="{Binding}"
+                        ContentTemplate="{StaticResource ProfilePreviewTemplate}"
+                        ToolTip="{Binding AutomationName}" />
+      </DataTemplate>
+    </ResourceDictionary>
+  </UserControl.Resources>
+
+  <StackPanel>
+    <StackPanel x:Name="ExpandedProfilesHeader" Margin="8,0,8,8">
+      <TextBlock Text="{localization:Loc Section_Profiles, Fallback='Wallpaper profiles'}"
+                 Style="{DynamicResource WorkbenchRailSectionHeadingTextStyle}" />
+    </StackPanel>
+
+    <Border x:Name="CompactProfilesHeader"
+            Height="32"
+            Margin="8,4,8,6"
+            Visibility="Collapsed"
+            ToolTip="{localization:Loc Section_Profiles, Fallback='Wallpaper profiles'}">
+      <ui:SymbolIcon Symbol="Image24"
+                     HorizontalAlignment="Center"
+                     VerticalAlignment="Center" />
+    </Border>
+
+    <ListBox x:Name="ProfileList"
+             ItemsSource="{Binding ProfileItemsSource, ElementName=Root}"
+             SelectedItem="{Binding SelectedProfile, ElementName=Root, Mode=TwoWay}"
+             IsEnabled="{Binding CanEditProfiles, ElementName=Root}"
+             ItemContainerStyle="{StaticResource ProfileListItemStyle}"
+             SelectionMode="Single"
+             VirtualizingPanel.IsVirtualizing="False"
+             AutomationProperties.Name="{localization:Loc Section_Profiles, Fallback='Wallpaper profiles'}"
+             AutomationProperties.HelpText="{localization:Loc Hint_ProfileStrip, Fallback='Choose the draft profile to preview and edit.'}"
+             SelectionChanged="ProfileList_SelectionChanged">
+      <ListBox.Style>
+        <Style TargetType="ListBox"
+               BasedOn="{StaticResource WorkbenchListBoxStyle}">
+          <Setter Property="ItemTemplate" Value="{StaticResource ExpandedProfileTemplate}" />
+          <Style.Triggers>
+            <DataTrigger Binding="{Binding IsCompact, ElementName=Root}" Value="True">
+              <Setter Property="ItemTemplate" Value="{StaticResource CompactProfileTemplate}" />
+            </DataTrigger>
+          </Style.Triggers>
+        </Style>
+      </ListBox.Style>
+    </ListBox>
+
+    <ui:Button x:Name="ExpandedCreateProfileButton"
+               Margin="4,8,4,0"
+               Style="{DynamicResource WorkbenchRailActionButtonStyle}"
+               Command="{Binding CreateProfileCommand, ElementName=Root}"
+               IsEnabled="{Binding CanEditProfiles, ElementName=Root}"
+               AutomationProperties.Name="{localization:Loc Action_NewProfile, Fallback='New profile'}">
+      <StackPanel Orientation="Horizontal">
+        <ui:SymbolIcon Symbol="Add16" VerticalAlignment="Center" />
+        <TextBlock Margin="8,0,0,0"
+                   Text="{localization:Loc Action_NewProfile, Fallback='New profile'}"
+                   VerticalAlignment="Center" />
+      </StackPanel>
+    </ui:Button>
+
+    <ui:Button x:Name="CompactCreateProfileButton"
+               Width="40"
+               Height="40"
+               Margin="4,8,4,0"
+               Padding="0"
+               Visibility="Collapsed"
+               Style="{DynamicResource WorkbenchIconButtonStyle}"
+               Command="{Binding CreateProfileCommand, ElementName=Root}"
+               IsEnabled="{Binding CanEditProfiles, ElementName=Root}"
+               ToolTip="{localization:Loc Action_NewProfile, Fallback='New profile'}"
+               AutomationProperties.Name="{localization:Loc Action_NewProfile, Fallback='New profile'}">
+      <ui:SymbolIcon Symbol="Add16" />
+    </ui:Button>
+  </StackPanel>
+</UserControl>

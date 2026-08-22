@@ -16,6 +16,7 @@ env:
   DOTNET_CLI_TELEMETRY_OPTOUT: "1"
   DOTNET_NOLOGO: "1"
   NUGET_XMLDOC_MODE: skip
+  RELEASE_RUNTIME_PACK_VERSION: "10.0.10"
 
 jobs:
   release:
@@ -53,6 +54,20 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Match tag to project version
+        run: |
+          [xml]$buildProperties = Get-Content -LiteralPath .\Directory.Build.props -Raw
+          $declaredVersions = @(
+            $buildProperties.Project.PropertyGroup.VersionPrefix |
+              ForEach-Object { [string]$_ } |
+              Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+          )
+          $tagVersionPrefix = ($env:RELEASE_VERSION -split '[-+]', 2)[0]
+          if ($declaredVersions.Count -ne 1 -or
+              $declaredVersions[0] -ne $tagVersionPrefix) {
+            throw "Tag version prefix $tagVersionPrefix must match Directory.Build.props VersionPrefix."
+          }
+
       - name: Set up .NET
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
@@ -72,6 +87,15 @@ jobs:
           $actualSdk = dotnet --version
           if ($actualSdk -ne "10.0.302") {
             throw "Release requires .NET SDK 10.0.302 but resolved $actualSdk."
+          }
+
+          $installedRuntimes = @(dotnet --list-runtimes)
+          $escapedRuntimeVersion = [regex]::Escape($env:RELEASE_RUNTIME_PACK_VERSION)
+          foreach ($runtimeName in @("Microsoft.NETCore.App", "Microsoft.WindowsDesktop.App")) {
+            $escapedRuntimeName = [regex]::Escape($runtimeName)
+            if (-not ($installedRuntimes -match "^$escapedRuntimeName $escapedRuntimeVersion \[")) {
+              throw "Release requires $runtimeName $($env:RELEASE_RUNTIME_PACK_VERSION)."
+            }
           }
 
       - name: Restore
@@ -95,7 +119,17 @@ jobs:
           --configuration Release
           --no-build
           --no-restore
-          --filter "Category!=Integration"
+          --filter "Category!=Integration&Category!=BrowserContract"
+
+      - name: Run browser contracts in Microsoft Edge
+        env:
+          BACKDROP_FOR_CODEX_RUN_BROWSER_CONTRACTS: "1"
+        run: >-
+          dotnet test .\tests\BackdropForCodex.Core.Tests\BackdropForCodex.Core.Tests.csproj
+          --configuration Release
+          --no-build
+          --no-restore
+          --filter "Category=BrowserContract"
 
       - name: Publish self-contained single-file app
         run: |
@@ -141,10 +175,9 @@ jobs:
             "LICENSE",
             "NOTICE",
             "PRIVACY.md",
-            "SECURITY.md",
-            "THREAT_MODEL.md",
             "THIRD_PARTY_NOTICES.md"
           ) -Destination $publishDir
+          Copy-Item -LiteralPath "docs\PORTABLE_README.md" -Destination (Join-Path $publishDir "README.md")
 
           $licenseDir = Join-Path $publishDir "licenses"
           New-Item -ItemType Directory -Path $licenseDir -Force | Out-Null
@@ -156,9 +189,9 @@ jobs:
           }
 
           $noticeFiles = @(
-            @{ Package = "microsoft.netcore.app.runtime.win-x64"; Version = "10.0.10"; Source = "LICENSE.TXT"; Destination = "dotnet-runtime-LICENSE.txt" },
-            @{ Package = "microsoft.netcore.app.runtime.win-x64"; Version = "10.0.10"; Source = "THIRD-PARTY-NOTICES.TXT"; Destination = "dotnet-runtime-THIRD-PARTY-NOTICES.txt" },
-            @{ Package = "microsoft.windowsdesktop.app.runtime.win-x64"; Version = "10.0.10"; Source = "LICENSE"; Destination = "windowsdesktop-LICENSE.txt" },
+            @{ Package = "microsoft.netcore.app.runtime.win-x64"; Version = $env:RELEASE_RUNTIME_PACK_VERSION; Source = "LICENSE.TXT"; Destination = "dotnet-runtime-LICENSE.txt" },
+            @{ Package = "microsoft.netcore.app.runtime.win-x64"; Version = $env:RELEASE_RUNTIME_PACK_VERSION; Source = "THIRD-PARTY-NOTICES.TXT"; Destination = "dotnet-runtime-THIRD-PARTY-NOTICES.txt" },
+            @{ Package = "microsoft.windowsdesktop.app.runtime.win-x64"; Version = $env:RELEASE_RUNTIME_PACK_VERSION; Source = "LICENSE"; Destination = "windowsdesktop-LICENSE.txt" },
             @{ Package = "wpf-ui"; Version = "4.3.0"; Source = "LICENSE.md"; Destination = "wpf-ui-LICENSE.md" },
             @{ Package = "wpf-ui"; Version = "4.3.0"; Source = "ThirdPartyNotices.txt"; Destination = "wpf-ui-THIRD-PARTY-NOTICES.txt" },
             @{ Package = "wpf-ui.tray"; Version = "4.3.0"; Source = "LICENSE.md"; Destination = "wpf-ui-tray-LICENSE.md" },
@@ -194,7 +227,10 @@ jobs:
           $vendoredNoticeFiles = @(
             @{ Source = "third_party\licenses\PuppeteerSharp-25.3.4-LICENSE.txt"; Destination = "puppeteersharp-LICENSE.txt" },
             @{ Source = "third_party\licenses\WebDriverBiDi-0.0.54-LICENSE.txt"; Destination = "webdriverbidi-LICENSE.txt" },
-            @{ Source = "third_party\licenses\Microsoft.IO.RecyclableMemoryStream-3.0.1-LICENSE.txt"; Destination = "microsoft-io-recyclablememorystream-LICENSE.txt" }
+            @{ Source = "third_party\licenses\Microsoft.IO.RecyclableMemoryStream-3.0.1-LICENSE.txt"; Destination = "microsoft-io-recyclablememorystream-LICENSE.txt" },
+            @{ Source = "third_party\licenses\Vortice.Windows-3.8.3-LICENSE.txt"; Destination = "vortice-windows-LICENSE.txt" },
+            @{ Source = "third_party\licenses\Vortice.Mathematics-2.1.0-LICENSE.txt"; Destination = "vortice-mathematics-LICENSE.txt" },
+            @{ Source = "third_party\licenses\SharpGen.Runtime-2.4.2-beta-LICENSE.txt"; Destination = "sharpgen-runtime-LICENSE.txt" }
           )
           foreach ($notice in $vendoredNoticeFiles) {
             if (-not (Test-Path -LiteralPath $notice.Source -PathType Leaf)) {
@@ -214,7 +250,7 @@ jobs:
             "-bc", (Join-Path $env:GITHUB_WORKSPACE "src"),
             "-pn", "Backdrop for Codex",
             "-pv", $env:RELEASE_VERSION,
-            "-ps", "Organization:TogawaSakiko-desuwa",
+            "-ps", "TogawaSakiko-desuwa",
             "-nsb", "https://github.com/$($env:GITHUB_REPOSITORY)",
             "-mi", "SPDX:2.2",
             "-V", "Information"
@@ -243,6 +279,16 @@ jobs:
           }
 
           $sbom = Get-Content -LiteralPath $generatedSbom -Raw -Encoding utf8 | ConvertFrom-Json
+          $expectedRootSupplier = "Organization: TogawaSakiko-desuwa"
+          $rootPackages = @(
+            $sbom.packages |
+              Where-Object { $_.SPDXID -eq "SPDXRef-RootPackage" }
+          )
+          if ($rootPackages.Count -ne 1 -or
+              $rootPackages[0].supplier -ne $expectedRootSupplier) {
+            throw "SBOM root supplier must be exactly '$expectedRootSupplier'."
+          }
+
           $lock = Get-Content -LiteralPath "src\BackdropForCodex.App\packages.lock.json" -Raw -Encoding utf8 | ConvertFrom-Json
           $framework = $lock.dependencies.PSObject.Properties |
             Where-Object { $_.Name -notmatch '/' } |
@@ -260,8 +306,8 @@ jobs:
 
             $requiredPackages[$dependency.Name] = [string]$dependency.Value.resolved
           }
-          $requiredPackages["Microsoft.NETCore.App.Runtime.win-x64"] = "10.0.10"
-          $requiredPackages["Microsoft.WindowsDesktop.App.Runtime.win-x64"] = "10.0.10"
+          $requiredPackages["Microsoft.NETCore.App.Runtime.win-x64"] = $env:RELEASE_RUNTIME_PACK_VERSION
+          $requiredPackages["Microsoft.WindowsDesktop.App.Runtime.win-x64"] = $env:RELEASE_RUNTIME_PACK_VERSION
 
           foreach ($requiredPackage in $requiredPackages.GetEnumerator()) {
             $matches = @(
@@ -278,6 +324,40 @@ jobs:
           }
 
           Copy-Item -LiteralPath $generatedSbom -Destination $sbomPath
+          $manifestDirectory = Join-Path $publishDir "_manifest"
+          Remove-Item -LiteralPath $manifestDirectory -Recurse -Force
+          if (Test-Path -LiteralPath $manifestDirectory) {
+            throw "Generated SBOM metadata must not remain inside the portable package."
+          }
+
+          $expectedTopLevelFiles = @(
+            "BackdropForCodex.exe",
+            "LICENSE",
+            "NOTICE",
+            "PRIVACY.md",
+            "README.md",
+            "THIRD_PARTY_NOTICES.md"
+          )
+          $actualTopLevelFiles = @(
+            Get-ChildItem -LiteralPath $publishDir -File |
+              Select-Object -ExpandProperty Name |
+              Sort-Object
+          )
+          $packageContentDifference = @(
+            Compare-Object ($expectedTopLevelFiles | Sort-Object) $actualTopLevelFiles
+          )
+          if ($packageContentDifference.Count -ne 0) {
+            throw "Portable package has unexpected top-level files: $($packageContentDifference.InputObject -join ', ')"
+          }
+
+          $actualTopLevelDirectories = @(
+            Get-ChildItem -LiteralPath $publishDir -Directory |
+              Select-Object -ExpandProperty Name
+          )
+          if ($actualTopLevelDirectories.Count -ne 1 -or
+              $actualTopLevelDirectories[0] -ne "licenses") {
+            throw "Portable package must contain only the licenses directory."
+          }
 
       - name: Archive and calculate SHA-256
         run: |

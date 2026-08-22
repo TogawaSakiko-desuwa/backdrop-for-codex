@@ -7,6 +7,24 @@ namespace BackdropForCodex.Core.Tests.Codex;
 public sealed class HttpCdpJsonTransportTests
 {
     [Fact]
+    public void PublicConstructors_ExposeOnlyOwnedClientPath()
+    {
+        var constructor = Assert.Single(typeof(HttpCdpJsonTransport).GetConstructors());
+
+        Assert.Equal(
+            [typeof(TimeSpan?), typeof(int)],
+            constructor.GetParameters().Select(parameter => parameter.ParameterType));
+        Assert.All(constructor.GetParameters(), parameter => Assert.True(parameter.HasDefaultValue));
+        Assert.DoesNotContain(
+            constructor.GetParameters(),
+            parameter => typeof(HttpClient).IsAssignableFrom(parameter.ParameterType));
+
+        using var transport = new HttpCdpJsonTransport(
+            requestTimeout: TimeSpan.FromSeconds(1),
+            maxResponseBytes: 64);
+    }
+
+    [Fact]
     public async Task GetStringAsync_RejectsNonLoopbackBeforeSending()
     {
         var handler = new StubHandler((_, _) =>

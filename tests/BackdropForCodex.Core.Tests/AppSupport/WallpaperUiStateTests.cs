@@ -105,7 +105,7 @@ public sealed class WallpaperUiStateTests
     [Fact]
     public void RuntimeComparisonTreatsAllEmptyProfilesAsOfficial()
     {
-        var official = SettingsV2.CreateDefault();
+        var official = SettingsV3.CreateDefault();
         var restyled = UpdateGlobal(
             official,
             profile => profile with
@@ -126,7 +126,7 @@ public sealed class WallpaperUiStateTests
     [Fact]
     public void ConfigurationComparisonIgnoresDeprecatedCompatibilityProfileMetadata()
     {
-        var persisted = SettingsV2.CreateDefault();
+        var persisted = SettingsV3.CreateDefault();
 #pragma warning disable CS0618 // Exercise the deprecated persistence field's UI semantics.
         var legacyMetadataChanged = persisted with
         {
@@ -187,14 +187,14 @@ public sealed class WallpaperUiStateTests
                 WallpaperOperationStage.Validating));
     }
 
-    private static SettingsV2 CreateSettings(
+    private static SettingsV3 CreateSettings(
         string mediaPath,
         MediaKind mediaKind,
         bool acceptedCdpRisk = false,
         bool includeRecent = false,
         string? additionalRecentPath = null)
     {
-        var baseline = SettingsV2.CreateDefault();
+        var baseline = SettingsV3.CreateDefault();
         var selected = CreateMedia(mediaPath, mediaKind);
         var catalog = new List<MediaReference> { selected };
         var recents = new List<Guid>();
@@ -223,8 +223,8 @@ public sealed class WallpaperUiStateTests
         }).CreateSnapshot();
     }
 
-    private static SettingsV2 UpdateGlobal(
-        SettingsV2 settings,
+    private static SettingsV3 UpdateGlobal(
+        SettingsV3 settings,
         Func<WallpaperProfile, WallpaperProfile> update)
     {
         var global = settings.ResolveProfile(SemanticRegion.Global);

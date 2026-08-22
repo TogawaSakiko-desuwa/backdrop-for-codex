@@ -374,7 +374,28 @@ public sealed class WallpaperSessionComponentsTests
     }
 
     [Fact]
-    public void CapabilityState_CannotReenableADegradedCapabilityWithinGeneration()
+    public void CapabilityState_DoesNotDowngradeOptionalEffectsFromOneTransientProbe()
+    {
+        var declared = PresentationContractCatalog.CreateFullySupportedCapabilities();
+        var transientWeakObservation = new CompatibilityCapabilities(
+            declared.Global,
+            declared.Regions,
+            CompatibilityCapability.Disabled(
+                CompatibilityCapabilityReasonCode.StructuralProbeFailed),
+            declared.Audio,
+            CompatibilityCapability.Disabled(
+                CompatibilityCapabilityReasonCode.StructuralProbeFailed));
+        var state = new InjectionCapabilityState();
+        state.Begin(declared, continuesCurrentGeneration: false);
+
+        var observation = state.Observe(transientWeakObservation);
+
+        Assert.True(observation.Current.Glass.IsAvailable);
+        Assert.True(observation.Current.Advanced.IsAvailable);
+    }
+
+    [Fact]
+    public void CapabilityState_ConfirmsStructuralFailureBeforeLockingTheDowngrade()
     {
         var declared = PresentationContractCatalog.CreateFullySupportedCapabilities();
         var failedGlassObservation = new CompatibilityCapabilities(
@@ -388,9 +409,13 @@ public sealed class WallpaperSessionComponentsTests
         var state = new InjectionCapabilityState();
         state.Begin(declared, continuesCurrentGeneration: false);
 
+        var firstMiss = state.Observe(failedGlassObservation);
+        var secondMiss = state.Observe(failedGlassObservation);
         var downgrade = state.Observe(failedGlassObservation);
         var attemptedReenable = state.Observe(declared);
 
+        Assert.True(firstMiss.Current.Glass.IsAvailable);
+        Assert.True(secondMiss.Current.Glass.IsAvailable);
         Assert.True(downgrade.Previous.Glass.IsAvailable);
         Assert.False(downgrade.Current.Glass.IsAvailable);
         Assert.False(attemptedReenable.Current.Glass.IsAvailable);
@@ -401,6 +426,89 @@ public sealed class WallpaperSessionComponentsTests
         state.Begin(declared, continuesCurrentGeneration: false);
 
         Assert.True(state.Current.Glass.IsAvailable);
+    }
+
+    [Fact]
+    public void CapabilityState_PositiveEvidenceResetsEachStructuralFailureStreak()
+    {
+        var declared = PresentationContractCatalog.CreateFullySupportedCapabilities();
+        var failedGlassObservation = new CompatibilityCapabilities(
+            declared.Global,
+            declared.Regions,
+            CompatibilityCapability.Disabled(
+                CompatibilityCapabilityReasonCode.StructuralProbeFailed),
+            declared.Audio,
+            declared.Advanced);
+        var failedAdvancedObservation = new CompatibilityCapabilities(
+            declared.Global,
+            declared.Regions,
+            declared.Glass,
+            declared.Audio,
+            CompatibilityCapability.Disabled(
+                CompatibilityCapabilityReasonCode.StructuralProbeFailed));
+        var state = new InjectionCapabilityState();
+        state.Begin(declared, continuesCurrentGeneration: false);
+
+        state.Observe(failedGlassObservation);
+        state.Observe(failedAdvancedObservation);
+        state.Observe(failedGlassObservation);
+        var secondConsecutiveGlassMiss = state.Observe(failedGlassObservation);
+
+        Assert.True(secondConsecutiveGlassMiss.Current.Glass.IsAvailable);
+        Assert.True(secondConsecutiveGlassMiss.Current.Advanced.IsAvailable);
+
+        var confirmedGlassMiss = state.Observe(failedGlassObservation);
+
+        Assert.False(confirmedGlassMiss.Current.Glass.IsAvailable);
+        Assert.True(confirmedGlassMiss.Current.Advanced.IsAvailable);
+    }
+
+    [Fact]
+    public void CapabilityState_AppliesExplicitNonStructuralDowngradeImmediately()
+    {
+        var declared = PresentationContractCatalog.CreateFullySupportedCapabilities();
+        var explicitMismatch = new CompatibilityCapabilities(
+            declared.Global,
+            declared.Regions,
+            CompatibilityCapability.Disabled(
+                CompatibilityCapabilityReasonCode.NoMatchingPresentationContract),
+            declared.Audio,
+            declared.Advanced);
+        var state = new InjectionCapabilityState();
+        state.Begin(declared, continuesCurrentGeneration: false);
+
+        var observation = state.Observe(explicitMismatch);
+
+        Assert.False(observation.Current.Glass.IsAvailable);
+        Assert.True(observation.Current.Advanced.IsAvailable);
+    }
+
+    [Fact]
+    public void CapabilityState_NestedActivationTransactionsCarryConfirmedStreaks()
+    {
+        var declared = PresentationContractCatalog.CreateFullySupportedCapabilities();
+        var weakObservation = new CompatibilityCapabilities(
+            declared.Global,
+            declared.Regions,
+            CompatibilityCapability.Disabled(
+                CompatibilityCapabilityReasonCode.StructuralProbeFailed),
+            declared.Audio,
+            CompatibilityCapability.Disabled(
+                CompatibilityCapabilityReasonCode.StructuralProbeFailed));
+        var generation = new InjectionCapabilityState();
+        generation.Begin(declared, continuesCurrentGeneration: false);
+
+        for (var observation = 0; observation < 3; observation++)
+        {
+            var pipeline = generation.CreateStagedCopy();
+            var page = pipeline.CreateStagedCopy();
+            _ = page.Observe(weakObservation);
+            _ = pipeline.Commit(page);
+            _ = generation.Commit(pipeline);
+        }
+
+        Assert.False(generation.Current.Glass.IsAvailable);
+        Assert.False(generation.Current.Advanced.IsAvailable);
     }
 
     [Fact]

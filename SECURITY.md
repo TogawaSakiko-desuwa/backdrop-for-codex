@@ -2,17 +2,16 @@
 
 Backdrop for Codex 会连接高权限的本地调试接口。请先阅读[威胁模型](THREAT_MODEL.md)，不要把“仅回环”理解为完整隔离。
 
-当前安全基线为 1.4.1 Stable（2026-07-27）。设置 schema 继续为 2；多方案 V2 Workspace、latest-wins actor、播放槽所有权 token 和类型化 runtime surface 属于并发与资源所有权加固，不放宽既有包、进程、会话、回环 CDP、唯一页面或版本无关结构契约验证。
+本文适用于 Backdrop for Codex `v1.5.0`。
 
 ## 支持的版本
 
 | 版本 | 安全更新 |
 | --- | --- |
-| 最新稳定版 | 支持 |
-| `main` 分支 | 尽力支持，可能包含未发布变更 |
+| `v1.5.x` | 支持 |
 | 旧版本、Fork、自行修改的构建 | 不保证 |
 
-通常只为最新稳定版发布安全修复；`main` 分支包含尚未发布的变更，仅提供尽力支持。若漏洞影响范围不同，公告会另行说明。
+安全修复通常发布到最新稳定版本；若漏洞影响范围不同，安全公告会另行说明。
 
 ## 私下报告漏洞
 
@@ -31,10 +30,13 @@ Backdrop for Codex 会连接高权限的本地调试接口。请先阅读[威胁
 - 未验证调试目标、包身份、进程或 WebSocket 端点而连接错误目标；
 - 通过媒体路径、设置、日志、HTML、CSS 或 JavaScript 产生的注入、目录穿越或数据泄露；
 - reparse point、符号链接、校验后替换或文件身份混淆，使未选择或未校验的文件进入渲染器；
+- Steam / Wallpaper Engine 安装定位、VDF/ACF/`project.json` 解析、Workshop PublishedFileId 或 Local Project 根目录验证被绕过，造成路径穿越、reparse 逃逸、重复身份混淆或执行 Application 项目；
+- 仅凭窗口标题、CLI 退出码或 HWND 捕获 Wallpaper Engine，未核验 PID、启动时间、可执行路径和非干扰放置；Wallpaper Engine 返回项目路径时未比对其与所选项目的一致性，或把未返回项目路径误当成项目身份已得到证明；误用全局 pause/play/mute 影响用户现有桌面壁纸；
+- Windows Graphics Capture 捕获桌面或错误窗口、关闭失败后恢复 pop-out 到屏幕、旧 generation 清理新动态资源，或 MSE 背压导致无界内存增长；
 - 多个合格页面目标存在时仍进行注入，或结构能力探针被用来绕过安全身份失败；
 - 能够读取或导出 Codex 聊天、凭据或会话状态的非预期代码路径；
 - 诊断导出包含白名单之外的路径、标题、URL、DOM、聊天、设置、标识符或散列，或未经用户主动操作发送数据；
-- 设置迁移未先保留并核验原始 V1 字节、自动覆盖恢复/未来 schema 状态，或让损坏设置进入运行时；
+- 设置迁移未先保留并核验原始 V1/V2 字节、自动覆盖恢复/未来 schema 状态，或让损坏设置进入运行时；
 - 并发 Apply、Cancel、恢复官方背景、重置或恢复备份导致旧 revision 覆盖新 `SavedDesired`/`ActiveSnapshot`、发布错误成功状态或越过排他 barrier；
 - playback ownership 失效，导致旧 revision 释放较新的媒体 lease/槽位或清理不属于自己的 injection generation；
 - 提权、任意命令执行、任意文件写入或不安全自动启动；
@@ -44,35 +46,24 @@ Backdrop for Codex 会连接高权限的本地调试接口。请先阅读[威胁
 ## 通常不在范围内
 
 - OpenAI Codex、Microsoft Store、Windows、Chromium/.NET 或第三方依赖自身的漏洞；请同时按其上游流程报告。
+- Steam、Wallpaper Engine 或用户安装的第三方 Workshop / Web wallpaper 自身的漏洞；如果 Backdrop 的验证、隔离或清理明显扩大影响，仍欢迎私下报告。
 - Windows 10、Arm、Win32/便携版 Codex、网页或 CLI 等明确不支持环境。
 - 已拥有管理员、内核或当前用户任意代码执行能力的攻击者所能完成的通用操作；但如果本项目明显扩大影响，仍欢迎私下报告。
 - 仅造成外观差异且没有安全或隐私影响的问题。
 
-## 安全不变量
+## 安全边界
 
-贡献不得削弱以下约束，除非先更新威胁模型、经过专项审查并在发布说明中明确告知：
-
-- 只接受严格的 IPv4 `127.0.0.1` CDP 端点，拒绝非回环、重定向和形态异常的调试 URL；伴侣不得为媒体启动 HTTP 或其他网络监听器；
-- 不要求管理员权限，不写入 Codex 包或系统保护目录；
-- 媒体只来自用户明确选择的本地普通文件：通过已打开句柄解析最终目标、核验本地卷/文件身份/扩展名/文件头或容器签名/大小，并在完整使用期间保持同一只读 lease；
-- runtime 必须从已经原子保存的 canonical `SettingsV2` 快照中的同一 `MediaReference` 重新获取固定 lease，不得使用调用方拼装的 profile/media 副本或临时媒体 ID；
-- 设置写入、Codex session 和单槽播放池只有一个排序 owner；Apply 遵循一项 running、最多一项 pending 的 latest-wins 模型，旧任务必须安全退出后新任务才可触碰 runtime。每个外部 await 后复核 revision，保存成功返回是明确持久化提交点；
-- activation revision 与 injection generation 是独立计数器。活动播放槽必须绑定所有权 token；pending lease 直接释放，旧 revision 只能条件释放自己的 token，不能清理新 generation。无条件清空只允许显式 Official、完整重置或 Dispose；
-- 不把任意本地路径拼入可执行脚本或不受控 URL；
-- Codex 版本号本身不是安全准入条件；官方包身份、架构、应用 ID、完整包名一致性、进程、当前会话、PID、启动时间、监听器所有权、端点和目标元数据仍必须全部通过，否则关闭所有能力并拒绝连接；
-- 表现能力只由程序内置、只读且与版本无关的结构契约决定：`global-baseline-v1` 独立验证最小全局结构，`codex-shell-v1` 验证受审壳层锚点；高级契约零匹配或多重匹配时只能保留 Global，同一 generation 内契约不得切换且能力只能降级。结构证据不能提升或替代安全判定；
-- 初始注入最长等待 10 秒且只接受唯一合格工作页；持续多目标歧义必须拒绝并清理；
-- MSIX `file:` 目标必须精确匹配系统实际报告包根目录下的受审入口；远程目标必须匹配受审主机及具有完整路径段边界的工作区路由，并拒绝认证、路径穿越和反斜杠歧义。不得仅凭标题、路径片段或任意回环内容端口授权页面。文件输入必须由同一次准备求值直接返回句柄，并在上传前重新核验页面，不能重新按可预测选择器拾取新 document 的元素；
-- schema 仍为 2，1.4.0 不得新增序列化字段或引入 Settings V3；正常 Workspace、Application 与 runtime 接口只接受经验证和深复制的 `SettingsV2`。`SettingsV1` 只保留在迁移、V1 原始备份恢复、降级兼容和对应测试中。schema 1 迁移必须先保留并核验原始字节只读备份；损坏、迁移失败、备份冲突和未来 schema 不得被隐式默认值或自动保存覆盖；
-- UI 和控制流必须明确区分 `Draft`、`SavedDesired`、`ActiveSnapshot` 以及 `Official`、`MediaActive`、`Faulted`、`Disconnected`；不得靠异常或单一 `IsActive` 猜测。进度和类型化终态必须携带 revision，过期事件不能覆盖较新状态；
-- 不读取聊天内容，不添加遥测或项目自有云服务；
-- 日志默认不包含聊天或媒体绝对路径；诊断报告只能由用户主动导出，并严格限制为公开说明的类型化白名单字段，不得自动上传；
-- 第三方 Actions 使用完整提交 SHA，发布物提供散列、SBOM 与 GitHub 来源证明。
-
-这些是设计目标而非绝对保证。实现、审查与发布流程均可能出现缺陷。
+- 只连接经过验证的官方 Store/MSIX Codex 和严格 IPv4 `127.0.0.1` 调试端点；不接受非回环、重定向或异常调试 URL，也不为媒体启动网络监听器。
+- 使用普通用户权限运行，不修改或重新签名 Codex 包，不写入系统保护目录。
+- 本地媒体和 Wallpaper Engine Image / Video 入口会验证最终文件、项目根、格式和大小，并在使用期间保持只读句柄；路径和文件名不会拼入可执行脚本或不受控 URL。
+- Wallpaper Engine 来源只读取经过验证的本机安装、已安装 Workshop 和 Local Projects；Application / Unknown 不执行，也不会浏览在线 Workshop、订阅、下载或修改 Steam 配置。
+- Scene / Web 要求 Wallpaper Engine 已经运行，只捕获经过验证的独立项目窗口，不捕获桌面，不使用全局播放/静音命令，也不传递第三方脚本、输入、音频或 Codex 内容。Backdrop 不枚举、静音或改变 Wallpaper Engine 音频会话；项目可能播放声音，第三方 Web 项目也可能自行联网。
+- Codex 包、进程、当前会话、监听器和唯一工作页的安全验证先于页面兼容判断；页面结构不能覆盖安全失败。
+- 不修改或绕过 Codex 内容安全策略，不读取聊天，不添加遥测或项目自有云服务。
+- 旧设置迁移前保留并核验原始 V1/V2 备份；损坏、冲突或未来版本设置不会被默认值静默覆盖。
+- 日志不记录聊天或媒体绝对路径；诊断报告只在用户主动导出时生成，使用固定字段白名单且不自动上传。
+- 发布物提供 SHA-256、SPDX SBOM 与 GitHub 来源证明。
 
 ## 协调披露
 
 维护者确认问题后会评估影响、准备修复和验证证据、申请适用的 CVE，并在修复可用时发布公告。请在维护者确认修复窗口前保密。我们会在公告中尊重报告者的署名偏好；未经同意不会公开报告者身份。
-
-本项目按 Apache-2.0 的“按原样”条款提供，不作安全保证；这不影响我们认真处理善意报告。

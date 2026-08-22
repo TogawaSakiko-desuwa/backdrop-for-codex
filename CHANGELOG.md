@@ -2,7 +2,39 @@
 
 本项目的所有重要变更记录在此文件中。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased]
+## [1.5.0] - 2026-08-22
+
+### Added
+
+- 新增已安装 Wallpaper Engine Workshop 与 Local Project 来源库，支持搜索、按类型或来源筛选和静态缩略图；Image / Video 可稳定使用，Scene / Web 作为实验性功能提供，Application 与未知类型不会执行。
+- 新增 Wallpaper Engine 安装自动发现与本次运行内的手动选择。
+
+### Changed
+
+- 重做背景方案工作台，统一来源选择、预览、方案管理、状态提示和恢复官方背景入口。
+- Wallpaper Engine Image / Video 直接使用本地媒体；实验性 Scene / Web 从已运行的 Wallpaper Engine 捕获项目窗口像素。Backdrop 不自动启动 Wallpaper Engine，也不枚举、静音或改变其音频会话；项目声音可能通过 Wallpaper Engine 播放，音频不会转发到 Codex。
+- 实验性 Scene / Web 会在启动或运行遇到可恢复故障时逐级切换画质档位，并在短暂捕获、编码或页面传输故障后尝试恢复。
+- 页面短暂重载不再立即永久关闭可选视觉效果；安全身份、目标歧义和资源所有权失败仍会停止激活。
+
+### Refactored
+
+- 将本地文件、Wallpaper Engine Image / Video 与 Scene / Web 统一到来源提供器、激活事务和活动资源租约，直接媒体与动态项目共用“最后一次操作生效”和资源所有权边界。
+- 将 Scene / Web 运行链路拆分为项目窗口渲染、动态捕获、帧调度、fMP4 编码和页面流传输组件，由统一激活器管理画质档位、恢复和清理。
+- 将持久化设置重构为 schema 3 快照和显式迁移链；V1/V2 设置迁移前会保留对应的原始只读备份，缺失项目可继续显示最近已知名称和类型。
+
+### Fixed
+
+- 修复新版 Codex 页面出现额外主内容节点时玻璃与高级表面错误降级的问题。
+- 修复深色主题按钮和列表项文字对比度，以及设置对话框未完整阻止后台交互的问题。
+- 修复 Wallpaper Engine 来源库首次展开非空列表时可能崩溃，并补充未加载、刷新中和失败状态提示。
+- 修复部分 Scene / Web 媒体片段导致画面停在首帧或会话提前结束的问题。
+- 修复 Scene / Web 激活成功后兼容状态仍显示未评估，以及旧会话状态可能覆盖新背景的问题。
+
+### Security
+
+- Wallpaper Engine 安装、项目路径、项目类型、窗口所有权和捕获目标均在使用前验证；Scene / Web 不捕获桌面，不把项目脚本、输入或 Codex 内容传入页面。
+- Web 项目首次使用时会提示其可能联网并播放声音；拒绝提示时不会激活。
+- 手动选择的 Wallpaper Engine 安装位置不写入设置、背景方案或诊断报告。
 
 ## [1.4.5] - 2026-08-07
 
@@ -21,11 +53,6 @@
 - 修复助手消息中的 Markdown 宽表格沿用原生 wide-block 布局后超出消息玻璃层的问题；玻璃现在通过单一自适应伪元素精确覆盖表格横向滚动区，保留原生滚动、圆角、边框与背景模糊，同时避免父层与伪元素重复叠加玻璃。
 - 覆盖宽表格的最小宽度、容器查询流体宽度和最大宽度分支，并按 Codex 原生物理边距行为单独处理 RTL 页面；规则继续限制在经审核的助手消息与完整 Markdown 表格结构内，不扩散到普通表格或近似节点。
 
-### Verification
-
-- Release 非集成测试 540 项全部通过；选择器与能力契约相关测试 63 项全部通过，确认宽表规则仅属于 Advanced 能力块且 Glass 独立降级不会误禁用该规则。
-- 真实 Edge/CDP 回归覆盖 LTR 与 RTL 下的 900、960、1280px 六种组合，验证玻璃与 scroller 左右边界精确重合、仅存在一个横向 scroller、可滚至末端且不产生页面级横向溢出；当前 Codex 页面像素采样同时确认玻璃实际绘制且父层无重复玻璃。
-
 ## [1.4.3] - 2026-08-02
 
 ### Fixed
@@ -34,11 +61,6 @@
 - 修复兼容迁移一度混淆顶部应用菜单栏与下层内容 edge header 的问题；“文件 / 编辑 / 视图 / 帮助”所在的 Electron 原生菜单顶栏现在通过窗口类型、窗口 chrome、应用根和直接水平 `menubar` 结构承载主题玻璃，不依赖会变化的 CSS Modules 类名；同时带 `data-app-shell-application-menu-bar` 与 `data-app-shell-header-edge-scroll` 的下层内容 header 及其 context 子层保持透明且不重复模糊。
 - 修复设置页末端画布已移除 `main-surface` class 后选择器零命中、右侧继续显示原生黑底的问题；设置路由 guard 与 shell data-marker 链保持不变，末端改用 26.727 唯一的 Electron/Windows 语义 surface 组合并继续排除浏览器画布、卡片和控件。
 - 修复 Codex 浅色主题下侧栏、标题栏、设置画布和活动消息卡片仍使用深色玻璃表面、导致文字对比度不足的问题；浅色玻璃现在跟随主题主表面色并保留既有透明度与模糊效果，主题令牌缺失时回退白色，深色视觉保持不变。
-
-### Verification
-
-- .NET SDK `10.0.301` 的锁定还原、格式检查和 Release 构建全部通过，构建为 0 警告、0 错误；540 个非集成测试全部通过，16 个受审选择器用例确认标题栏、设置画布及近似反例作用域。
-- 当前机器 3 个 Codex 身份与实时页面结构用例全部通过，确认官方 Codex `26.727` 运行页匹配 `codex-shell-v1` 并恢复 Glass/Advanced；4 个 Edge/CDP 用例全部通过，其中深色 fixture 直接断言顶部应用菜单栏和 26.727 设置画布的半透明背景、blur 与 saturate，并确认下层 edge header 为透明，浅色 fixture 通过最终栅格与对比度验证主题玻璃表面。
 
 ## [1.4.2] - 2026-07-28
 
@@ -56,10 +78,6 @@
 - 修复最大化窗口后本地预览只横向拉伸、内部文字与图标不随画布一致缩放的问题。预览改为完整可见的 `960×540`（16:9）逻辑画布，按可用区域严格等比放大并居中，不再形成中央小卡片。
 - 移除预览外层 `Card` 模板造成的内容内缩和底部裁切；媒体、模拟 Codex 界面、焦点与拖放交互层现在共享同一无内边距画布边界。
 - 修复“背景模糊”在本地预览中模糊整张媒体的问题。图片和视频保持清晰，只由一个实时 `VisualBrush` 采样层在左栏、顶栏、消息、输入栏和右栏五个圆角玻璃区域内应用模糊，主题遮罩仍参与采样且不增加第二路视频解码。
-
-### Verification
-
-- 非集成自动化套件扩展到 533 个；新增真实 WPF 窗口布局、普通/最大化/最小尺寸等比缩放、DPI 像素取整、五区玻璃组合和棋盘像素边界测试。Release 重建为 0 警告、0 错误，533 个非集成测试全部通过。
 
 ## [1.4.0] - 2026-07-26
 
@@ -84,11 +102,6 @@
 - 继续保持既有安全验证顺序：官方包、进程、当前会话、严格 IPv4 回环端点、CDP browser/socket/target、唯一页面，再执行版本无关结构契约。安全失败或持续多目标歧义仍为零 DOM 探针。
 - 媒体激活从已保存的同一 `MediaReference` 重新获取固定只读 lease；安全验证或注入开始后的失败继续失败关闭并报告真实清理结果。注入前文件失效且尚未触碰 Codex 时保留旧活动背景。
 - schema 仍为 2；1.3.5 reader/writer 兼容 fixture 验证 1.4.0 不增加字段，并保留多方案、隐藏区域绑定、共享或孤立媒体引用及废弃兼容标识。
-
-### Verification
-
-- 非集成自动化套件扩展到 521 个，覆盖 V2 深快照和三种 equality、方案 CRUD/删除重绑、latest-wins checkpoint 与压力、提交点语义、lease 所有权、旧 revision/generation 过滤、空方案、类型化状态和关键 UI/可访问性边界。
-- 环境相关 Edge/CDP、当前机器 Codex 身份、通知区域和 UI Automation 冒烟仍须在满足条件的 Windows 11 交互桌面逐项执行；未运行或缺少先决条件时必须记录为“未验证”，不得计为通过。
 
 ## [1.3.5] - 2026-07-26
 
@@ -127,11 +140,6 @@
 
 - 包、Publisher、AppId、进程、当前会话、PID/启动时间、监听器所有权、严格 IPv4 回环、CDP browser/socket/target 和唯一页面验证继续严格失败关闭。只有安全目标验证成功后才会运行结构证据探针，任何安全失败或持续多目标歧义都不会执行 DOM 探针。
 - 1.3.3 作为既有能力的安全边界与兼容模型重构直接进入 Stable；这是一次明确的 Preview 例外，后续新增的上游敏感能力仍须先发 Preview 再进入 Stable。
-
-### Verification
-
-- 实施前非集成测试基线为 390 个。512 MiB/8 GiB 边界测试改用声明长度只读测试流的修复已经包含在 1.3.1，本版本沿用该基线，不重复把它记作 1.3.3 的改动。
-- 当前实现的 436 个非集成测试全部通过；显式启用的 3 个真实 Edge/CDP 用例同时验证冷启动及 `visible` / `full-bleed` / `hidden` 状态和节点重建后的顶部渐变均被清除、无关渐变与 0.5px 分隔线保留、四种 shell 锚点组合、同 DOM 下跨版本契约一致，以及 CSP 受限媒体加载；另有 2 个当前机器用例验证官方 Codex 包和运行中进程身份。
 
 ## [1.3.2] - 2026-07-25
 
@@ -264,7 +272,9 @@
 - 复验完整 MSIX 包名、激活 PID、进程启动时间、Windows 会话和监听器所有权；媒体服务保持已校验文件的只读句柄。
 - 明确禁止 CSP bypass；关闭、更换或 lease 到期时移除媒体 `src`、撤销 `blob:` URL，并仅删除带有本项目 owner/generation 的节点和样式。
 
-[Unreleased]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.4.3...HEAD
+[1.5.0]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.4.5...v1.5.0
+[1.4.5]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.4.4...v1.4.5
+[1.4.4]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.4.3...v1.4.4
 [1.4.3]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.4.2...v1.4.3
 [1.4.2]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.4.1...v1.4.2
 [1.4.1]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.4.0...v1.4.1

@@ -20,8 +20,8 @@ public sealed class WallpaperEditorViewModel : ObservableObject
 
     private readonly IAppTextProvider _text;
     private readonly ISafeMediaPreviewService _previewMedia;
-    private string? _selectedMediaPath;
-    private MediaKind _selectedMediaKind;
+    private MediaReference? _selectedMediaReference;
+    private string? _selectedMediaDisplayName;
     private WallpaperFit _fit = WallpaperFit.Cover;
     private double _focusX = 0.5;
     private double _focusY = 0.5;
@@ -39,7 +39,7 @@ public sealed class WallpaperEditorViewModel : ObservableObject
         ISafeMediaPreviewService? previewMedia = null)
     {
         _text = text ?? throw new ArgumentNullException(nameof(text));
-        _previewMedia = previewMedia ?? SafeMediaPreviewService.Shared;
+        _previewMedia = previewMedia ?? AppWallpaperSources.Preview;
     }
 
     /// <summary>
@@ -47,40 +47,33 @@ public sealed class WallpaperEditorViewModel : ObservableObject
     /// </summary>
     public event EventHandler? DraftChanged;
 
-    public string? SelectedMediaPath
-    {
-        get => _selectedMediaPath;
-        private set
-        {
-            if (SetProperty(ref _selectedMediaPath, value))
-            {
-                OnPropertyChanged(nameof(SelectedMediaName));
-                OnPropertyChanged(nameof(HasSelectedMedia));
-                OnPropertyChanged(nameof(IsVideoSelected));
-                OnPropertyChanged(nameof(CanAdjustFocus));
-                NotifyDraftChanged();
-            }
-        }
-    }
+    /// <summary>
+    /// Canonical source identity for the current draft. A new immutable snapshot is returned so
+    /// view code never receives the editor's retained instance.
+    /// </summary>
+    public MediaReference? SelectedMediaReference =>
+        _selectedMediaReference?.Snapshot();
 
-    public string SelectedMediaName => SelectedMediaPath is null
-        ? Text("Media_None", "No media selected")
-        : Path.GetFileName(SelectedMediaPath);
+    public string? SelectedMediaIdentifier =>
+        _selectedMediaReference?.SourceIdentifier;
 
-    public bool HasSelectedMedia => SelectedMediaPath is not null;
+    /// <summary>
+    /// Compatibility surface for local file pickers. Provider identifiers must use
+    /// <see cref="SelectedMediaReference"/> instead.
+    /// </summary>
+    public string? SelectedMediaPath =>
+        _selectedMediaReference?.SourceKind == MediaSourceKind.LocalFile
+            ? _selectedMediaReference.SourceIdentifier
+            : null;
 
-    public MediaKind SelectedMediaKind
-    {
-        get => _selectedMediaKind;
-        private set
-        {
-            if (SetProperty(ref _selectedMediaKind, value))
-            {
-                OnPropertyChanged(nameof(IsVideoSelected));
-                NotifyDraftChanged();
-            }
-        }
-    }
+    public string SelectedMediaName => _selectedMediaReference is null
+        ? _text.GetStringOrFallback("Media_None", "No media selected")
+        : _selectedMediaDisplayName ?? GetDefaultDisplayName(_selectedMediaReference);
+
+    public bool HasSelectedMedia => _selectedMediaReference is not null;
+
+    public MediaKind SelectedMediaKind =>
+        _selectedMediaReference?.LastKnownKind ?? MediaKind.None;
 
     public bool IsVideoSelected => SelectedMediaKind == MediaKind.Video;
 
@@ -106,7 +99,15 @@ public sealed class WallpaperEditorViewModel : ObservableObject
 
     public bool IsCoverFit => Fit == WallpaperFit.Cover;
 
-    public bool CanAdjustFocus => _isEditingEnabled && HasSelectedMedia && IsCoverFit;
+    public bool CanAdjustFocus =>
+        _isEditingEnabled &&
+        SelectedMediaKind is MediaKind.Image or MediaKind.Video &&
+        IsCoverFit;
+
+    public bool IsPreviewUnavailable =>
+        HasSelectedMedia && SelectedMediaKind == MediaKind.None;
+
+    public bool IsEditingEnabled => _isEditingEnabled;
 
     public double FocusX
     {
@@ -134,7 +135,7 @@ public sealed class WallpaperEditorViewModel : ObservableObject
         }
     }
 
-    public string FocusLabel => $"{FocusX:P0}, {FocusY:P0}";
+    public string FocusLabel => $"{FocusX:P0}·{FocusY:P0}";
 
     public double PanelOpacity
     {
@@ -203,10 +204,13 @@ public sealed class WallpaperEditorViewModel : ObservableObject
         {
             if (SetProperty(ref _acceptedCdpRisk, value))
             {
+                OnPropertyChanged(nameof(RequiresCdpRisk));
                 NotifyDraftChanged();
             }
         }
     }
+
+    public bool RequiresCdpRisk => HasSelectedMedia && !AcceptedCdpRisk;
 
     public void SelectMedia(string mediaPath)
     {
@@ -219,16 +223,68 @@ public sealed class WallpaperEditorViewModel : ObservableObject
             throw new MediaValidationException("The selected extension is not supported.");
         }
 
+        SelectMediaReference(
+            new MediaReference
+            {
+                MediaId = Guid.CreateVersion7(),
+                SourceKind = MediaSourceKind.LocalFile,
+                SourceIdentifier = normalizedPath,
+                LastKnownKind = kind,
+                LastKnownContentKind = kind == MediaKind.Image
+                    ? WallpaperContentKind.Image
+                    : WallpaperContentKind.Video,
+                LastKnownDisplayName = Path.GetFileName(normalizedPath),
+            },
+            Path.GetFileName(normalizedPath));
+    }
+
+    /// <summary>
+    /// Selects a discovered provider source without interpreting its identifier as a file path.
+    /// Scene and Web sources remain durable dynamic selections while intentionally carrying no
+    /// direct-media kind; their static workbench preview is independent from runtime activation.
+    /// </summary>
+    public void SelectSource(WallpaperSourceDescriptor descriptor)
+    {
+        ArgumentNullException.ThrowIfNull(descriptor);
+        if (descriptor.DeliveryKind == WallpaperDeliveryKind.Unsupported)
+        {
+            throw new WallpaperContentNotSupportedException(descriptor);
+        }
+
+        SelectMediaReference(
+            new MediaReference
+            {
+                MediaId = Guid.CreateVersion7(),
+                SourceKind = descriptor.SourceKind,
+                SourceIdentifier = descriptor.SourceIdentifier,
+                LastKnownKind = descriptor.ContentKind switch
+                {
+                    WallpaperContentKind.Image => MediaKind.Image,
+                    WallpaperContentKind.Video => MediaKind.Video,
+                    _ => MediaKind.None,
+                },
+                LastKnownContentKind = descriptor.ContentKind,
+                LastKnownDisplayName = descriptor.DisplayName,
+            },
+            descriptor.DisplayName);
+    }
+
+    public void SelectMediaReference(
+        MediaReference reference,
+        string? displayName = null)
+    {
+        ArgumentNullException.ThrowIfNull(reference);
+        var snapshot = reference.Snapshot();
         RunBatch(
             () =>
             {
-                SelectedMediaKind = kind;
-                SelectedMediaPath = normalizedPath;
-                IsMediaMissing = !_previewMedia.IsAvailable(normalizedPath);
+                SetSelectedMediaReference(snapshot, displayName);
+                IsMediaMissing = IsDirectMedia(snapshot) &&
+                    !_previewMedia.IsAvailable(snapshot);
             });
     }
 
-    public void ApplySettings(SettingsV2 settings)
+    public void ApplySettings(SettingsV3 settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
         var snapshot = settings.CreateSnapshot();
@@ -240,8 +296,7 @@ public sealed class WallpaperEditorViewModel : ObservableObject
         RunBatch(
             () =>
             {
-                SelectedMediaKind = media?.LastKnownKind ?? MediaKind.None;
-                SelectedMediaPath = media?.SourceIdentifier;
+                SetSelectedMediaReference(media, displayName: null);
                 Fit = profile.Fit;
                 FocusX = profile.FocusX;
                 FocusY = profile.FocusY;
@@ -252,11 +307,12 @@ public sealed class WallpaperEditorViewModel : ObservableObject
                 AcceptedCdpRisk = snapshot.AcceptedCdpRisk;
                 IsMediaMissing =
                     media is not null &&
-                    !_previewMedia.IsAvailable(media.SourceIdentifier);
+                    IsDirectMedia(media) &&
+                    !_previewMedia.IsAvailable(media);
             });
     }
 
-    public SettingsV2 ProjectOnto(SettingsV2 baseline)
+    public SettingsV3 ProjectOnto(SettingsV3 baseline)
     {
         ArgumentNullException.ThrowIfNull(baseline);
         var snapshot = baseline.CreateSnapshot();
@@ -264,31 +320,32 @@ public sealed class WallpaperEditorViewModel : ObservableObject
         var mediaCatalog = snapshot.MediaCatalog.ToList();
         Guid? mediaId = null;
 
-        if (SelectedMediaPath is { } selectedPath)
+        if (_selectedMediaReference is { } selectedReference)
         {
-            var normalizedPath = Path.GetFullPath(selectedPath);
+            var selected = selectedReference.Snapshot();
             var existing = mediaCatalog.FirstOrDefault(
                 media =>
-                    media.SourceKind == MediaSourceKind.LocalFile &&
-                    string.Equals(
-                        media.SourceIdentifier,
-                        normalizedPath,
-                        StringComparison.OrdinalIgnoreCase));
+                    media.SourceKind == selected.SourceKind &&
+                    SourceIdentifiersEqual(media, selected));
             if (existing is null)
             {
-                existing = new MediaReference
-                {
-                    MediaId = Guid.CreateVersion7(),
-                    SourceKind = MediaSourceKind.LocalFile,
-                    SourceIdentifier = normalizedPath,
-                    LastKnownKind = SelectedMediaKind,
-                };
+                existing = selected;
                 mediaCatalog.Add(existing);
             }
-            else if (existing.LastKnownKind != SelectedMediaKind)
+            else if (existing.LastKnownKind != selected.LastKnownKind ||
+                     existing.LastKnownContentKind != selected.LastKnownContentKind ||
+                     !string.Equals(
+                         existing.LastKnownDisplayName,
+                         selected.LastKnownDisplayName,
+                         StringComparison.Ordinal))
             {
                 var index = mediaCatalog.IndexOf(existing);
-                existing = existing with { LastKnownKind = SelectedMediaKind };
+                existing = existing with
+                {
+                    LastKnownKind = selected.LastKnownKind,
+                    LastKnownContentKind = selected.LastKnownContentKind,
+                    LastKnownDisplayName = selected.LastKnownDisplayName,
+                };
                 mediaCatalog[index] = existing;
             }
 
@@ -341,6 +398,7 @@ public sealed class WallpaperEditorViewModel : ObservableObject
         }
 
         _isEditingEnabled = enabled;
+        OnPropertyChanged(nameof(IsEditingEnabled));
         OnPropertyChanged(nameof(CanAdjustFocus));
     }
 
@@ -359,6 +417,72 @@ public sealed class WallpaperEditorViewModel : ObservableObject
 
     private static double ClampOverlay(double value) =>
         Math.Clamp(value, 0, MaximumOverlay);
+
+    private void SetSelectedMediaReference(
+        MediaReference? reference,
+        string? displayName)
+    {
+        var snapshot = reference?.Snapshot();
+        var normalizedDisplayName = string.IsNullOrWhiteSpace(displayName)
+            ? snapshot?.LastKnownDisplayName
+            : displayName.Trim();
+        if (Equals(_selectedMediaReference, snapshot) &&
+            string.Equals(
+                _selectedMediaDisplayName,
+                normalizedDisplayName,
+                StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _selectedMediaReference = snapshot;
+        _selectedMediaDisplayName = normalizedDisplayName;
+        OnPropertyChanged(nameof(SelectedMediaReference));
+        OnPropertyChanged(nameof(SelectedMediaIdentifier));
+        OnPropertyChanged(nameof(SelectedMediaPath));
+        OnPropertyChanged(nameof(SelectedMediaName));
+        OnPropertyChanged(nameof(HasSelectedMedia));
+        OnPropertyChanged(nameof(SelectedMediaKind));
+        OnPropertyChanged(nameof(IsVideoSelected));
+        OnPropertyChanged(nameof(IsPreviewUnavailable));
+        OnPropertyChanged(nameof(CanAdjustFocus));
+        OnPropertyChanged(nameof(RequiresCdpRisk));
+        NotifyDraftChanged();
+    }
+
+    private string GetDefaultDisplayName(MediaReference reference)
+    {
+        if (reference.SourceKind is MediaSourceKind.LocalFile or
+            MediaSourceKind.WallpaperEngineLocalProject)
+        {
+            var fileName = Path.GetFileName(reference.SourceIdentifier);
+            if (!string.IsNullOrWhiteSpace(fileName))
+            {
+                return fileName;
+            }
+        }
+
+        return reference.LastKnownKind switch
+        {
+            MediaKind.Image => _text.GetStringOrFallback("Media_Image", "Image"),
+            MediaKind.Video => _text.GetStringOrFallback("Media_Video", "Video"),
+            _ => _text.GetStringOrFallback("Profile_Media", "Media"),
+        };
+    }
+
+    private static bool IsDirectMedia(MediaReference reference) =>
+        reference.LastKnownKind is MediaKind.Image or MediaKind.Video;
+
+    private static bool SourceIdentifiersEqual(
+        MediaReference left,
+        MediaReference right) =>
+        string.Equals(
+            left.SourceIdentifier,
+            right.SourceIdentifier,
+            left.SourceKind is MediaSourceKind.LocalFile or
+                MediaSourceKind.WallpaperEngineLocalProject
+                ? StringComparison.OrdinalIgnoreCase
+                : StringComparison.Ordinal);
 
     private void RunBatch(Action update)
     {
@@ -383,11 +507,4 @@ public sealed class WallpaperEditorViewModel : ObservableObject
         }
     }
 
-    private string Text(string key, string fallback)
-    {
-        var localized = _text.GetString(key);
-        return string.Equals(localized, key, StringComparison.Ordinal)
-            ? fallback
-            : localized;
-    }
 }

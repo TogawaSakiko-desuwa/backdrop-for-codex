@@ -1,7 +1,13 @@
 namespace BackdropForCodex.Core.Injection;
 
+/// <summary>
+/// Completes the verified file-input handoff inside the page without hosting the selected media
+/// over HTTP.
+/// </summary>
 internal static class InjectionMediaScriptModule
 {
+    // The expected byte length rejects a selection that no longer matches the prepared metadata.
+    // The activation counter prevents an older asynchronous load from claiming readiness later.
     internal static string BuildActivateMedia(long generation)
     {
         EnsureGeneration(generation);

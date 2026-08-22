@@ -20,6 +20,9 @@ public interface IAppPreferencesStore : IDisposable
 /// </summary>
 public sealed class AppPreferencesStore : IAppPreferencesStore
 {
+    private const string DeprecatedWallpaperEngineInstallRootProperty =
+        "wallpaperEngineInstallRootPath";
+
     public const long MaximumDocumentBytes = 64 * 1024;
 
     public const string SettingsDirectoryName = "CodexWallpaper";
@@ -70,24 +73,28 @@ public sealed class AppPreferencesStore : IAppPreferencesStore
 
             try
             {
-                await using var stream = new FileStream(
+                AppPreferencesV1? preferences;
+                bool removedDeprecatedInstallRoot;
+                await using (var stream = new FileStream(
                     _preferencesPath,
                     FileMode.Open,
                     FileAccess.Read,
                     FileShare.Read,
                     bufferSize: 4096,
-                    FileOptions.Asynchronous | FileOptions.SequentialScan);
-                if (stream.Length > MaximumDocumentBytes)
+                    FileOptions.Asynchronous | FileOptions.SequentialScan))
                 {
-                    throw new AppPreferencesStoreException(
-                        AppPreferencesStoreOperation.Read,
-                        "The UI preferences document exceeds the size limit.");
+                    if (stream.Length > MaximumDocumentBytes)
+                    {
+                        throw new AppPreferencesStoreException(
+                            AppPreferencesStoreOperation.Read,
+                            "The UI preferences document exceeds the size limit.");
+                    }
+
+                    (preferences, removedDeprecatedInstallRoot) =
+                        await DeserializePreferencesAsync(stream, cancellationToken)
+                            .ConfigureAwait(false);
                 }
 
-                var preferences = await JsonSerializer.DeserializeAsync<AppPreferencesV1>(
-                    stream,
-                    _serializerOptions,
-                    cancellationToken).ConfigureAwait(false);
                 if (preferences is null)
                 {
                     throw new AppPreferencesStoreException(
@@ -97,7 +104,14 @@ public sealed class AppPreferencesStore : IAppPreferencesStore
 
                 try
                 {
-                    return preferences.Snapshot();
+                    var snapshot = preferences.Snapshot();
+                    if (removedDeprecatedInstallRoot)
+                    {
+                        await WriteSnapshotCoreAsync(snapshot, cancellationToken)
+                            .ConfigureAwait(false);
+                    }
+
+                    return snapshot;
                 }
                 catch (AppPreferencesValidationException exception)
                 {
@@ -150,39 +164,10 @@ public sealed class AppPreferencesStore : IAppPreferencesStore
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            var directoryPath = Path.GetDirectoryName(_preferencesPath)
-                ?? throw new AppPreferencesStoreException(
-                    AppPreferencesStoreOperation.Write,
-                    "The UI preferences location is unavailable.");
-            string? temporaryPath = null;
-
             try
             {
-                Directory.CreateDirectory(directoryPath);
-                temporaryPath = Path.Combine(
-                    directoryPath,
-                    $".{Path.GetFileName(_preferencesPath)}.{Guid.NewGuid():N}.tmp");
-
-                await using (var stream = new FileStream(
-                    temporaryPath,
-                    FileMode.CreateNew,
-                    FileAccess.Write,
-                    FileShare.None,
-                    bufferSize: 4096,
-                    FileOptions.Asynchronous | FileOptions.WriteThrough))
-                {
-                    await JsonSerializer.SerializeAsync(
-                        stream,
-                        snapshot,
-                        _serializerOptions,
-                        cancellationToken).ConfigureAwait(false);
-                    await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
-                    stream.Flush(flushToDisk: true);
-                }
-
-                cancellationToken.ThrowIfCancellationRequested();
-                PublishTemporaryFile(temporaryPath);
-                temporaryPath = null;
+                await WriteSnapshotCoreAsync(snapshot, cancellationToken)
+                    .ConfigureAwait(false);
             }
             catch (AppPreferencesStoreException)
             {
@@ -208,10 +193,6 @@ public sealed class AppPreferencesStore : IAppPreferencesStore
                     AppPreferencesStoreOperation.Write,
                     "UI preferences could not be saved.",
                     exception);
-            }
-            finally
-            {
-                TryDeleteTemporaryFile(temporaryPath);
             }
         }
         finally
@@ -274,6 +255,104 @@ public sealed class AppPreferencesStore : IAppPreferencesStore
         options.UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow;
         options.Converters.Add(new JsonStringEnumConverter());
         return options;
+    }
+
+    private async ValueTask<(AppPreferencesV1? Preferences, bool RemovedDeprecatedInstallRoot)>
+        DeserializePreferencesAsync(
+            Stream stream,
+            CancellationToken cancellationToken)
+    {
+        using var document = await JsonDocument.ParseAsync(
+            stream,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+        if (document.RootElement.ValueKind != JsonValueKind.Object)
+        {
+            return (
+                document.RootElement.Deserialize<AppPreferencesV1>(_serializerOptions),
+                RemovedDeprecatedInstallRoot: false);
+        }
+
+        var removedDeprecatedInstallRoot = document.RootElement
+            .EnumerateObject()
+            .Any(IsDeprecatedWallpaperEngineInstallRootProperty);
+        if (!removedDeprecatedInstallRoot)
+        {
+            return (
+                document.RootElement.Deserialize<AppPreferencesV1>(_serializerOptions),
+                RemovedDeprecatedInstallRoot: false);
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        using var sanitized = new MemoryStream();
+        await using (var writer = new Utf8JsonWriter(sanitized))
+        {
+            writer.WriteStartObject();
+            foreach (var property in document.RootElement.EnumerateObject())
+            {
+                if (!IsDeprecatedWallpaperEngineInstallRootProperty(property))
+                {
+                    property.WriteTo(writer);
+                }
+            }
+
+            writer.WriteEndObject();
+            await writer.FlushAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        sanitized.Position = 0;
+        var preferences = await JsonSerializer.DeserializeAsync<AppPreferencesV1>(
+            sanitized,
+            _serializerOptions,
+            cancellationToken).ConfigureAwait(false);
+        return (preferences, RemovedDeprecatedInstallRoot: true);
+    }
+
+    private static bool IsDeprecatedWallpaperEngineInstallRootProperty(
+        JsonProperty property) =>
+        string.Equals(
+            property.Name,
+            DeprecatedWallpaperEngineInstallRootProperty,
+            StringComparison.OrdinalIgnoreCase);
+
+    private async Task WriteSnapshotCoreAsync(
+        AppPreferencesV1 snapshot,
+        CancellationToken cancellationToken)
+    {
+        var directoryPath = Path.GetDirectoryName(_preferencesPath)
+            ?? throw new IOException("The UI preferences location is unavailable.");
+        string? temporaryPath = null;
+        try
+        {
+            Directory.CreateDirectory(directoryPath);
+            temporaryPath = Path.Combine(
+                directoryPath,
+                $".{Path.GetFileName(_preferencesPath)}.{Guid.NewGuid():N}.tmp");
+
+            await using (var stream = new FileStream(
+                temporaryPath,
+                FileMode.CreateNew,
+                FileAccess.Write,
+                FileShare.None,
+                bufferSize: 4096,
+                FileOptions.Asynchronous | FileOptions.WriteThrough))
+            {
+                await JsonSerializer.SerializeAsync(
+                    stream,
+                    snapshot,
+                    _serializerOptions,
+                    cancellationToken).ConfigureAwait(false);
+                await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
+                stream.Flush(flushToDisk: true);
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            PublishTemporaryFile(temporaryPath);
+            temporaryPath = null;
+        }
+        finally
+        {
+            TryDeleteTemporaryFile(temporaryPath);
+        }
     }
 
     private void PublishTemporaryFile(string temporaryPath)

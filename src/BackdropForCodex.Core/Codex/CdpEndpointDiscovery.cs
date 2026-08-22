@@ -4,6 +4,12 @@ using System.Text.Json;
 
 namespace BackdropForCodex.Core.Codex;
 
+/// <summary>
+/// Retrieves the fixed CDP discovery documents over direct IPv4 loopback HTTP. Implementations
+/// used for discovery must bypass proxies, disable redirects, and reject any requested or final
+/// URI outside the exact loopback origin and reviewed path. Final-URI validation alone cannot
+/// prove that an automatically followed redirect or proxy did not leave loopback.
+/// </summary>
 public interface ICdpJsonTransport
 {
     ValueTask<string> GetStringAsync(Uri uri, CancellationToken cancellationToken = default);
@@ -36,10 +42,11 @@ public sealed class HttpCdpJsonTransport : ICdpJsonTransport, IDisposable
     }
 
     /// <summary>
-    /// Creates a transport over an externally managed client. Callers must disable automatic
-    /// redirects and proxies; the response URI is still verified before any body is accepted.
+    /// Creates a test transport over an externally managed client. The supplied handler may not
+    /// enforce the production transport's no-redirect and no-proxy guarantees, so this overload is
+    /// intentionally unavailable to production callers.
     /// </summary>
-    public HttpCdpJsonTransport(
+    internal HttpCdpJsonTransport(
         HttpClient httpClient,
         TimeSpan? requestTimeout = null,
         int maxResponseBytes = DefaultMaxResponseBytes)
@@ -189,6 +196,13 @@ public sealed record CdpEndpointIdentityResult(
 
 public static class CdpEndpointIdentityVerifier
 {
+    /// <summary>
+    /// Validates that the supplied process candidate and discovery documents describe a reviewed
+    /// Chromium endpoint on one strict IPv4 loopback port. This method does not inspect live
+    /// processes, sockets, or listener ownership; success proves consistency only among the
+    /// caller-provided snapshots. <see cref="CdpEndpointDiscovery"/> re-queries its candidate
+    /// source after the network reads to reject ownership changes and PID reuse before calling it.
+    /// </summary>
     public static CdpEndpointIdentityResult Verify(
         CdpEndpointCandidate candidate,
         VerifiedCodexIdentity verifiedIdentity,

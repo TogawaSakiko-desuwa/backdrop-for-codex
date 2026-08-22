@@ -1,0 +1,535 @@
+<UserControl x:Class="BackdropForCodex.App.Views.WallpaperEngineLibraryView"
+             x:Name="Root"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:localization="clr-namespace:BackdropForCodex.App.Services.Localization"
+             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+             xmlns:views="clr-namespace:BackdropForCodex.App.Views"
+             MinWidth="320"
+             MinHeight="360"
+             Style="{DynamicResource WorkbenchRootStyle}">
+  <UserControl.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="/BackdropForCodex;component/Themes/WorkbenchTheme.xaml" />
+      </ResourceDictionary.MergedDictionaries>
+      <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+
+      <Style x:Key="LibraryMetadataTextStyle"
+             TargetType="TextBlock"
+             BasedOn="{StaticResource WorkbenchCaptionTextStyle}">
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        <Setter Property="TextWrapping" Value="NoWrap" />
+      </Style>
+
+      <Style x:Key="ContentKindTextStyle"
+             TargetType="TextBlock"
+             BasedOn="{StaticResource LibraryMetadataTextStyle}">
+        <Setter Property="Text" Value="{localization:Loc Media_Source, Fallback='Wallpaper source'}" />
+        <Style.Triggers>
+          <DataTrigger Binding="{Binding ContentKind}" Value="Image">
+            <Setter Property="Text" Value="{localization:Loc Media_Image, Fallback=Image}" />
+          </DataTrigger>
+          <DataTrigger Binding="{Binding ContentKind}" Value="Video">
+            <Setter Property="Text" Value="{localization:Loc Media_Video, Fallback=Video}" />
+          </DataTrigger>
+          <DataTrigger Binding="{Binding ContentKind}" Value="Scene">
+            <Setter Property="Text" Value="{localization:Loc Media_Scene, Fallback=Scene}" />
+          </DataTrigger>
+          <DataTrigger Binding="{Binding ContentKind}" Value="Web">
+            <Setter Property="Text" Value="{localization:Loc Media_Web, Fallback=Web}" />
+          </DataTrigger>
+        </Style.Triggers>
+      </Style>
+
+      <Style x:Key="OriginTextStyle"
+             TargetType="TextBlock"
+             BasedOn="{StaticResource LibraryMetadataTextStyle}">
+        <Setter Property="Text" Value="{localization:Loc Source_Local, Fallback=Local}" />
+        <Style.Triggers>
+          <DataTrigger Binding="{Binding Origin}" Value="Workshop">
+            <Setter Property="Text" Value="{localization:Loc Source_Workshop, Fallback=Workshop}" />
+          </DataTrigger>
+        </Style.Triggers>
+      </Style>
+
+      <Style x:Key="AvailabilityTextStyle"
+             TargetType="TextBlock"
+             BasedOn="{StaticResource LibraryMetadataTextStyle}">
+        <Setter Property="Text" Value="{localization:Loc Source_Ready, Fallback=Ready}" />
+        <Style.Triggers>
+          <DataTrigger Binding="{Binding Availability}" Value="RendererUnavailable">
+            <Setter Property="Text" Value="{localization:Loc Source_RendererUnavailable, Fallback='Live playback unavailable'}" />
+          </DataTrigger>
+          <DataTrigger Binding="{Binding Availability}" Value="Stale">
+            <Setter Property="Text" Value="{localization:Loc Source_Stale, Fallback='Refresh required'}" />
+          </DataTrigger>
+          <DataTrigger Binding="{Binding Availability}" Value="ProjectMissing">
+            <Setter Property="Text" Value="{localization:Loc Source_ProjectMissing, Fallback='Project missing'}" />
+          </DataTrigger>
+          <DataTrigger Binding="{Binding Availability}" Value="MetadataInvalid">
+            <Setter Property="Text" Value="{localization:Loc Source_MetadataInvalid, Fallback='Project information invalid'}" />
+          </DataTrigger>
+          <DataTrigger Binding="{Binding Availability}" Value="NotInstalled">
+            <Setter Property="Text" Value="{localization:Loc Source_NotInstalled, Fallback='Not installed'}" />
+          </DataTrigger>
+          <DataTrigger Binding="{Binding Availability}" Value="Unsupported">
+            <Setter Property="Text" Value="{localization:Loc Source_Unsupported, Fallback=Unsupported}" />
+          </DataTrigger>
+        </Style.Triggers>
+      </Style>
+
+      <Style x:Key="SourceGridItemStyle" TargetType="ListBoxItem">
+        <Setter Property="Width" Value="216" />
+        <Setter Property="Height" Value="204" />
+        <Setter Property="Margin" Value="8" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="VerticalContentAlignment" Value="Stretch" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="FocusVisualStyle" Value="{DynamicResource WorkbenchFocusVisualStyle}" />
+        <Setter Property="AutomationProperties.Name" Value="{Binding DisplayName}" />
+        <Setter Property="AutomationProperties.ItemStatus"
+                Value="{localization:Loc Source_Ready, Fallback=Ready}" />
+        <Setter Property="AutomationProperties.HelpText"
+                Value="{localization:Loc Media_Source, Fallback='Wallpaper source'}" />
+        <Setter Property="Template">
+          <Setter.Value>
+            <ControlTemplate TargetType="ListBoxItem">
+              <Grid>
+                <Border x:Name="CardBorder"
+                        Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1"
+                        CornerRadius="{DynamicResource WorkbenchRadius8}">
+                  <ContentPresenter />
+                </Border>
+                <Border x:Name="SelectionRail"
+                        Width="3"
+                        Margin="1,8,0,8"
+                        HorizontalAlignment="Left"
+                        Background="{DynamicResource AccentFillColorDefaultBrush}"
+                        CornerRadius="2"
+                        Visibility="Collapsed" />
+              </Grid>
+              <ControlTemplate.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                  <Setter TargetName="CardBorder"
+                          Property="Background"
+                          Value="{DynamicResource CardBackgroundFillColorSecondaryBrush}" />
+                </Trigger>
+                <Trigger Property="IsSelected" Value="True">
+                  <Setter TargetName="CardBorder"
+                          Property="Background"
+                          Value="{DynamicResource ControlFillColorSecondaryBrush}" />
+                  <Setter TargetName="SelectionRail"
+                          Property="Visibility"
+                          Value="Visible" />
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                  <Setter Property="Opacity" Value="0.62" />
+                </Trigger>
+              </ControlTemplate.Triggers>
+            </ControlTemplate>
+          </Setter.Value>
+        </Setter>
+        <Style.Triggers>
+          <DataTrigger Binding="{Binding ContentKind}" Value="Image">
+            <Setter Property="AutomationProperties.HelpText"
+                    Value="{localization:Loc Media_Image, Fallback=Image}" />
+          </DataTrigger>
+          <DataTrigger Binding="{Binding ContentKind}" Value="Video">
+            <Setter Property="AutomationProperties.HelpText"
+                    Value="{localization:Loc Media_Video, Fallback=Video}" />
+          </DataTrigger>
+          <DataTrigger Binding="{Binding ContentKind}" Value="Scene">
+            <Setter Property="AutomationProperties.HelpText"
+                    Value="{localization:Loc Media_Scene, Fallback=Scene}" />
+          </DataTrigger>
+          <DataTrigger Binding="{Binding ContentKind}" Value="Web">
+            <Setter Property="AutomationProperties.HelpText"
+                    Value="{localization:Loc Media_Web, Fallback=Web}" />
+          </DataTrigger>
+          <DataTrigger Binding="{Binding Availability}" Value="RendererUnavailable">
+            <Setter Property="AutomationProperties.ItemStatus"
+                    Value="{localization:Loc Source_RendererUnavailable, Fallback='Live playback unavailable'}" />
+          </DataTrigger>
+          <DataTrigger Binding="{Binding Availability}" Value="Stale">
+            <Setter Property="AutomationProperties.ItemStatus"
+                    Value="{localization:Loc Source_Stale, Fallback='Refresh required'}" />
+          </DataTrigger>
+          <DataTrigger Binding="{Binding Availability}" Value="ProjectMissing">
+            <Setter Property="AutomationProperties.ItemStatus"
+                    Value="{localization:Loc Source_ProjectMissing, Fallback='Project missing'}" />
+          </DataTrigger>
+          <DataTrigger Binding="{Binding Availability}" Value="MetadataInvalid">
+            <Setter Property="AutomationProperties.ItemStatus"
+                    Value="{localization:Loc Source_MetadataInvalid, Fallback='Project information invalid'}" />
+          </DataTrigger>
+          <DataTrigger Binding="{Binding Availability}" Value="NotInstalled">
+            <Setter Property="AutomationProperties.ItemStatus"
+                    Value="{localization:Loc Source_NotInstalled, Fallback='Not installed'}" />
+          </DataTrigger>
+          <DataTrigger Binding="{Binding Availability}" Value="Unsupported">
+            <Setter Property="AutomationProperties.ItemStatus"
+                    Value="{localization:Loc Source_Unsupported, Fallback=Unsupported}" />
+          </DataTrigger>
+        </Style.Triggers>
+      </Style>
+
+      <DataTemplate x:Key="SourceCardTemplate">
+        <Grid Margin="8"
+              Loaded="SourceCard_Loaded"
+              Unloaded="SourceCard_Unloaded">
+          <Grid.RowDefinitions>
+            <RowDefinition Height="120" />
+            <RowDefinition Height="*" />
+          </Grid.RowDefinitions>
+          <Border Background="{DynamicResource WorkbenchStageMatBrush}"
+                  CornerRadius="{DynamicResource WorkbenchRadius6}"
+                  ClipToBounds="True">
+            <Grid>
+              <ui:SymbolIcon Symbol="Image24"
+                             FontSize="28"
+                             Foreground="{DynamicResource WorkbenchStageMutedTextBrush}"
+                             HorizontalAlignment="Center"
+                             VerticalAlignment="Center" />
+              <Image Source="{Binding Thumbnail}"
+                     Stretch="UniformToFill"
+                     RenderOptions.BitmapScalingMode="HighQuality" />
+              <Border HorizontalAlignment="Left"
+                      VerticalAlignment="Top"
+                      Margin="8"
+                      Padding="7,3"
+                      Background="#D911161B"
+                      CornerRadius="{DynamicResource WorkbenchRadius6}"
+                      Visibility="{Binding IsStaticPreview, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <TextBlock Text="{localization:Loc Source_StaticPreview, Fallback='Static preview'}"
+                           FontSize="11"
+                           FontWeight="SemiBold"
+                           Foreground="{DynamicResource WorkbenchStageTextBrush}" />
+              </Border>
+            </Grid>
+          </Border>
+          <Grid Grid.Row="1" Margin="4,9,4,2">
+            <Grid.RowDefinitions>
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <TextBlock Text="{Binding DisplayName}"
+                       FontSize="{DynamicResource WorkbenchTypeBody}"
+                       FontWeight="SemiBold"
+                       TextTrimming="CharacterEllipsis"
+                       ToolTip="{Binding DisplayName}" />
+            <Grid Grid.Row="1" Margin="0,3,0,0">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="12" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+              <TextBlock Style="{StaticResource ContentKindTextStyle}" />
+              <Border Grid.Column="1"
+                      Width="2"
+                      Height="2"
+                      Background="{DynamicResource TextFillColorSecondaryBrush}"
+                      CornerRadius="1"
+                      VerticalAlignment="Center" />
+              <TextBlock Grid.Column="2" Style="{StaticResource OriginTextStyle}" />
+            </Grid>
+            <TextBlock Grid.Row="2"
+                       Margin="0,3,0,0"
+                       Style="{StaticResource AvailabilityTextStyle}" />
+          </Grid>
+        </Grid>
+      </DataTemplate>
+    </ResourceDictionary>
+  </UserControl.Resources>
+
+  <Border Background="{DynamicResource SolidBackgroundFillColorBaseBrush}"
+          BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}"
+          BorderThickness="1"
+          CornerRadius="{DynamicResource WorkbenchRadius12}"
+          ClipToBounds="True">
+    <Grid>
+      <Grid.RowDefinitions>
+        <RowDefinition Height="64" />
+        <RowDefinition Height="Auto" />
+        <RowDefinition Height="*" />
+        <RowDefinition Height="64" />
+      </Grid.RowDefinitions>
+
+      <Border BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}"
+              BorderThickness="0,0,0,1">
+        <Grid Margin="20,0,12,0">
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="Auto" />
+          </Grid.ColumnDefinitions>
+          <StackPanel VerticalAlignment="Center">
+            <TextBlock Text="{localization:Loc Source_LibraryTitle, Fallback='Wallpaper Engine'}"
+                       Style="{DynamicResource WorkbenchTitleTextStyle}" />
+            <TextBlock Margin="0,2,0,0"
+                       Style="{DynamicResource WorkbenchCaptionTextStyle}">
+              <Run Text="{Binding InstalledCount, Mode=OneWay}" />
+              <Run Text="{localization:Loc Source_InstalledCountSuffix, Fallback=' installed projects'}" />
+            </TextBlock>
+          </StackPanel>
+          <ui:Button x:Name="ChooseInstallationButton"
+                     Grid.Column="1"
+                     Height="36"
+                     Margin="0,0,4,0"
+                     Padding="12,0"
+                     Style="{DynamicResource WorkbenchSecondaryButtonStyle}"
+                     IsEnabled="{Binding CanManageWallpaperEngineInstallation}"
+                     Content="{localization:Loc Source_ChooseInstallation, Fallback='Choose installation'}"
+                     ToolTip="{localization:Loc Source_ChooseInstallationHelp, Fallback='Choose the verified Wallpaper Engine wallpaper64.exe'}"
+                     AutomationProperties.Name="{localization:Loc Source_ChooseInstallation, Fallback='Choose installation'}"
+                     Click="ChooseInstallation_Click" />
+          <ui:Button x:Name="ClearInstallationButton"
+                     Grid.Column="2"
+                     Height="36"
+                     Margin="0,0,4,0"
+                     Padding="12,0"
+                     Style="{DynamicResource WorkbenchSecondaryButtonStyle}"
+                     Visibility="{Binding HasPreferredWallpaperEngineInstallation, Converter={StaticResource BooleanToVisibilityConverter}}"
+                     Content="{localization:Loc Source_UseAutomaticDiscovery, Fallback='Use automatic'}"
+                         ToolTip="{localization:Loc Source_UseAutomaticDiscoveryHelp, Fallback='Search Steam libraries automatically instead.'}"
+                     AutomationProperties.Name="{localization:Loc Source_UseAutomaticDiscovery, Fallback='Use automatic'}"
+                     Click="ClearInstallation_Click" />
+          <ui:Button Grid.Column="3"
+                     Width="36"
+                     Height="36"
+                     Margin="0,0,4,0"
+                     Style="{DynamicResource WorkbenchIconButtonStyle}"
+                     Command="{Binding RefreshCommand}"
+                     ToolTip="{localization:Loc Action_Refresh, Fallback=Refresh}"
+                     AutomationProperties.Name="{localization:Loc Action_Refresh, Fallback=Refresh}">
+            <ui:SymbolIcon Symbol="ArrowClockwise24" />
+          </ui:Button>
+          <ui:Button Grid.Column="4"
+                     Width="36"
+                     Height="36"
+                     Style="{DynamicResource WorkbenchIconButtonStyle}"
+                     ToolTip="{localization:Loc Action_Close, Fallback=Close}"
+                     AutomationProperties.Name="{localization:Loc Action_Close, Fallback=Close}"
+                     Click="Close_Click">
+            <ui:SymbolIcon Symbol="Dismiss24" />
+          </ui:Button>
+        </Grid>
+      </Border>
+
+      <Border Grid.Row="1"
+              Padding="20,12"
+              BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}"
+              BorderThickness="0,0,0,1">
+        <Grid>
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" MinWidth="220" />
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="Auto" />
+          </Grid.ColumnDefinitions>
+          <Grid Height="36">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="36" />
+              <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <ui:SymbolIcon Symbol="Search24"
+                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center" />
+            <TextBox x:Name="SearchBox"
+                     Grid.Column="1"
+                     MinWidth="184"
+                     Height="36"
+                     BorderThickness="0"
+                     Background="Transparent"
+                     Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                     ToolTip="{localization:Loc Source_SearchHint, Fallback='Search installed projects'}"
+                     AutomationProperties.Name="{localization:Loc Source_SearchHint, Fallback='Search installed projects'}" />
+            <Border Grid.ColumnSpan="2"
+                    BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="{DynamicResource WorkbenchRadius6}"
+                    IsHitTestVisible="False" />
+          </Grid>
+          <ComboBox x:Name="ContentFilterBox"
+                    Grid.Column="1"
+                    Width="132"
+                    Height="36"
+                    Margin="12,0,0,0"
+                    SelectedIndex="0"
+                    SelectionChanged="ContentFilter_SelectionChanged"
+                    AutomationProperties.Name="{localization:Loc Source_FilterType, Fallback='Filter by type'}">
+            <ComboBoxItem Tag="All" Content="{localization:Loc Filter_AllTypes, Fallback='All types'}" />
+            <ComboBoxItem Tag="Image" Content="{localization:Loc Media_Image, Fallback=Image}" />
+            <ComboBoxItem Tag="Video" Content="{localization:Loc Media_Video, Fallback=Video}" />
+            <ComboBoxItem Tag="Scene" Content="{localization:Loc Media_Scene, Fallback=Scene}" />
+            <ComboBoxItem Tag="Web" Content="{localization:Loc Media_Web, Fallback=Web}" />
+          </ComboBox>
+          <ComboBox x:Name="OriginFilterBox"
+                    Grid.Column="2"
+                    Width="132"
+                    Height="36"
+                    Margin="8,0,0,0"
+                    SelectedIndex="0"
+                    SelectionChanged="OriginFilter_SelectionChanged"
+                    AutomationProperties.Name="{localization:Loc Source_FilterOrigin, Fallback='Filter by origin'}">
+            <ComboBoxItem Tag="All" Content="{localization:Loc Filter_AllOrigins, Fallback='All origins'}" />
+            <ComboBoxItem Tag="Workshop" Content="{localization:Loc Source_Workshop, Fallback=Workshop}" />
+            <ComboBoxItem Tag="Local" Content="{localization:Loc Source_Local, Fallback=Local}" />
+          </ComboBox>
+        </Grid>
+      </Border>
+
+      <Grid Grid.Row="2">
+        <ListBox x:Name="SourceGridList"
+                 ItemsSource="{Binding VisibleItems}"
+                 SelectedItem="{Binding SelectedItem, Mode=TwoWay}"
+                 ItemTemplate="{StaticResource SourceCardTemplate}"
+                 ItemContainerStyle="{StaticResource SourceGridItemStyle}"
+                 SelectionMode="Single"
+                 Background="Transparent"
+                 BorderThickness="0"
+                 Padding="12"
+                 ScrollViewer.CanContentScroll="True"
+                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                 ScrollViewer.VerticalScrollBarVisibility="Auto"
+                 VirtualizingPanel.IsVirtualizing="True"
+                 VirtualizingPanel.VirtualizationMode="Recycling"
+                 KeyboardNavigation.DirectionalNavigation="Contained"
+                 AutomationProperties.Name="{localization:Loc Source_LibraryTitle, Fallback='Wallpaper Engine'}"
+                 SelectionChanged="SourceGridList_SelectionChanged">
+          <ListBox.ItemsPanel>
+            <ItemsPanelTemplate>
+              <views:VirtualizingWrapPanel ItemWidth="232" ItemHeight="220" />
+            </ItemsPanelTemplate>
+          </ListBox.ItemsPanel>
+        </ListBox>
+
+        <StackPanel HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    MaxWidth="460">
+          <StackPanel.Style>
+            <Style TargetType="StackPanel">
+              <Setter Property="Visibility" Value="Collapsed" />
+              <Style.Triggers>
+                <DataTrigger Binding="{Binding HasItems, ElementName=SourceGridList}" Value="False">
+                  <Setter Property="Visibility" Value="Visible" />
+                </DataTrigger>
+              </Style.Triggers>
+            </Style>
+          </StackPanel.Style>
+          <ui:SymbolIcon Symbol="Library24"
+                         FontSize="32"
+                         Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                         HorizontalAlignment="Center" />
+          <TextBlock Margin="0,12,0,0"
+                     TextAlignment="Center">
+            <TextBlock.Style>
+              <Style TargetType="TextBlock" BasedOn="{StaticResource WorkbenchSectionHeadingTextStyle}">
+                <Setter Property="Text" Value="{localization:Loc Source_EmptyTitle, Fallback='No installed projects match'}" />
+                <Style.Triggers>
+                  <DataTrigger Binding="{Binding IntegrationAvailability}" Value="InstallationSelectionRequired">
+                    <Setter Property="Text" Value="{localization:Loc Source_InstallationSelectionRequiredTitle, Fallback='Choose an installation'}" />
+                  </DataTrigger>
+                  <DataTrigger Binding="{Binding IntegrationAvailability}" Value="InstallationSelectionInvalid">
+                    <Setter Property="Text" Value="{localization:Loc Source_InstallationSelectionInvalidTitle, Fallback='Installation needs attention'}" />
+                  </DataTrigger>
+                  <DataTrigger Binding="{Binding IntegrationAvailability}" Value="InstallationSelectionFailed">
+                    <Setter Property="Text" Value="{localization:Loc Source_InstallationSelectionFailedTitle, Fallback='Installation choice was not saved'}" />
+                  </DataTrigger>
+                  <DataTrigger Binding="{Binding IntegrationAvailability}" Value="NotInstalled">
+                    <Setter Property="Text" Value="{localization:Loc Source_NotInstalledTitle, Fallback='Wallpaper Engine was not found'}" />
+                  </DataTrigger>
+                  <DataTrigger Binding="{Binding InstallationAvailabilityReason}" Value="SteamNotFound">
+                    <Setter Property="Text" Value="{localization:Loc Source_SteamNotFoundTitle, Fallback='Steam was not found'}" />
+                  </DataTrigger>
+                </Style.Triggers>
+              </Style>
+            </TextBlock.Style>
+          </TextBlock>
+          <TextBlock Margin="0,6,0,0"
+                     TextAlignment="Center"
+                     TextWrapping="Wrap"
+                     AutomationProperties.LiveSetting="Polite">
+            <TextBlock.Style>
+              <Style TargetType="TextBlock" BasedOn="{StaticResource WorkbenchCaptionTextStyle}">
+                <Setter Property="Text" Value="{localization:Loc Source_EmptyMessage, Fallback='Change the filters or refresh Wallpaper Engine projects.'}" />
+                <Style.Triggers>
+                  <DataTrigger Binding="{Binding IntegrationAvailability}" Value="InstallationSelectionRequired">
+                    <Setter Property="Text" Value="{localization:Loc Source_InstallationSelectionRequiredMessage, Fallback='Multiple verified installations were found. Choose the one Backdrop should use on this PC.'}" />
+                  </DataTrigger>
+                  <DataTrigger Binding="{Binding IntegrationAvailability}" Value="InstallationSelectionInvalid">
+                    <Setter Property="Text" Value="{localization:Loc Source_InstallationSelectionInvalidMessage, Fallback='The selected installation no longer passes validation. Choose wallpaper64.exe again or return to automatic discovery.'}" />
+                  </DataTrigger>
+                  <DataTrigger Binding="{Binding IntegrationAvailability}" Value="InstallationSelectionFailed">
+            <Setter Property="Text" Value="{localization:Loc Source_InstallationSelectionFailedMessage, Fallback='Your previous choice is still in use. Check the installation and retry.'}" />
+                  </DataTrigger>
+                  <DataTrigger Binding="{Binding IntegrationAvailability}" Value="NotInstalled">
+                    <Setter Property="Text" Value="{localization:Loc Source_NotInstalledMessage, Fallback='Install Wallpaper Engine through Steam, or choose an existing verified installation.'}" />
+                  </DataTrigger>
+                  <DataTrigger Binding="{Binding InstallationAvailabilityReason}" Value="SteamNotFound">
+                    <Setter Property="Text" Value="{localization:Loc Source_SteamNotFoundMessage, Fallback='Steam could not be located from this Windows account. Choose an existing verified Wallpaper Engine installation to continue.'}" />
+                  </DataTrigger>
+                </Style.Triggers>
+              </Style>
+            </TextBlock.Style>
+          </TextBlock>
+          <StackPanel Margin="0,16,0,0"
+                      HorizontalAlignment="Center"
+                      Orientation="Horizontal"
+                      Visibility="{Binding CanManageWallpaperEngineInstallation, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <ui:Button Height="36"
+                       Padding="14,0"
+                       Style="{DynamicResource WorkbenchSecondaryButtonStyle}"
+                       Content="{localization:Loc Source_ChooseInstallFolder, Fallback='Choose install folder'}"
+                       Click="ChooseInstallationFolder_Click" />
+            <ui:Button Height="36"
+                       Margin="8,0,0,0"
+                       Padding="14,0"
+                       Style="{DynamicResource WorkbenchSecondaryButtonStyle}"
+                       Visibility="{Binding HasPreferredWallpaperEngineInstallation, Converter={StaticResource BooleanToVisibilityConverter}}"
+                       Content="{localization:Loc Source_UseAutomaticDiscovery, Fallback='Use automatic'}"
+                       Click="ClearInstallation_Click" />
+          </StackPanel>
+        </StackPanel>
+      </Grid>
+
+      <Border Grid.Row="3"
+              BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}"
+              BorderThickness="0,1,0,0">
+        <Grid Margin="20,0">
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="Auto" />
+          </Grid.ColumnDefinitions>
+          <StackPanel VerticalAlignment="Center">
+            <TextBlock Text="{Binding SelectedItem.DisplayName,
+                                      FallbackValue={localization:Loc Source_SelectProject, Fallback='Select a project'},
+                                      TargetNullValue={localization:Loc Source_SelectProject, Fallback='Select a project'}}"
+                       FontWeight="SemiBold"
+                       TextTrimming="CharacterEllipsis" />
+            <TextBlock Margin="0,2,0,0"
+                   Text="{localization:Loc Source_AssignHint, Fallback='Selecting a project does not change the current profile. Use the button below to add it.'}"
+                       Style="{DynamicResource WorkbenchCaptionTextStyle}"
+                       TextTrimming="CharacterEllipsis" />
+          </StackPanel>
+          <ui:Button x:Name="AssignSourceButton"
+                     Grid.Column="1"
+                     MinWidth="160"
+                     Height="40"
+                     Style="{DynamicResource WorkbenchSecondaryButtonStyle}"
+                     IsEnabled="{Binding SelectedItem.CanAssign}"
+                     Content="{localization:Loc Source_UseForProfile, Fallback='Use in current profile'}"
+                     AutomationProperties.Name="{localization:Loc Source_UseForProfile, Fallback='Use in current profile'}"
+                     Click="Assign_Click" />
+        </Grid>
+      </Border>
+    </Grid>
+  </Border>
+</UserControl>

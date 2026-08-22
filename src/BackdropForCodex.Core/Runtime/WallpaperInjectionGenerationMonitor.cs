@@ -127,13 +127,72 @@ internal sealed class WallpaperInjectionGenerationMonitor
         }
     }
 
+    public bool TryCaptureCompatibility(
+        long generation,
+        PresentationContractSnapshot presentation,
+        CompatibilityCapabilities capabilities)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(generation);
+        ArgumentNullException.ThrowIfNull(presentation);
+        ArgumentNullException.ThrowIfNull(capabilities);
+
+        WallpaperInjectionCapabilitiesChangedEventArgs? eventArgs = null;
+        lock (_capabilitySync)
+        {
+            if (_capabilityObservationGeneration != generation)
+            {
+                return false;
+            }
+
+            var current = Volatile.Read(ref _compatibilitySnapshot);
+            var initializesGeneration =
+                current.Presentation.MatchState == ContractMatchState.NotEvaluated;
+            var lockedPresentation = initializesGeneration
+                ? presentation
+                : current.Presentation;
+            var mergedCapabilities = initializesGeneration
+                ? capabilities
+                : current.Capabilities.DowngradeWith(capabilities);
+            if (lockedPresentation != current.Presentation ||
+                mergedCapabilities != current.Capabilities)
+            {
+                eventArgs = new WallpaperInjectionCapabilitiesChangedEventArgs(
+                    generation,
+                    current.Capabilities,
+                    mergedCapabilities,
+                    lockedPresentation);
+                Volatile.Write(
+                    ref _compatibilitySnapshot,
+                    current with
+                    {
+                        Presentation = lockedPresentation,
+                        Capabilities = mergedCapabilities,
+                    });
+            }
+        }
+
+        if (eventArgs is not null)
+        {
+            PublishCapabilitiesChanged(eventArgs);
+        }
+
+        return true;
+    }
+
     public void MarkActive(long generation)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(generation);
         Interlocked.Exchange(ref _activeGeneration, generation);
     }
 
-    public void ClearActive() => Interlocked.Exchange(ref _activeGeneration, 0);
+    public void ClearActive()
+    {
+        lock (_capabilitySync)
+        {
+            _capabilityObservationGeneration = 0;
+            Interlocked.Exchange(ref _activeGeneration, 0);
+        }
+    }
 
     public bool IsActiveGeneration(long generation) =>
         generation > 0 &&
@@ -227,24 +286,10 @@ internal sealed class WallpaperInjectionGenerationMonitor
             return;
         }
 
-        lock (_capabilitySync)
-        {
-            if (_capabilityObservationGeneration != eventArgs.Generation)
-            {
-                return;
-            }
-
-            var current = Volatile.Read(ref _compatibilitySnapshot);
-            Volatile.Write(
-                ref _compatibilitySnapshot,
-                current with
-                {
-                    Presentation = eventArgs.PresentationContract,
-                    Capabilities = eventArgs.Current,
-                });
-        }
-
-        PublishCapabilitiesChanged(eventArgs);
+        _ = TryCaptureCompatibility(
+            eventArgs.Generation,
+            eventArgs.PresentationContract,
+            eventArgs.Current);
     }
 
     private void PublishCapabilitiesChanged(

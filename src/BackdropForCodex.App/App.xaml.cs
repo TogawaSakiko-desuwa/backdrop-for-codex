@@ -5,6 +5,7 @@ using System.Windows;
 using BackdropForCodex.App.Services.Diagnostics;
 using BackdropForCodex.App.Services.Errors;
 using BackdropForCodex.App.Services.Localization;
+using BackdropForCodex.App.Services.Media;
 using BackdropForCodex.App.Services.Preferences;
 using BackdropForCodex.App.Services.Wallpaper;
 using BackdropForCodex.App.ViewModels;
@@ -23,6 +24,7 @@ public partial class App : System.Windows.Application
     private TrayController? _trayController;
     private WallpaperApplicationService? _wallpaperService;
     private AppPreferencesStore? _preferencesStore;
+    private readonly IAppTextProvider _text = new AppTextProvider();
     private UserFacingErrorMapper? _errorMapper;
     private MainWindow? _mainWindow;
     private int _shutdownStarted;
@@ -47,7 +49,9 @@ public partial class App : System.Windows.Application
                 if (!forwarded)
                 {
                     ShowMessageSafely(
-                        "Backdrop for Codex is already running, but its notification-area instance could not be reached. Open it from the notification area and retry.",
+                        _text.GetStringOrFallback(
+                            "Error_InstanceAlreadyRunning_Message",
+                            "Backdrop for Codex is already running, but its notification-area instance could not be reached. Open it from the notification area and retry."),
                         MessageBoxImage.Warning);
                 }
 
@@ -65,24 +69,28 @@ public partial class App : System.Windows.Application
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "CodexWallpaper",
                 "settings.json");
-            var text = new AppTextProvider();
-            _errorMapper = new UserFacingErrorMapper(text);
+            _errorMapper = new UserFacingErrorMapper(_text);
             _preferencesStore = AppPreferencesStore.CreateForCurrentUser();
-            _wallpaperService = WallpaperApplicationService.CreateDefault(settingsPath);
+            _wallpaperService = WallpaperApplicationService.CreateDefault(
+                settingsPath,
+                AppWallpaperSources.Registry);
             var viewModel = new MainWindowViewModel(
                 _wallpaperService,
                 _preferencesStore,
                 _errorMapper,
-                text);
+                _text,
+                AppWallpaperSources.Preview,
+                AppWallpaperSources.Registry,
+                AppWallpaperSources.WallpaperEngineLocator);
             _mainWindow = new MainWindow(
                 viewModel,
-                text,
+                _text,
                 new DiagnosticReportService());
             _trayController = new TrayController(
                 _mainWindow,
                 viewModel.DisableAsync,
                 () => _mainWindow.RequestShutdownAsync(ShutdownSafelyAsync),
-                text);
+                _text);
 
             if (HasLaunchArgument(e.Args))
             {
@@ -275,7 +283,9 @@ public partial class App : System.Windows.Application
             if (cleanupFailed)
             {
                 ShowMessageSafely(
-                    "Cleanup could not be fully confirmed. The page lease will keep trying to restore the background; exit Codex completely to close the debugging endpoint immediately.",
+                    _text.GetStringOrFallback(
+                        "Error_ShutdownCleanupFailed_Message",
+                        "The official background could not be confirmed before exit. Exit Codex completely to close the local debugging connection."),
                     MessageBoxImage.Warning);
             }
 
@@ -299,8 +309,12 @@ public partial class App : System.Windows.Application
         }
 
         return exception is PlatformNotSupportedException
-            ? "Backdrop for Codex requires Windows 11 on x64 hardware."
-            : "Backdrop for Codex could not start safely. Confirm this is Windows 11 x64 and retry.";
+            ? _text.GetStringOrFallback(
+                "Error_UnsupportedPlatform_Message",
+                "Backdrop for Codex requires Windows 11 on x64 hardware.")
+            : _text.GetStringOrFallback(
+                "Error_StartupFailed_Message",
+                "Backdrop for Codex could not start. Confirm this is Windows 11 x64 and retry.");
     }
 
     private static void ShowMessageSafely(string message, MessageBoxImage image)

@@ -12,8 +12,9 @@ public enum WallpaperFit
 }
 
 /// <summary>
-/// Version one of the durable wallpaper settings contract.
-/// Video playback is intentionally always muted and looping, so neither option is persisted.
+/// Frozen version-one migration contract. Production state and all new publications use
+/// <see cref="SettingsV3"/>; this type exists only to validate legacy input before migration.
+/// Video playback was intentionally always muted and looping, so neither option was persisted.
 /// </summary>
 public sealed record SettingsV1
 {
@@ -58,65 +59,6 @@ public sealed record SettingsV1
         "Do not use this property for runtime behavior.")]
     [EditorBrowsable(EditorBrowsableState.Never)]
     public string? LastCompatibilityProfileId { get; init; }
-
-    public static SettingsV1 CreateDefault() => new();
-
-    /// <summary>
-    /// Returns a copy with <paramref name="mediaPath"/> at the front of the bounded recent list.
-    /// Paths are compared case-insensitively because this application targets Windows.
-    /// </summary>
-    public SettingsV1 AddRecentMediaPath(string mediaPath)
-    {
-        var normalizedPath = ValidateAndNormalizePath(mediaPath, nameof(mediaPath));
-        var currentPaths = RecentMediaPaths ?? Array.Empty<string>();
-        var paths = new List<string>(MaximumRecentMediaPaths) { normalizedPath };
-
-        foreach (var candidate in currentPaths)
-        {
-            if (paths.Count == MaximumRecentMediaPaths)
-            {
-                break;
-            }
-
-            if (!string.IsNullOrWhiteSpace(candidate) &&
-                !paths.Contains(candidate, StringComparer.OrdinalIgnoreCase))
-            {
-                paths.Add(candidate);
-            }
-        }
-
-        return this with
-        {
-            RecentMediaPaths = new ReadOnlyCollection<string>(paths),
-        };
-    }
-
-    /// <summary>
-    /// Returns a copy without <paramref name="mediaPath"/> in the recent list.
-    /// Paths are compared case-insensitively because this application targets Windows.
-    /// </summary>
-    public SettingsV1 RemoveRecentMediaPath(string mediaPath)
-    {
-        var normalizedPath = ValidateAndNormalizePath(mediaPath, nameof(mediaPath));
-        var currentPaths = RecentMediaPaths ?? Array.Empty<string>();
-        var paths = currentPaths
-            .Where(candidate =>
-                !string.Equals(candidate, normalizedPath, StringComparison.OrdinalIgnoreCase))
-            .ToArray();
-
-        return this with
-        {
-            RecentMediaPaths = new ReadOnlyCollection<string>(paths),
-        };
-    }
-
-    /// <summary>
-    /// Returns a copy with an empty recent-media list.
-    /// </summary>
-    public SettingsV1 ClearRecentMediaPaths() => this with
-    {
-        RecentMediaPaths = Array.Empty<string>(),
-    };
 
     public void Validate()
     {
@@ -256,16 +198,6 @@ public sealed record SettingsV1
         }
     }
 
-    private static string ValidateAndNormalizePath(string path, string parameterName)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(path, parameterName);
-        if (!Path.IsPathFullyQualified(path))
-        {
-            throw new ArgumentException("The media path must be absolute.", parameterName);
-        }
-
-        return Path.GetFullPath(path);
-    }
 }
 
 public sealed class SettingsValidationException : Exception

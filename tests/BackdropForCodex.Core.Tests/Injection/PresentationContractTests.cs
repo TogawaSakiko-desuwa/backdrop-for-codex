@@ -14,6 +14,10 @@ public sealed class PresentationContractTests
         Assert.Contains("body \\u003E #root", script, StringComparison.Ordinal);
         Assert.Contains("appRoot.contains(main)", script, StringComparison.Ordinal);
         Assert.Contains(
+            "\"shellMainSelector\":\"main[data-app-shell-main-surface]\"",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains(
             "\"shellHeaderSelector\":\"" +
             "header[data-app-shell-application-menu-bar]" +
             "[data-app-shell-header-edge-scroll]\"",
@@ -26,17 +30,33 @@ public sealed class PresentationContractTests
             script,
             StringComparison.Ordinal);
         Assert.Contains(
-            "appRoot && appRoot.querySelector(probe.shellHeaderSelector)",
+            "candidate.matches(probe.shellMainSelector)",
             script,
             StringComparison.Ordinal);
         Assert.Contains(
-            "main && main.querySelector(probe.mainViewportSelector)",
+            "!candidate.parentElement?.closest(probe.mainSelector)",
             script,
             StringComparison.Ordinal);
         Assert.Contains(
-            "shellHeader && mainViewport",
+            "candidate.querySelectorAll(selector)",
             script,
             StringComparison.Ordinal);
+        Assert.Contains(
+            "signal.closest(probe.mainSelector) === candidate",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "signalCount >= 2",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "shellCandidates.length === 1",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains("typedShellMainPresent", script, StringComparison.Ordinal);
+        Assert.Contains("shellHeaderPresent", script, StringComparison.Ordinal);
+        Assert.Contains("mainViewportPresent", script, StringComparison.Ordinal);
+        Assert.Contains("shellCandidateAmbiguous", script, StringComparison.Ordinal);
         Assert.DoesNotContain("aside", script, StringComparison.Ordinal);
         Assert.DoesNotContain(
             "data-app-shell-focus-area",
@@ -305,7 +325,6 @@ public sealed class PresentationContractTests
                 declared.Advanced));
         var options = new WallpaperInjectionOptions(
             generation: 3,
-            source: new Uri("file:///C:/Wallpapers/wallpaper.png"),
             localMediaPath: @"C:\Wallpapers\wallpaper.png",
             expectedContentLength: 4096,
             WallpaperMediaKind.Image);
@@ -323,13 +342,13 @@ public sealed class PresentationContractTests
     [Fact]
     public void BuildInstall_OwnsHomeSurfaceStylesAsGlassCapability()
     {
-        var installScript = InjectionScriptBuilder.BuildInstall(
-            new WallpaperInjectionOptions(
-                generation: 3,
-                source: new Uri("file:///C:/Wallpapers/wallpaper.png"),
-                localMediaPath: @"C:\Wallpapers\wallpaper.png",
-                expectedContentLength: 4096,
-                WallpaperMediaKind.Image));
+        var installScript = InjectionScriptPayloadTestHelper.ExtractStyleSheet(
+            InjectionScriptBuilder.BuildInstall(
+                new WallpaperInjectionOptions(
+                    generation: 3,
+                    localMediaPath: @"C:\Wallpapers\wallpaper.png",
+                    expectedContentLength: 4096,
+                    WallpaperMediaKind.Image)));
         const string homeRule = "[role=\"main\"]:has([data-home-ambient-suggestions])";
         var homeRuleIndex = installScript.IndexOf(homeRule, StringComparison.Ordinal);
         var glassStartIndex = installScript.LastIndexOf(
@@ -350,7 +369,6 @@ public sealed class PresentationContractTests
     {
         var options = new WallpaperInjectionOptions(
             generation: 3,
-            source: new Uri("file:///C:/Wallpapers/wallpaper.png"),
             localMediaPath: @"C:\Wallpapers\wallpaper.png",
             expectedContentLength: 4096,
             WallpaperMediaKind.Image);
@@ -371,11 +389,12 @@ public sealed class PresentationContractTests
                 declared.Audio,
                 CompatibilityCapability.Disabled(
                     CompatibilityCapabilityReasonCode.StructuralProbeFailed)));
-        var installScript = InjectionScriptBuilder.BuildInstall(options, declared);
-        var degradedScript = InjectionScriptBuilder.BuildInstall(options, glassDisabled);
-        var advancedDegradedScript = InjectionScriptBuilder.BuildInstall(
-            options,
-            advancedDisabled);
+        var installScript = InjectionScriptPayloadTestHelper.ExtractStyleSheet(
+            InjectionScriptBuilder.BuildInstall(options, declared));
+        var degradedScript = InjectionScriptPayloadTestHelper.ExtractStyleSheet(
+            InjectionScriptBuilder.BuildInstall(options, glassDisabled));
+        var advancedDegradedScript = InjectionScriptPayloadTestHelper.ExtractStyleSheet(
+            InjectionScriptBuilder.BuildInstall(options, advancedDisabled));
         string[] glassRuleAnchors =
         [
             "plugins-page-search",
