@@ -1048,7 +1048,8 @@ public sealed class DynamicWallpaperActivationFactoryTests
             project)).Lease;
         var fallbackEncoder = encoder.Encoders[^1];
         await WaitUntilAsync(
-            () => capture.Frames.Count == 2 && pacerClock.PendingWaitCount == 1,
+            () => pacerClock.HasPendingWaitWithin(TimeSpan.FromSeconds(1)) &&
+                capture.Frames.Count == 2,
             TimeSpan.FromSeconds(5));
 
         Assert.Single(fallbackEncoder.EncodedFrames);
@@ -1056,8 +1057,8 @@ public sealed class DynamicWallpaperActivationFactoryTests
         Assert.Equal(1, capture.Frames[0].DisposeCount);
         pacerClock.Advance(TimeSpan.FromMilliseconds(100));
         await WaitUntilAsync(
-            () => fallbackEncoder.EncodedFrames.Count == 2 &&
-                pacerClock.PendingWaitCount == 1,
+            () => pacerClock.HasPendingWaitWithin(TimeSpan.FromSeconds(1)) &&
+                fallbackEncoder.EncodedFrames.Count == 2,
             TimeSpan.FromSeconds(5));
 
         Assert.Same(capture.Frames[1], fallbackEncoder.EncodedFrames[1]);
@@ -1144,7 +1145,7 @@ public sealed class DynamicWallpaperActivationFactoryTests
         var health = Assert.IsAssignableFrom<IActiveWallpaperHealthSource>(active);
         var fallbackEncoder = encoder.Encoders[^1];
         await WaitUntilAsync(
-            () => pacerClock.PendingWaitCount == 1,
+            () => pacerClock.HasPendingWaitWithin(TimeSpan.FromSeconds(1)),
             TimeSpan.FromSeconds(5));
 
         pacerClock.Advance(TimeSpan.FromTicks(2_000_001));
@@ -1152,7 +1153,7 @@ public sealed class DynamicWallpaperActivationFactoryTests
             () => fallbackEncoder.EncodedFrames.Count == 2,
             TimeSpan.FromSeconds(5));
         await WaitUntilAsync(
-            () => pacerClock.PendingWaitCount == 1,
+            () => pacerClock.HasPendingWaitWithin(TimeSpan.FromSeconds(1)),
             TimeSpan.FromSeconds(5));
 
         Assert.False(health.Completion.IsCompleted);
@@ -1191,7 +1192,7 @@ public sealed class DynamicWallpaperActivationFactoryTests
         var health = Assert.IsAssignableFrom<IActiveWallpaperHealthSource>(active);
         var fallbackEncoder = encoder.Encoders[^1];
         await WaitUntilAsync(
-            () => pacerClock.PendingWaitCount == 1,
+            () => pacerClock.HasPendingWaitWithin(TimeSpan.FromSeconds(1)),
             TimeSpan.FromSeconds(5));
         pacerClock.Advance(TimeSpan.FromTicks(666_667));
         await fallbackEncoder.EncodingBlocked.Task.WaitAsync(TimeSpan.FromSeconds(5));
