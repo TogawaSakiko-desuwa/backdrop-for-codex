@@ -1,9 +1,0 @@
-{
-  "useCase": "ui-mockup",
-  "direction": "precision optical proofing bench",
-  "composition": "stage-led focus",
-  "sourceReference": "user-provided://current-workbench-screenshot",
-  "prompt": "Native Windows 11 WPF workbench with a compact 224px profile/source rail, unmistakably dominant calibrated preview stage, 360px progressive-disclosure inspector, and fixed safety/commit strip. Cool charcoal/fog material, precise seams and crop ticks, system-blue accent, restrained corners, no card grid; exclude the external yellow close overlay.",
-  "approved": true,
-  "approval": "Delegated by the user after locking the precision-workbench direction and asking for uninterrupted execution. Selected because it best preserves preview primacy, source discoverability, progressive disclosure, and a single safe commit path. The light-system-theme treatment from option C remains an adaptive-state reference, not a different composition."
-}

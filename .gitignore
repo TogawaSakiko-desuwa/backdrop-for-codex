@@ -27,5 +27,4 @@ settings.local.json
 # Local-only development overlays
 /.agents/
 /AGENTS.md
-/.impeccable/actual/
-/.impeccable/mocks/*.png
+/.impeccable/

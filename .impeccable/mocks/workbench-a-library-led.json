@@ -1,8 +1,0 @@
-{
-  "useCase": "ui-mockup",
-  "direction": "precision optical proofing bench",
-  "composition": "library-led",
-  "sourceReference": "user-provided://current-workbench-screenshot",
-  "prompt": "Native Windows 11 WPF workbench with a 224px information-rich source rail, dominant calibrated wallpaper proof, 360px whitespace-grouped inspector, and quiet bottom commit bar. Cool graphite/fog material, registration ticks, system-blue accent, restrained corners, no card grid; exclude the external yellow close overlay.",
-  "approved": false
-}
