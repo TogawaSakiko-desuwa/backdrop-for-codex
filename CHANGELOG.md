@@ -2,18 +2,18 @@
 
 本项目的所有重要变更记录在此文件中。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
-## [1.5.0] - 2026-08-21
+## [1.5.0] - 2026-08-22
 
 ### Added
 
-- 新增已安装 Wallpaper Engine Workshop 与 Local Project 来源库，支持搜索、按类型或来源筛选和静态缩略图；Image、Video、Scene 和 Web 项目可用，Application 与未知类型不会执行。
+- 新增已安装 Wallpaper Engine Workshop 与 Local Project 来源库，支持搜索、按类型或来源筛选和静态缩略图；Image / Video 可稳定使用，Scene / Web 作为实验性功能提供，Application 与未知类型不会执行。
 - 新增 Wallpaper Engine 安装自动发现与本次运行内的手动选择。
 
 ### Changed
 
 - 重做背景方案工作台，统一来源选择、预览、方案管理、状态提示和恢复官方背景入口。
-- Wallpaper Engine Image / Video 直接使用本地媒体；Scene / Web 从已运行的 Wallpaper Engine 捕获项目窗口像素。Backdrop 不自动启动 Wallpaper Engine，也不枚举、静音或改变其音频会话；项目声音可能通过 Wallpaper Engine 播放，音频不会转发到 Codex。
-- Scene / Web 会在启动或运行遇到可恢复故障时逐级切换画质档位，并在短暂捕获、编码或页面传输故障后尝试恢复。
+- Wallpaper Engine Image / Video 直接使用本地媒体；实验性 Scene / Web 从已运行的 Wallpaper Engine 捕获项目窗口像素。Backdrop 不自动启动 Wallpaper Engine，也不枚举、静音或改变其音频会话；项目声音可能通过 Wallpaper Engine 播放，音频不会转发到 Codex。
+- 实验性 Scene / Web 会在启动或运行遇到可恢复故障时逐级切换画质档位，并在短暂捕获、编码或页面传输故障后尝试恢复。
 - 页面短暂重载不再立即永久关闭可选视觉效果；安全身份、目标歧义和资源所有权失败仍会停止激活。
 
 ### Refactored
@@ -40,7 +40,11 @@
 
 ### Fixed
 
-- 适配 Codex `26.803` 的助手消息与 Markdown 表格结构更新，恢复普通助手消息、窄表和宽表的玻璃效果与横向滚动边界，同时保留旧版页面兼容。
+- 适配 Codex `26.803` 的助手消息与 Markdown 表格 DOM 更新：普通助手玻璃改用 `data-markdown-text-style="assistant-message"` 语义锚点，宽表格改用 `data-markdown-table="true"` 与 `[data-wide-block]`，恢复新版页面中的消息玻璃和自适应宽表玻璃，同时保留 26.727 旧结构兼容。
+
+### Verification
+
+- Release 非集成测试 540 项全部通过；真实 Edge/CDP 回归覆盖新版普通助手消息、窄表与宽表，并确认 LTR/RTL 下玻璃边界、横向滚动和页面无溢出。
 
 ## [1.4.4] - 2026-08-04
 

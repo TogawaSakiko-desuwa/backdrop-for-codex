@@ -61,7 +61,7 @@ Backdrop for Codex is an unofficial, open-source companion for **Windows 11 x64*
 - Experimental Scene/Web steps down through quality profiles after recoverable failures and attempts to recover from brief capture, encoding, or page-connection interruptions.
 - Updated compatibility for the current Codex conversation and Markdown table structure, with dark-theme contrast and dialog interaction fixes.
 
-[Read the full changelog](CHANGELOG.md#150---2026-08-21)
+[Read the full changelog](CHANGELOG.md#150---2026-08-22)
 
 ## Download and quick start
 
