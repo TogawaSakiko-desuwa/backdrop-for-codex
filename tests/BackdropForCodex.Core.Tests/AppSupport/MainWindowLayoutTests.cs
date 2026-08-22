@@ -196,11 +196,14 @@ public sealed class MainWindowLayoutTests
                         ShowActivated = false,
                     };
                     window.Show();
-
-                    // Simulate a constrained host before driving each responsive mode explicitly.
-                    window.MaxWidth = 1024;
-                    ArrangeWindow(window, width: 1440, height: 860);
-                    var library = FindElement(window, "LibraryPane");
+                    window.Dispatcher.Invoke(
+                        static () => { },
+                        DispatcherPriority.ApplicationIdle);
+                    ApplyResponsiveLayout(window, width: 1440);
+                    var workbench = Assert.IsType<Grid>(
+                        FindElement(window, "WorkbenchSurface"));
+                    var library = Assert.IsType<WallpaperLibraryView>(
+                        FindElement(window, "LibraryPane"));
                     var preview = FindElement(window, "PreviewPane");
                     var inspector = Assert.IsType<Border>(
                         FindElement(window, "InspectorHost"));
@@ -215,7 +218,10 @@ public sealed class MainWindowLayoutTests
                         FindElement(window, "RestoreActionButton"));
                     var applyAction = Assert.IsAssignableFrom<Wpf.Ui.Controls.Button>(
                         FindElement(window, "ApplyActionButton"));
-                    Assert.Equal(224, library.ActualWidth, precision: 3);
+                    Assert.Equal(
+                        new GridLength(WallpaperLibraryView.ExpandedWidth),
+                        workbench.ColumnDefinitions[0].Width);
+                    Assert.False(library.IsCompact);
                     Assert.Equal(Visibility.Visible, preview.Visibility);
                     Assert.Equal(Visibility.Visible, inspector.Visibility);
                     Assert.Equal(new Thickness(1, 0, 0, 0), inspector.BorderThickness);
@@ -235,11 +241,19 @@ public sealed class MainWindowLayoutTests
                     Assert.Equal(FontWeights.SemiBold, applyAction.FontWeight);
                     Assert.True(applyAction.MinHeight >= 44);
 
-                    ArrangeWindow(window, width: 1200, height: 760);
-                    Assert.Equal(56, library.ActualWidth, precision: 3);
+                    ApplyResponsiveLayout(window, width: 1024);
+                    Assert.Equal(
+                        new GridLength(WallpaperLibraryView.CompactWidth),
+                        workbench.ColumnDefinitions[0].Width);
+                    Assert.True(library.IsCompact);
                     Assert.Equal(Visibility.Visible, inspector.Visibility);
 
-                    ArrangeWindow(window, width: 800, height: 700);
+                    ArrangeWindow(window, width: 820, height: 700);
+                    Assert.True(MainWindow.UsesStackedLayout(window.ActualWidth));
+                    Assert.Equal(
+                        new GridLength(0),
+                        workbench.ColumnDefinitions[0].Width);
+                    Assert.False(library.IsCompact);
                     Assert.Equal(Visibility.Collapsed, library.Visibility);
                     Assert.Equal(Visibility.Visible, mobileToolbar.Visibility);
                     Assert.Equal(Visibility.Visible, preview.Visibility);
@@ -271,7 +285,7 @@ public sealed class MainWindowLayoutTests
 
                     adjustMode.RaiseEvent(
                         new RoutedEventArgs(Button.ClickEvent));
-                    window.UpdateLayout();
+                    ApplyResponsiveLayout(window, width: 820);
                     Assert.Equal(Visibility.Collapsed, preview.Visibility);
                     Assert.Equal(Visibility.Visible, inspector.Visibility);
                     Assert.Equal(
@@ -285,7 +299,7 @@ public sealed class MainWindowLayoutTests
 
                     FindElement(window, "LibraryDrawerButton").RaiseEvent(
                         new RoutedEventArgs(Button.ClickEvent));
-                    window.UpdateLayout();
+                    ApplyResponsiveLayout(window, width: 820);
                     Assert.Equal(Visibility.Visible, library.Visibility);
                     Assert.Equal(
                         Visibility.Visible,
@@ -300,7 +314,7 @@ public sealed class MainWindowLayoutTests
                         RoutedEvent = Keyboard.PreviewKeyDownEvent,
                     };
                     window.RaiseEvent(escape);
-                    window.UpdateLayout();
+                    ApplyResponsiveLayout(window, width: 820);
                     Assert.True(escape.Handled);
                     Assert.Equal(Visibility.Collapsed, library.Visibility);
                     Assert.Equal(
@@ -847,13 +861,20 @@ public sealed class MainWindowLayoutTests
         double width,
         double height)
     {
-        window.MaxWidth = double.PositiveInfinity;
-        window.MaxHeight = double.PositiveInfinity;
         window.Width = width;
         window.Height = height;
         window.Dispatcher.Invoke(
             static () => { },
             DispatcherPriority.ApplicationIdle);
+        window.UpdateLayout();
+    }
+
+    private static void ApplyResponsiveLayout(MainWindow window, double width)
+    {
+        window.UpdateResponsiveLayout(width);
+        window.Dispatcher.Invoke(
+            static () => { },
+            DispatcherPriority.DataBind);
         window.UpdateLayout();
     }
 

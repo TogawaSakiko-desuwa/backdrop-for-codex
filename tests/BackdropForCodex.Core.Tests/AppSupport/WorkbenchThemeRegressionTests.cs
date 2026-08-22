@@ -70,6 +70,10 @@ public sealed class WorkbenchThemeRegressionTests
                     window = CreateWindow(fixture);
                     ApplyDarkTheme(window);
                     fixture.ViewModel.IsStatusOpen = true;
+                    var library = FindVisualElement<WallpaperLibraryView>(
+                        window,
+                        element => element.Name == "LibraryPane");
+                    library.Visibility = Visibility.Visible;
                     window.Dispatcher.Invoke(
                         static () => { },
                         DispatcherPriority.DataBind);
@@ -77,17 +81,16 @@ public sealed class WorkbenchThemeRegressionTests
 
                     var expected = ResourceColor("TextFillColorPrimaryBrush");
                     var profileList = FindVisualElement<ListBox>(
-                        window,
+                        library,
                         element => element.Name == "ProfileList");
                     var profile = fixture.ViewModel.ProfileCards[0];
-                    var profileText = FindVisualElement<TextBlock>(
-                        profileList,
-                        element => element.Text == profile.DisplayName);
+                    var profileItem = Assert.IsType<ListBoxItem>(
+                        profileList.ItemContainerGenerator.ContainerFromItem(profile));
                     var chooseMedia = FindVisualElement<Wpf.Ui.Controls.Button>(
-                        window,
+                        library,
                         element => element.Name == "ExpandedChooseMediaButton");
                     var createProfile = FindVisualElement<Wpf.Ui.Controls.Button>(
-                        window,
+                        library,
                         element => element.Name == "ExpandedCreateProfileButton");
                     var dismissStatus = FindVisualElement<Wpf.Ui.Controls.Button>(
                         window,
@@ -99,7 +102,7 @@ public sealed class WorkbenchThemeRegressionTests
                         window,
                         element => element.Name == "RestoreActionButton");
 
-                    Assert.Equal(expected, BrushColor(profileText.Foreground));
+                    Assert.Equal(expected, BrushColor(profileItem.Foreground));
                     Assert.Equal(expected, BrushColor(chooseMedia.Foreground));
                     Assert.Equal(expected, BrushColor(createProfile.Foreground));
                     Assert.Equal(expected, BrushColor(dismissStatus.Foreground));
@@ -111,7 +114,7 @@ public sealed class WorkbenchThemeRegressionTests
                         "TextFillColorPrimaryBrush");
                     Assert.Equal(
                         lightExpected,
-                        BrushColor(profileText.Foreground));
+                        BrushColor(profileItem.Foreground));
                     Assert.Equal(
                         lightExpected,
                         BrushColor(chooseMedia.Foreground));
@@ -216,10 +219,6 @@ public sealed class WorkbenchThemeRegressionTests
                     UriKind.Relative),
             });
         window.Show();
-        window.MaxWidth = double.PositiveInfinity;
-        window.MaxHeight = double.PositiveInfinity;
-        window.Width = 1440;
-        window.Height = 860;
         window.Dispatcher.Invoke(
             static () => { },
             DispatcherPriority.ApplicationIdle);

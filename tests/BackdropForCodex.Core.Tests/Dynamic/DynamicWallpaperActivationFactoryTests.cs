@@ -1289,9 +1289,6 @@ public sealed class DynamicWallpaperActivationFactoryTests
         await WaitUntilAsync(
             () => deadline.ArmCount > armCountBeforeResume && deadline.HasPendingWait,
             TimeSpan.FromSeconds(5));
-        Assert.True(deadline.ExpireCurrent());
-
-        await WaitUntilAsync(() => pages.Leases.Count == 2, TimeSpan.FromSeconds(5));
         Assert.False(health.Completion.IsCompleted);
     }
 

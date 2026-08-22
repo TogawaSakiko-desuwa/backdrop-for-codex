@@ -1150,7 +1150,7 @@ public partial class MainWindow : FluentWindow
     private void Window_SizeChanged(object sender, SizeChangedEventArgs e) =>
         UpdateResponsiveLayout(e.NewSize.Width);
 
-    private void UpdateResponsiveLayout(double width)
+    internal void UpdateResponsiveLayout(double width)
     {
         var isMobile = UsesStackedLayout(width);
         var useCompactRail = UsesCompactRail(width);
