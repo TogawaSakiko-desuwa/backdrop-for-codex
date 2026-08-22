@@ -4,7 +4,7 @@
 
 # Backdrop for Codex
 
-Backdrop for Codex 是一个面向 **Windows 11 x64** 的非官方开源伴侣，为官方 Microsoft Store / MSIX Codex 桌面应用添加可预览、可保存并可随时恢复的工作区背景。支持本地图片、静音循环视频，以及已安装的 Wallpaper Engine Image / Video / Scene / Web 项目。
+Backdrop for Codex 是一个面向 **Windows 11 x64** 的非官方开源伴侣，为官方 Microsoft Store / MSIX Codex 桌面应用添加可预览、可保存并可随时恢复的工作区背景。支持本地图片、静音循环视频、已安装的 Wallpaper Engine Image / Video，以及实验性的 Scene / Web 项目。
 
 **不修改 Codex 安装文件 · 不向项目自有服务上传本地媒体 · 不读取聊天 · 不收集遥测**
 
@@ -16,7 +16,7 @@ Backdrop for Codex 是一个面向 **Windows 11 x64** 的非官方开源伴侣�
 
 [**下载 Windows 11 x64 便携版 →**](https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/releases/latest)
 
-`v1.5.0` · 无需安装 · 使用普通用户权限运行 · 支持本地媒体与已安装的 Wallpaper Engine Image / Video / Scene / Web
+`v1.5.0` · 无需安装 · 使用普通用户权限运行 · 支持本地媒体、Wallpaper Engine Image / Video，以及实验性 Scene / Web
 
 > [!CAUTION]
 > Backdrop for Codex 是独立社区项目，与 OpenAI 或 Microsoft 无隶属、赞助、认可或支持关系。它通过本机回环地址上的 Chrome DevTools Protocol（CDP）工作；请勿以管理员身份运行或转发调试端口，使用完毕后应完全退出 Codex。详情见[安全说明](SECURITY.md)和[威胁模型](THREAT_MODEL.md)。
@@ -48,14 +48,17 @@ Backdrop for Codex 是一个面向 **Windows 11 x64** 的非官方开源伴侣�
 
 ### Wallpaper Engine 来源
 
+> [!IMPORTANT]
+> Scene / Web 在 v1.5.0 中为实验性功能，当前仍在完善；Image / Video 是稳定使用路径。
+
 - 浏览本机已安装的 Workshop 项目和 Local Project，可按类型或来源筛选，并通过项目缩略图快速选择。
-- 支持 Image、Video、Scene 和 Web 项目。Image / Video 可直接播放；使用 Scene / Web 前需先启动 Wallpaper Engine。
+- 支持 Image、Video，以及实验性的 Scene / Web 项目。Image / Video 可直接播放；使用 Scene / Web 前需先启动 Wallpaper Engine。
 
 ### 工作台与运行链路
 
 - 重新设计背景工作台，将背景方案、来源库、最近使用、预览、应用和恢复官方背景集中在同一套操作流程中。
 - 重构来源、设置、激活和清理链路，使本地媒体与 Wallpaper Engine 项目使用统一的背景方案；现有方案会自动迁移。
-- Scene / Web 会在遇到可恢复故障时逐级降低画质，并在短暂的捕获、编码或页面连接中断后尝试恢复。
+- 实验性 Scene / Web 会在遇到可恢复故障时逐级降低画质，并在短暂的捕获、编码或页面连接中断后尝试恢复。
 - 适配当前 Codex 对话与 Markdown 表格结构，并修复深色主题文字对比度和对话框交互问题。
 
 [查看完整更新日志](CHANGELOG.md#150---2026-08-21)
@@ -104,14 +107,14 @@ gh attestation verify .\BackdropForCodex-v1.5.0-win-x64.zip `
 - 使用本地 PNG、JPEG、WebP 图片或静音循环 MP4、WebM 视频。
 - 从经过验证的官方 Steam / Wallpaper Engine 安装中发现本机已安装的 Workshop 项目和 `projects/myprojects`、`projects/backup` 本地项目；不浏览在线 Workshop，不订阅、下载或修改 Steam 配置。
 - 唯一有效安装会自动选择；存在多个安装或自动发现失败时，可在来源库手动选择安装位置，并可随时恢复自动发现。手动选择仅在本次运行中生效。
-- Wallpaper Engine Image / Video 项目可直接播放；Scene / Web 要求 Wallpaper Engine 已经运行。项目可能通过 Wallpaper Engine 播放声音，Backdrop 不静音或转发该音频。
+- Wallpaper Engine Image / Video 项目可直接播放；实验性 Scene / Web 要求 Wallpaper Engine 已经运行。项目可能通过 Wallpaper Engine 播放声音，Backdrop 不静音或转发该音频。
 
 ### 工作台与方案
 
 - 管理多个背景方案，包括新建、复制、重命名、删除，以及不使用自定义媒体的“官方背景”方案。
 - 提供“完整显示”“裁剪填满”“拉伸”三种适配模式，并支持拖动焦点和方向键微调。
 - 分别调整浅色/深色主题遮罩、面板不透明度和背景模糊，应用前即可预览。
-- 支持文件选择、单文件拖放、最近使用记录，以及视频和 Scene / Web 动态背景的暂停与继续。
+- 支持文件选择、单文件拖放、最近使用记录，以及视频和实验性 Scene / Web 动态背景的暂停与继续。
 
 ### 应用与恢复
 
@@ -135,14 +138,14 @@ gh attestation verify .\BackdropForCodex-v1.5.0-win-x64.zip `
 | PNG、JPEG、WebP | 支持 |
 | MP4、WebM | 支持静音循环播放 |
 | 已安装的 Wallpaper Engine Image / Video | 支持 Workshop 与 Local Project；直接使用受验证媒体文件，不要求 Wallpaper Engine 正在运行 |
-| 已安装的 Wallpaper Engine Scene / Web | 支持 Workshop 与 Local Project；要求经过验证的 Wallpaper Engine 已经运行，且系统支持动态捕获与播放。项目声音可能由 Wallpaper Engine 直接播放 |
+| 已安装的 Wallpaper Engine Scene / Web | 实验性支持 Workshop 与 Local Project；要求经过验证的 Wallpaper Engine 已经运行，且系统支持动态捕获与播放。项目声音可能由 Wallpaper Engine 直接播放 |
 | Wallpaper Engine Application、Unknown | 永久拒绝，不执行 |
 | 在线 Workshop、自动订阅/下载、用户属性、预设、播放列表、向 Codex 转发声音或输入 | 不支持 |
 | 本地媒体限制 | 仅本地普通磁盘文件；图片不超过 512 MiB、单边 32,768 像素和约 33.5 MP，视频不超过 8 GiB |
 | Codex Win32 便携版、Codex 网页版/CLI、Windows 10、Windows on Arm、macOS、Linux | 不支持 |
 | 多窗口独立壁纸、分区域壁纸、视频声音 | 当前不支持 |
 
-Scene / Web 不会使用 Wallpaper Engine 的全局 pause/play/mute 命令，也不会捕获桌面。使用前请先启动 Wallpaper Engine；Backdrop 不会自动启动它。Scene / Web 可能播放声音，Backdrop 不枚举、静音或改变任何 Wallpaper Engine 音频会话，也不会把音频转发到 Codex。首次使用 Web 项目会提示其可能联网和播放声音。项目仓库和 Release 不包含 Wallpaper Engine 二进制、Workshop 内容或用户项目。
+实验性 Scene / Web 不会使用 Wallpaper Engine 的全局 pause/play/mute 命令，也不会捕获桌面。使用前请先启动 Wallpaper Engine；Backdrop 不会自动启动它。Scene / Web 可能播放声音，Backdrop 不枚举、静音或改变任何 Wallpaper Engine 音频会话，也不会把音频转发到 Codex。首次使用 Web 项目会提示其可能联网和播放声音。项目仓库和 Release 不包含 Wallpaper Engine 二进制、Workshop 内容或用户项目。
 
 兼容性依据实际 Codex 页面和进程状态判断。安全核验失败时不会注入；只有部分视觉效果不可用时，应用会保留可用背景并使用高可读性回退。Codex 更新可能暂时影响兼容性，请优先使用最新版本的 Backdrop for Codex。
 

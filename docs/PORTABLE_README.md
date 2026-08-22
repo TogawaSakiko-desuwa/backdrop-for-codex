@@ -4,10 +4,12 @@
 
 ## 1.5.0 新增
 
+> Scene / Web 为实验性功能，当前仍在完善；Image / Video 是稳定使用路径。
+
 - 来源库可浏览本机已安装的 Wallpaper Engine Workshop 和 Local Project，并按类型或来源筛选。
 - 新工作台集中管理背景方案、来源、最近使用和预览；旧版方案会在首次启动时自动迁移。
-- Image / Video 项目可直接播放；Scene / Web 需先启动 Wallpaper Engine，并会在遇到可恢复故障时逐级降低画质。Backdrop 不会自动启动 Wallpaper Engine。
-- Scene / Web 项目可能通过 Wallpaper Engine 播放声音，Web 项目可能联网；Application 和未知类型不会执行。
+- Image / Video 项目可直接播放；实验性 Scene / Web 需先启动 Wallpaper Engine，并会在遇到可恢复故障时逐级降低画质。Backdrop 不会自动启动 Wallpaper Engine。
+- 实验性 Scene / Web 项目可能通过 Wallpaper Engine 播放声音，Web 项目可能联网；Application 和未知类型不会执行。
 
 ## 快速开始
 

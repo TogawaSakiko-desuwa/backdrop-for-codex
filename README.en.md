@@ -4,7 +4,7 @@
 
 # Backdrop for Codex
 
-Backdrop for Codex is an unofficial, open-source companion for **Windows 11 x64** that adds previewable and reusable workspace backdrops to the official Microsoft Store/MSIX Codex desktop app. It supports local images, muted looping videos, and installed Wallpaper Engine Image, Video, Scene, and Web projects, with an explicit Restore Official action.
+Backdrop for Codex is an unofficial, open-source companion for **Windows 11 x64** that adds previewable and reusable workspace backdrops to the official Microsoft Store/MSIX Codex desktop app. It supports local images, muted looping videos, installed Wallpaper Engine Image/Video projects, and experimental Scene/Web projects, with an explicit Restore Official action.
 
 **Does not modify the Codex package · Does not upload local media to a project-operated service · Does not read chats · Does not collect telemetry**
 
@@ -16,7 +16,7 @@ Backdrop for Codex is an unofficial, open-source companion for **Windows 11 x64*
 
 [**Download the Windows 11 x64 portable build →**](https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/releases/latest)
 
-`v1.5.0` · No installer · Runs as a standard user · Supports local media and installed Wallpaper Engine Image, Video, Scene, and Web projects
+`v1.5.0` · No installer · Runs as a standard user · Supports local media, Wallpaper Engine Image/Video, and experimental Scene/Web
 
 > [!CAUTION]
 > Backdrop for Codex is an independent community project. It is not affiliated with, sponsored, endorsed, or supported by OpenAI or Microsoft. It works through the Chrome DevTools Protocol (CDP) on a local loopback address. Never run the companion as administrator or expose the debugging port beyond loopback, and fully exit Codex when finished. See the [security policy](SECURITY.md) and [threat model](THREAT_MODEL.md).
@@ -48,14 +48,17 @@ Backdrop for Codex is an unofficial, open-source companion for **Windows 11 x64*
 
 ### Wallpaper Engine sources
 
+> [!IMPORTANT]
+> Scene/Web is experimental in v1.5.0 and is still being improved. Image/Video is the stable path.
+
 - Browse installed Workshop items and Local Projects, filter them by type or origin, and choose projects from their thumbnails.
-- Use Image, Video, Scene, and Web projects. Image/Video play directly; start Wallpaper Engine before using Scene/Web.
+- Use Image/Video and experimental Scene/Web projects. Image/Video play directly; start Wallpaper Engine before using Scene/Web.
 
 ### Workbench and playback
 
 - A redesigned workbench brings profiles, sources, recent media, preview, Apply, and Restore Official into one workflow.
 - The source, settings, activation, and cleanup paths now use one profile model for local media and Wallpaper Engine projects. Existing profiles migrate automatically.
-- Scene/Web steps down through quality profiles after recoverable failures and attempts to recover from brief capture, encoding, or page-connection interruptions.
+- Experimental Scene/Web steps down through quality profiles after recoverable failures and attempts to recover from brief capture, encoding, or page-connection interruptions.
 - Updated compatibility for the current Codex conversation and Markdown table structure, with dark-theme contrast and dialog interaction fixes.
 
 [Read the full changelog](CHANGELOG.md#150---2026-08-21)
@@ -104,14 +107,14 @@ gh attestation verify .\BackdropForCodex-v1.5.0-win-x64.zip `
 - Local PNG, JPEG, and WebP images, plus muted looping MP4 and WebM videos.
 - Discovery of installed Workshop items and Local Projects under `projects/myprojects` and `projects/backup` from a verified official Steam/Wallpaper Engine installation. The companion does not browse the online Workshop, subscribe, download, or modify Steam configuration.
 - One valid installation is selected automatically. If several exist or discovery fails, the source library can select an installation location and return to automatic discovery at any time. A manual choice lasts only for the current run.
-- Wallpaper Engine Image/Video projects play directly. Scene/Web requires Wallpaper Engine to be running. A project may play audio through Wallpaper Engine; Backdrop neither mutes nor forwards it.
+- Wallpaper Engine Image/Video projects play directly. Experimental Scene/Web requires Wallpaper Engine to be running. A project may play audio through Wallpaper Engine; Backdrop neither mutes nor forwards it.
 
 ### Workbench and profiles
 
 - Multiple backdrop profiles with create, duplicate, rename, delete, and an Official background option with no custom media.
 - Contain, cover, and stretch fit modes. Cover mode supports direct focus dragging and arrow-key adjustment.
 - Independent dark/light theme overlays, panel opacity, and backdrop blur with a preview before Apply.
-- File picker, single-file drag and drop, recent media, and pause/resume for video and Scene/Web motion.
+- File picker, single-file drag and drop, recent media, and pause/resume for video and experimental Scene/Web motion.
 
 ### Activation and recovery
 
@@ -135,14 +138,14 @@ gh attestation verify .\BackdropForCodex-v1.5.0-win-x64.zip `
 | PNG, JPEG, WebP | Supported |
 | MP4, WebM | Supported as muted looping video |
 | Installed Wallpaper Engine Image/Video | Supported for Workshop and Local Projects through verified direct media; Wallpaper Engine does not need to be running |
-| Installed Wallpaper Engine Scene/Web | Supported for Workshop and Local Projects when a verified Wallpaper Engine instance is already running and the system supports dynamic capture and playback. Project audio may play through Wallpaper Engine |
+| Installed Wallpaper Engine Scene/Web | Experimental support for Workshop and Local Projects when a verified Wallpaper Engine instance is already running and the system supports dynamic capture and playback. Project audio may play through Wallpaper Engine |
 | Wallpaper Engine Application/Unknown | Always rejected and never executed |
 | Online Workshop, automatic subscription/download, user properties, presets, playlists, or forwarding audio/input into Codex | Not supported |
 | Local media limits | Ordinary files on local disks only; image up to 512 MiB, 32,768 px per side, and approximately 33.5 MP; video up to 8 GiB |
 | Win32 portable Codex, Codex web/CLI, Windows 10, Windows on Arm, macOS, Linux | Not supported |
 | Independent per-window or per-region backdrops and video audio | Not supported |
 
-Scene/Web never uses Wallpaper Engine's global pause/play/mute commands and never captures the desktop. Start Wallpaper Engine before using a Scene/Web project; Backdrop does not start it automatically. Scene/Web may play audio, and Backdrop does not enumerate, mute, or change Wallpaper Engine audio sessions or relay audio into Codex. The first Web activation warns that the project may use the network and play audio. The repository and releases do not include Wallpaper Engine binaries, Workshop content, or user projects.
+Experimental Scene/Web never uses Wallpaper Engine's global pause/play/mute commands and never captures the desktop. Start Wallpaper Engine before using a Scene/Web project; Backdrop does not start it automatically. Scene/Web may play audio, and Backdrop does not enumerate, mute, or change Wallpaper Engine audio sessions or relay audio into Codex. The first Web activation warns that the project may use the network and play audio. The repository and releases do not include Wallpaper Engine binaries, Workshop content, or user projects.
 
 Compatibility is determined from the current Codex page and process state. A failed safety check stops activation. If only optional visual effects are unavailable, the companion keeps the usable backdrop and applies a high-readability fallback. Codex updates may temporarily affect compatibility, so use the latest Backdrop for Codex release.
 
