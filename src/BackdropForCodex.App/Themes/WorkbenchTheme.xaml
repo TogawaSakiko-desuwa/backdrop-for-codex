@@ -17,6 +17,16 @@
   <Thickness x:Key="WorkbenchInset24">24</Thickness>
   <Thickness x:Key="WorkbenchInset32">32</Thickness>
 
+  <!-- Directional spacing tokens. -->
+  <Thickness x:Key="WorkbenchStackGap8">0,8,0,0</Thickness>
+  <Thickness x:Key="WorkbenchStackGap12">0,12,0,0</Thickness>
+  <Thickness x:Key="WorkbenchStackGap16">0,16,0,0</Thickness>
+  <Thickness x:Key="WorkbenchStackGap24">0,24,0,0</Thickness>
+  <Thickness x:Key="WorkbenchRailItemInset">8,0,8,0</Thickness>
+  <Thickness x:Key="WorkbenchRailGroupInset">4,0,4,0</Thickness>
+  <Thickness x:Key="WorkbenchRailDividerInset">8,16,8,16</Thickness>
+  <Thickness x:Key="WorkbenchInspectorInset">24,0,24,24</Thickness>
+
   <CornerRadius x:Key="WorkbenchRadius8">8</CornerRadius>
   <CornerRadius x:Key="WorkbenchRadius6">6</CornerRadius>
   <CornerRadius x:Key="WorkbenchRadius12">12</CornerRadius>
@@ -222,17 +232,19 @@
     <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
     <Setter Property="HorizontalContentAlignment" Value="Stretch" />
     <Setter Property="Appearance" Value="Transparent" />
-    <Setter Property="Background" Value="{DynamicResource ControlFillColorSecondaryBrush}" />
-    <Setter Property="BorderBrush" Value="Transparent" />
-    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Background" Value="{DynamicResource ControlFillColorDefaultBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource DividerStrokeColorDefaultBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
     <Setter Property="CornerRadius" Value="{DynamicResource WorkbenchRadius8}" />
-    <Setter Property="MouseOverBackground" Value="{DynamicResource ControlFillColorTertiaryBrush}" />
-    <Setter Property="MouseOverBorderBrush" Value="Transparent" />
+    <Setter Property="MouseOverBackground" Value="{DynamicResource ControlFillColorSecondaryBrush}" />
+    <Setter Property="MouseOverBorderBrush" Value="{DynamicResource ControlStrokeColorDefaultBrush}" />
     <Setter Property="PressedBackground" Value="{DynamicResource SubtleFillColorTertiaryBrush}" />
     <Setter Property="FocusVisualStyle" Value="{DynamicResource WorkbenchFocusVisualStyle}" />
   </Style>
 
-  <Style x:Key="WorkbenchPrimaryActionButtonStyle" TargetType="ui:Button">
+  <!-- Preserve WPF UI's Appearance triggers for the primary action. -->
+  <Style x:Key="WorkbenchPrimaryActionButtonStyle" TargetType="ui:Button"
+         BasedOn="{StaticResource {x:Type ui:Button}}">
     <Setter Property="MinHeight" Value="{DynamicResource WorkbenchPrimaryTargetMinimum}" />
     <Setter Property="Padding" Value="16,8" />
     <Setter Property="Appearance" Value="Primary" />
@@ -260,10 +272,11 @@
   </Style>
 
   <Style x:Key="WorkbenchInspectorLabelStyle" TargetType="TextBlock">
-    <Setter Property="FontSize" Value="13" />
+    <Setter Property="FontSize" Value="{DynamicResource WorkbenchTypeBody}" />
     <Setter Property="FontWeight" Value="SemiBold" />
     <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
     <Setter Property="VerticalAlignment" Value="Center" />
+    <Setter Property="TextTrimming" Value="CharacterEllipsis" />
   </Style>
 
   <Style x:Key="WorkbenchInspectorMetricIconStyle" TargetType="ui:SymbolIcon">
@@ -276,8 +289,10 @@
     <Setter Property="IsHitTestVisible" Value="False" />
   </Style>
 
+  <!-- Readouts share one minimum so the right edge of the inspector stays a single
+       column; the chip still grows for the wider two-value crop-focus readout. -->
   <Style x:Key="WorkbenchValueChipStyle" TargetType="Border">
-    <Setter Property="MinWidth" Value="56" />
+    <Setter Property="MinWidth" Value="64" />
     <Setter Property="MinHeight" Value="28" />
     <Setter Property="Padding" Value="8,4" />
     <Setter Property="Background" Value="{DynamicResource ControlFillColorSecondaryBrush}" />
@@ -294,6 +309,32 @@
     <Setter Property="HorizontalAlignment" Value="Center" />
     <Setter Property="VerticalAlignment" Value="Center" />
     <Setter Property="TextAlignment" Value="Center" />
+    <Setter Property="TextWrapping" Value="NoWrap" />
+    <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+  </Style>
+
+  <Style x:Key="WorkbenchRailSectionHeadingTextStyle" TargetType="TextBlock">
+    <Setter Property="FontSize" Value="{DynamicResource WorkbenchTypeCaption}" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+    <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    <Setter Property="TextWrapping" Value="NoWrap" />
+  </Style>
+
+  <Style x:Key="WorkbenchRailDividerStyle" TargetType="Border"
+         BasedOn="{StaticResource WorkbenchDividerStyle}">
+    <Setter Property="Margin" Value="{DynamicResource WorkbenchRailDividerInset}" />
+  </Style>
+
+  <Style x:Key="WorkbenchQuietExpanderStyle" TargetType="Expander">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    <Setter Property="FocusVisualStyle" Value="{DynamicResource WorkbenchFocusVisualStyle}" />
   </Style>
 
   <Style x:Key="WorkbenchListBoxStyle" TargetType="ListBox">

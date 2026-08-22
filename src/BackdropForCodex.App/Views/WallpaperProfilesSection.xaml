@@ -244,10 +244,9 @@
   </UserControl.Resources>
 
   <StackPanel>
-    <StackPanel x:Name="ExpandedProfilesHeader" Margin="8,8">
+    <StackPanel x:Name="ExpandedProfilesHeader" Margin="8,0,8,8">
       <TextBlock Text="{localization:Loc Section_Profiles, Fallback='Wallpaper profiles'}"
-                 FontSize="16"
-                 Style="{DynamicResource WorkbenchSectionHeadingTextStyle}" />
+                 Style="{DynamicResource WorkbenchRailSectionHeadingTextStyle}" />
     </StackPanel>
 
     <Border x:Name="CompactProfilesHeader"

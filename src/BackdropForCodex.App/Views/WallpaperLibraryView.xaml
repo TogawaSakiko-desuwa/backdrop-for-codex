@@ -129,8 +129,28 @@
                                           CanEditProfiles="{Binding CanEditProfiles, ElementName=Root}"
                                           IsCompact="{Binding IsCompact, ElementName=Root}" />
 
+          <Border x:Name="ProfilesGroupDivider"
+                  Style="{DynamicResource WorkbenchRailDividerStyle}" />
+
+          <Grid x:Name="ExpandedSourcesHeader" Margin="8,0,4,8">
+            <TextBlock Text="{localization:Loc Section_Sources, Fallback=Sources}"
+                       Style="{DynamicResource WorkbenchRailSectionHeadingTextStyle}" />
+            <ui:Button x:Name="ExpandedWallpaperEngineRefreshButton"
+                       Width="28"
+                       Height="28"
+                       Padding="0"
+                       HorizontalAlignment="Right"
+                       VerticalAlignment="Center"
+                       Style="{DynamicResource WorkbenchIconButtonStyle}"
+                       Command="{Binding RefreshSourcesCommand, ElementName=Root}"
+                       ToolTip="{localization:Loc Action_Refresh, Fallback=Refresh}"
+                       AutomationProperties.Name="{localization:Loc Action_Refresh, Fallback=Refresh}">
+              <ui:SymbolIcon Symbol="ArrowClockwise24" FontSize="15" />
+            </ui:Button>
+          </Grid>
+
           <ui:Button x:Name="ExpandedChooseMediaButton"
-                     Margin="4,8,4,0"
+                     Margin="{DynamicResource WorkbenchRailGroupInset}"
                      Style="{DynamicResource WorkbenchRailActionButtonStyle}"
                      IsEnabled="{Binding CanChooseMedia, ElementName=Root}"
                      ToolTip="{localization:Loc Hint_SupportedFormats, Fallback='PNG, JPEG, WebP, MP4, or WebM'}"
@@ -162,14 +182,9 @@
           </ui:Button>
 
           <Grid Margin="4,8,4,0">
-            <Grid.ColumnDefinitions>
-              <ColumnDefinition Width="*" />
-              <ColumnDefinition Width="32" />
-            </Grid.ColumnDefinitions>
             <ui:Button x:Name="ExpandedWallpaperEngineButton"
-                       Grid.ColumnSpan="2"
                        MinHeight="52"
-                       Padding="10,6,40,6"
+                       Padding="10,6"
                        Style="{DynamicResource WorkbenchRailActionButtonStyle}"
                   ToolTip="{localization:Loc Source_LibraryHint, Fallback='Browse installed Wallpaper Engine projects. Scene and Web require Wallpaper Engine to be running and may play sound through it.'}"
                        AutomationProperties.Name="{localization:Loc Source_LibraryTitle, Fallback='Wallpaper Engine'}"
@@ -199,44 +214,34 @@
                 <StackPanel Grid.Column="1"
                             Margin="8,0,0,0"
                             VerticalAlignment="Center">
-                  <TextBlock Text="{localization:Loc Source_LibraryTitle, Fallback='Wallpaper Engine'}"
-                             FontWeight="SemiBold"
-                             TextTrimming="CharacterEllipsis" />
-                  <Grid Margin="0,2,0,0">
+                  <!-- Keep availability on its own full-width row for localization. -->
+                  <Grid>
                     <Grid.ColumnDefinitions>
-                      <ColumnDefinition Width="Auto" />
-                      <ColumnDefinition Width="12" />
                       <ColumnDefinition Width="*" />
+                      <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock Style="{StaticResource WorkbenchCaptionTextStyle}"
-                               TextWrapping="NoWrap">
-                      <Run Text="{Binding WallpaperEngineProjectCount, ElementName=Root}" />
-                      <Run Text="{localization:Loc Source_ProjectCountSuffix, Fallback=' projects'}" />
+                    <TextBlock Text="{localization:Loc Source_LibraryTitle, Fallback='Wallpaper Engine'}"
+                               FontWeight="SemiBold"
+                               TextTrimming="CharacterEllipsis" />
+                    <!-- Room only for the number, so the unit lives in the tooltip. -->
+                    <TextBlock Grid.Column="1"
+                               Margin="6,0,0,0"
+                               VerticalAlignment="Center"
+                               Style="{StaticResource WorkbenchCaptionTextStyle}"
+                               TextWrapping="NoWrap"
+                               Text="{Binding WallpaperEngineProjectCount, ElementName=Root}">
+                      <TextBlock.ToolTip>
+                        <TextBlock>
+                          <Run Text="{Binding WallpaperEngineProjectCount, ElementName=Root, Mode=OneWay}" />
+                          <Run Text="{localization:Loc Source_ProjectCountSuffix, Fallback=' projects'}" />
+                        </TextBlock>
+                      </TextBlock.ToolTip>
                     </TextBlock>
-                    <Border Grid.Column="1"
-                            Width="2"
-                            Height="2"
-                            Background="{DynamicResource TextFillColorSecondaryBrush}"
-                            CornerRadius="1"
-                            VerticalAlignment="Center" />
-                    <TextBlock Grid.Column="2"
-                               Style="{StaticResource WallpaperEngineRailStatusTextStyle}" />
                   </Grid>
+                  <TextBlock Margin="0,2,0,0"
+                             Style="{StaticResource WallpaperEngineRailStatusTextStyle}" />
                 </StackPanel>
               </Grid>
-            </ui:Button>
-            <ui:Button x:Name="ExpandedWallpaperEngineRefreshButton"
-                       Grid.Column="1"
-                       Width="28"
-                       Height="28"
-                       Padding="0"
-                       Margin="0,0,4,0"
-                       VerticalAlignment="Center"
-                       Style="{DynamicResource WorkbenchIconButtonStyle}"
-                       Command="{Binding RefreshSourcesCommand, ElementName=Root}"
-                       ToolTip="{localization:Loc Action_Refresh, Fallback=Refresh}"
-                       AutomationProperties.Name="{localization:Loc Action_Refresh, Fallback=Refresh}">
-              <ui:SymbolIcon Symbol="ArrowClockwise24" FontSize="15" />
             </ui:Button>
           </Grid>
 
@@ -262,6 +267,9 @@
                        Style="{StaticResource WallpaperEngineStatusDotStyle}" />
             </Grid>
           </ui:Button>
+
+          <Border x:Name="SourcesGroupDivider"
+                  Style="{DynamicResource WorkbenchRailDividerStyle}" />
 
           <views:WallpaperRecentsSection x:Name="RecentsSection"
                                          RecentItemsSource="{Binding RecentItemsSource, ElementName=Root}"

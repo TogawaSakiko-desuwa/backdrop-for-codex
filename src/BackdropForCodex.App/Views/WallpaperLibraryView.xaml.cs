@@ -14,6 +14,9 @@ public partial class WallpaperLibraryView : UserControl
     public const double ExpandedWidth = 224;
     public const double CompactWidth = 56;
 
+    private static readonly Thickness ExpandedGroupDividerInset = new(8, 16, 8, 16);
+    private static readonly Thickness CompactGroupDividerInset = new(8, 10, 8, 10);
+
     public static readonly DependencyProperty ProfileItemsSourceProperty =
         DependencyProperty.Register(
             nameof(ProfileItemsSource),
@@ -415,17 +418,21 @@ public partial class WallpaperLibraryView : UserControl
             return;
         }
 
+        var expanded = IsCompact ? Visibility.Collapsed : Visibility.Visible;
+        var compact = IsCompact ? Visibility.Visible : Visibility.Collapsed;
         SetCurrentValue(WidthProperty, IsCompact ? CompactWidth : ExpandedWidth);
-        ExpandedChooseMediaButton.Visibility =
-            IsCompact ? Visibility.Collapsed : Visibility.Visible;
-        CompactChooseMediaButton.Visibility =
-            IsCompact ? Visibility.Visible : Visibility.Collapsed;
-        ExpandedWallpaperEngineButton.Visibility =
-            IsCompact ? Visibility.Collapsed : Visibility.Visible;
-        ExpandedWallpaperEngineRefreshButton.Visibility =
-            IsCompact ? Visibility.Collapsed : Visibility.Visible;
-        CompactWallpaperEngineButton.Visibility =
-            IsCompact ? Visibility.Visible : Visibility.Collapsed;
+        ExpandedChooseMediaButton.Visibility = expanded;
+        CompactChooseMediaButton.Visibility = compact;
+        ExpandedWallpaperEngineButton.Visibility = expanded;
+        ExpandedWallpaperEngineRefreshButton.Visibility = expanded;
+        ExpandedSourcesHeader.Visibility = expanded;
+        CompactWallpaperEngineButton.Visibility = compact;
+
+        // Compact mode uses dividers instead of group captions.
+        ProfilesGroupDivider.Margin = IsCompact
+            ? CompactGroupDividerInset
+            : ExpandedGroupDividerInset;
+        SourcesGroupDivider.Margin = ProfilesGroupDivider.Margin;
         _ = VisualStateManager.GoToElementState(
             RailLayout,
             IsCompact ? "Compact" : "Expanded",

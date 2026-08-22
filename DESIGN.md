@@ -115,9 +115,9 @@ The palette combines Windows-owned neutral roles with a theme-independent charco
 ### Hierarchy
 
 - **Display** (semibold, 20px): Window-level and profile-specific inspector titles.
-- **Headline** (semibold, 16px): Rail, stage, and inspector section headings.
+- **Headline** (semibold, 16px): Stage and inspector section headings.
 - **Body** (regular or semibold, 14px): Controls, filenames, source rows, status copy, and primary action labels.
-- **Label** (semibold, 12px): Captions, metadata, values, safety summaries, and secondary guidance.
+- **Label** (semibold, 12px): Captions, metadata, values, safety summaries, secondary guidance, and library rail group captions. Rail captions use the secondary text role so the rail reads as grouped navigation rather than a stack of headlines competing with the inspector.
 
 ### Named Rules
 
@@ -156,7 +156,7 @@ Corners are small and functional: controls use a 6-DIP radius, recurring cards a
 
 ### Chips
 
-- **Style:** Inspector value chips are compact readouts, not filters: 56-DIP minimum width, 28-DIP minimum height, 8-by-4-DIP padding, subtle control fill, one-DIP stroke, and 6-DIP radius.
+- **Style:** Inspector value chips are compact readouts, not filters: 64-DIP minimum width, 28-DIP minimum height, 8-by-4-DIP padding, subtle control fill, one-DIP stroke, and 6-DIP radius. The minimum is shared so every readout lands on one right-hand column, and chips size to content rather than a fixed width so a two-value readout such as crop focus is never clipped.
 - **State:** Values use semibold label text with accent emphasis; selection state belongs to rows and tabs, not to the chip.
 
 ### Cards / Containers
@@ -175,15 +175,15 @@ Corners are small and functional: controls use a 6-DIP radius, recurring cards a
 
 ### Navigation
 
-Library navigation uses compact vertical rows with a 32-DIP media/source glyph, 14-DIP semibold name, 12-DIP metadata, neutral selected fill, and a 3-DIP accent rail. The 56-DIP compact rail preserves Fluent SymbolIcons and accessible names. On narrow windows, Preview and Adjust become two plain toolbar choices; the active choice gains only a subtle 2-DIP accent underline.
+Library navigation uses compact vertical rows with a 32-DIP media/source glyph, 14-DIP semibold name, 12-DIP metadata, neutral selected fill, and a 3-DIP accent rail. The rail is grouped, not flat: profiles, sources, and recent media are separated by one-DIP seams, each group carries a Label-scale caption, and group-level actions such as refresh and clear sit on that caption row instead of nesting inside a row control. Rail action buttons carry a subtle fill plus a one-DIP stroke so they never read as another selectable row. The 56-DIP compact rail drops the captions, keeps the seams, and preserves Fluent SymbolIcons and accessible names. On narrow windows, Preview and Adjust become two plain toolbar choices; the active choice gains only a subtle 2-DIP accent underline.
 
 ### Optical Proof Stage
 
-The signature component is a fixed dark stage with a 52-DIP title strip, narrow accent marker, bordered 8-DIP calibration mat, nested safe frame, center axes, crop marks, draggable focus reticle, and a bottom-left media-name pill. The wallpaper and translucent Codex wireframe dominate; surrounding calibration graphics stay fine, pale, and subordinate.
+The signature component is a fixed dark stage with a 52-DIP title strip, narrow accent marker, bordered 8-DIP calibration mat, nested safe frame, center axes, crop marks, draggable focus reticle, and a bottom-left media-name pill. The mat tracks the proof's 16:9 ratio inside its own padding rather than filling the stage, so crop marks sit on the real content corners and unused space stays outside the mat as stage, never as dead margin inside the frame. The wallpaper and translucent Codex wireframe dominate; surrounding calibration graphics stay fine, pale, and subordinate, resting near a third of full strength and rising only while the crop focus is adjustable and under the pointer.
 
 ### Inspector
 
-The inspector begins with the active profile name, then exposes Wallpaper and Basics as the immediate path. Effects remain collapsed until requested. Labels pair with Fluent SymbolIcons, values align in compact chips, and safety/privacy closes the panel as a quiet preflight rather than a competing card.
+The inspector pins the active profile name as a non-scrolling header on the panel fill, then exposes Wallpaper and Basics as the immediate path. Effects remain collapsed until requested and stay a seam-led section rather than a bordered card competing with the sections above it. Labels pair with Fluent SymbolIcons, values align in compact chips, and safety/privacy closes the panel as a quiet preflight rather than a competing card.
 
 ## Do's and Don'ts
 

@@ -9,12 +9,18 @@
     <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
   </UserControl.Resources>
 
-  <ScrollViewer VerticalScrollBarVisibility="Auto"
-                HorizontalScrollBarVisibility="Disabled">
-    <StackPanel Margin="24,16,24,24">
-      <TextBlock Margin="0,0,0,24"
-                 FontFamily="{DynamicResource WorkbenchDisplayFontFamily}"
-                 FontSize="20"
+  <Grid>
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="*" />
+    </Grid.RowDefinitions>
+
+    <!-- Keep the active-profile title outside the scrollable controls. -->
+    <Border x:Name="InspectorTitleBar"
+            Padding="24,16,24,16"
+            Background="{DynamicResource LayerFillColorAltBrush}">
+      <TextBlock FontFamily="{DynamicResource WorkbenchDisplayFontFamily}"
+                 FontSize="{DynamicResource WorkbenchTypeDisplay}"
                  FontWeight="SemiBold"
                  Foreground="{DynamicResource TextFillColorPrimaryBrush}"
                  TextTrimming="CharacterEllipsis"
@@ -22,7 +28,12 @@
         <Run Text="{localization:Loc Inspector_EditPrefix, Fallback='Edit '}" />
         <Run Text="{Binding DataContext.SelectedProfileCard.DisplayName, RelativeSource={RelativeSource AncestorType={x:Type ui:FluentWindow}}, Mode=OneWay, FallbackValue=Default}" />
       </TextBlock>
+    </Border>
 
+    <ScrollViewer Grid.Row="1"
+                  VerticalScrollBarVisibility="Auto"
+                  HorizontalScrollBarVisibility="Disabled">
+    <StackPanel Margin="{DynamicResource WorkbenchInspectorInset}">
       <Grid Margin="0,0,0,8">
         <Grid.ColumnDefinitions>
           <ColumnDefinition Width="*" />
@@ -116,7 +127,7 @@
                        Text="{localization:Loc Label_Focus, Fallback='Crop focus'}" />
           </StackPanel>
           <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
-            <Border Width="56"
+            <Border
                     Margin="0,0,8,0"
                     Style="{DynamicResource WorkbenchValueChipStyle}">
               <TextBlock Style="{DynamicResource WorkbenchValueTextStyle}"
@@ -146,7 +157,7 @@
                        Style="{DynamicResource WorkbenchInspectorLabelStyle}"
                        Text="{localization:Loc Label_PanelOpacity, Fallback='Panel opacity'}" />
           </StackPanel>
-          <Border Width="56"
+          <Border
                   HorizontalAlignment="Right"
                   Style="{DynamicResource WorkbenchValueChipStyle}">
             <TextBlock HorizontalAlignment="Center"
@@ -166,15 +177,19 @@
                 AutomationProperties.Name="{localization:Loc Label_PanelOpacity, Fallback='Panel opacity'}" />
       </StackPanel>
 
-      <Expander Margin="0,24,0,0"
+      <Border Margin="{DynamicResource WorkbenchStackGap24}"
+              Style="{DynamicResource WorkbenchDividerStyle}" />
+
+      <Expander Margin="{DynamicResource WorkbenchStackGap16}"
                 IsExpanded="False"
+                Style="{DynamicResource WorkbenchQuietExpanderStyle}"
                 AutomationProperties.Name="{localization:Loc Section_Effects, Fallback=Effects}">
         <Expander.Header>
           <TextBlock Text="{localization:Loc Section_Effects, Fallback=Effects}"
                      Style="{DynamicResource WorkbenchSectionHeadingTextStyle}"
                      AutomationProperties.HeadingLevel="Level2" />
         </Expander.Header>
-        <StackPanel Margin="0,16,0,0">
+        <StackPanel Margin="{DynamicResource WorkbenchStackGap16}">
           <StackPanel>
             <Grid>
               <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
@@ -185,7 +200,7 @@
                            Style="{DynamicResource WorkbenchInspectorLabelStyle}"
                            Text="{localization:Loc Label_Blur, Fallback='Background blur'}" />
               </StackPanel>
-              <Border Width="56"
+              <Border
                       HorizontalAlignment="Right"
                       Style="{DynamicResource WorkbenchValueChipStyle}">
                 <TextBlock HorizontalAlignment="Center"
@@ -216,7 +231,7 @@
                            Style="{DynamicResource WorkbenchInspectorLabelStyle}"
                            Text="{localization:Loc Label_DarkOverlay, Fallback='Dark theme overlay'}" />
               </StackPanel>
-              <Border Width="56"
+              <Border
                       HorizontalAlignment="Right"
                       Style="{DynamicResource WorkbenchValueChipStyle}">
                 <TextBlock HorizontalAlignment="Center"
@@ -246,7 +261,7 @@
                            Style="{DynamicResource WorkbenchInspectorLabelStyle}"
                            Text="{localization:Loc Label_LightOverlay, Fallback='Light theme overlay'}" />
               </StackPanel>
-              <Border Width="56"
+              <Border
                       HorizontalAlignment="Right"
                       Style="{DynamicResource WorkbenchValueChipStyle}">
                 <TextBlock HorizontalAlignment="Center"
@@ -288,7 +303,8 @@
                      Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
           <TextBlock Margin="0,8,0,0"
                      Text="{localization:Loc Settings_RiskSummary, Fallback='Enhanced launch uses a local Chromium debugging endpoint.'}"
-                     Style="{DynamicResource WorkbenchCaptionTextStyle}" />
+                     Style="{DynamicResource WorkbenchCaptionTextStyle}"
+                     TextWrapping="Wrap" />
         </StackPanel>
         <ui:Button Grid.Column="2"
                    MinHeight="32"
@@ -299,5 +315,6 @@
                    Click="ReviewRisk_Click" />
       </Grid>
     </StackPanel>
-  </ScrollViewer>
+    </ScrollViewer>
+  </Grid>
 </UserControl>

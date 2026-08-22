@@ -18,6 +18,46 @@ namespace BackdropForCodex.Core.Tests.AppSupport;
 public sealed class WorkbenchThemeRegressionTests
 {
     [Fact]
+    public void CommandBar_ResolvesPrimaryAndQuietStylesFromRealThemeResources()
+    {
+        StaTest.Run(
+            () =>
+            {
+                var fixture = MainWindowViewModelTests.CreateLayoutFixture();
+                MainWindow? window = null;
+                try
+                {
+                    window = CreateWindow(fixture);
+                    var apply = Assert.IsAssignableFrom<Wpf.Ui.Controls.Button>(
+                        window.FindName("ApplyActionButton"));
+                    var pause = Assert.IsAssignableFrom<Wpf.Ui.Controls.Button>(
+                        window.FindName("PauseActionButton"));
+                    var primaryStyle = Assert.IsType<Style>(
+                        window.FindResource("WorkbenchPrimaryActionButtonStyle"));
+                    var implicitButtonStyle = Assert.IsType<Style>(
+                        window.FindResource(typeof(Wpf.Ui.Controls.Button)));
+
+                    Assert.Same(implicitButtonStyle, primaryStyle.BasedOn);
+                    Assert.Same(primaryStyle, apply.Style);
+                    Assert.Equal(
+                        Wpf.Ui.Controls.ControlAppearance.Primary,
+                        apply.Appearance);
+                    Assert.Same(
+                        DependencyProperty.UnsetValue,
+                        pause.ReadLocalValue(Control.BackgroundProperty));
+                    Assert.Same(
+                        DependencyProperty.UnsetValue,
+                        pause.ReadLocalValue(Control.BorderBrushProperty));
+                    Assert.NotNull(pause.MouseOverBackground);
+                }
+                finally
+                {
+                    CloseWindow(window, fixture);
+                }
+            });
+    }
+
+    [Fact]
     public void DarkTheme_RailProfileAndActionsUseReadableThemeTextRoles()
     {
         StaTest.Run(

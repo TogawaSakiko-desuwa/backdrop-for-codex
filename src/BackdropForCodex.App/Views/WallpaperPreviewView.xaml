@@ -384,9 +384,18 @@
                 IsHitTestVisible="False"
                 Visibility="{Binding HasSelectedMedia, Converter={StaticResource BooleanToVisibilityConverter}}">
             <Grid.Style>
+              <!-- Emphasize calibration only while crop focus is adjustable and hovered. -->
               <Style TargetType="Grid">
-                <Setter Property="Opacity" Value="0.55" />
+                <Setter Property="Opacity" Value="0.34" />
                 <Style.Triggers>
+                  <MultiDataTrigger>
+                    <MultiDataTrigger.Conditions>
+                      <Condition Binding="{Binding CanAdjustFocus}" Value="True" />
+                      <Condition Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType={x:Type views:WallpaperPreviewView}}}"
+                                 Value="True" />
+                    </MultiDataTrigger.Conditions>
+                    <Setter Property="Opacity" Value="0.62" />
+                  </MultiDataTrigger>
                   <DataTrigger Binding="{Binding IsWorkbenchHighContrast, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
                                Value="True">
                     <Setter Property="Opacity" Value="1" />

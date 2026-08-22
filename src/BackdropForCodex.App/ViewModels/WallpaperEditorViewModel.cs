@@ -135,7 +135,7 @@ public sealed class WallpaperEditorViewModel : ObservableObject
         }
     }
 
-    public string FocusLabel => $"{FocusX:P0}, {FocusY:P0}";
+    public string FocusLabel => $"{FocusX:P0}·{FocusY:P0}";
 
     public double PanelOpacity
     {

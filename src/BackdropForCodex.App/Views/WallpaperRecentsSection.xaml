@@ -292,21 +292,31 @@
     </ResourceDictionary>
   </UserControl.Resources>
 
-  <StackPanel Margin="0,16,0,0">
+  <StackPanel>
     <Grid x:Name="ExpandedRecentHeader" Margin="8,0,4,8">
       <TextBlock Text="{localization:Loc Section_RecentMedia, Fallback='Recent media'}"
-                 FontSize="16"
-                 Style="{DynamicResource WorkbenchSectionHeadingTextStyle}"
-                 VerticalAlignment="Center" />
-      <ui:Button MinWidth="32"
-                 MinHeight="32"
-                 Padding="6,2"
+                 Style="{DynamicResource WorkbenchRailSectionHeadingTextStyle}" />
+      <ui:Button Width="28"
+                 Height="28"
+                 Padding="0"
                  HorizontalAlignment="Right"
-                 Style="{DynamicResource WorkbenchIconButtonStyle}"
+                 VerticalAlignment="Center"
                  Command="{Binding ClearRecentsCommand, ElementName=Root}"
-                 Content="{localization:Loc Action_ClearRecent, Fallback='Clear recent'}"
-                 FontSize="{DynamicResource WorkbenchTypeCaption}"
-                 AutomationProperties.Name="{localization:Loc Action_ClearRecent, Fallback='Clear recent'}" />
+                 ToolTip="{localization:Loc Action_ClearRecent, Fallback='Clear recent'}"
+                 AutomationProperties.Name="{localization:Loc Action_ClearRecent, Fallback='Clear recent'}">
+        <ui:Button.Style>
+          <Style TargetType="ui:Button"
+                 BasedOn="{StaticResource WorkbenchIconButtonStyle}">
+            <Style.Triggers>
+              <DataTrigger Binding="{Binding RecentItemsSource.Count, ElementName=Root}"
+                           Value="0">
+                <Setter Property="IsEnabled" Value="False" />
+              </DataTrigger>
+            </Style.Triggers>
+          </Style>
+        </ui:Button.Style>
+        <ui:SymbolIcon Symbol="Broom24" FontSize="15" />
+      </ui:Button>
     </Grid>
 
     <Border x:Name="CompactRecentHeader"

@@ -79,6 +79,39 @@ public sealed class MainWindowLayoutTests
     }
 
     [Fact]
+    public void AspectRatioDecorator_AppliesRatioToTheDecoratedContentBox()
+    {
+        StaTest.Run(
+            () =>
+            {
+                var frame = new Border
+                {
+                    Padding = new Thickness(8),
+                    BorderThickness = new Thickness(1),
+                };
+                var contentInset = CombinedFrameInset(frame);
+                var decorator = new AspectRatioDecorator
+                {
+                    Ratio = 16d / 9d,
+                    ContentInset = contentInset,
+                    Child = frame,
+                };
+                var available = new Size(978, 700);
+
+                decorator.Measure(available);
+                decorator.Arrange(new Rect(new Point(), available));
+
+                var contentWidth =
+                    frame.ActualWidth - contentInset.Left - contentInset.Right;
+                var contentHeight =
+                    frame.ActualHeight - contentInset.Top - contentInset.Bottom;
+                Assert.Equal(960, contentWidth, precision: 6);
+                Assert.Equal(540, contentHeight, precision: 6);
+                Assert.Equal(16d / 9d, contentWidth / contentHeight, precision: 6);
+            });
+    }
+
+    [Fact]
     public void PreviewSurface_MaximizesTheRealFullscreenPreviewPane()
     {
         StaTest.Run(
@@ -688,6 +721,13 @@ public sealed class MainWindowLayoutTests
                 Top = -10000,
                 ShowActivated = false,
             };
+            window.Resources.MergedDictionaries.Add(
+                new ResourceDictionary
+                {
+                    Source = new Uri(
+                        "/BackdropForCodex;component/Themes/WorkbenchTheme.xaml",
+                        UriKind.Relative),
+                });
             window.Show();
             window.Width = width;
             window.Height = height;
@@ -699,7 +739,10 @@ public sealed class MainWindowLayoutTests
             var previewPane = FindElement(window, "PreviewPane");
             var previewView = FindElement(window, "PreviewView");
             var previewHost = FindElement(previewView, "PreviewHost");
-            var calibrationFrame = FindElement(window, "CalibrationFrame");
+            var aspectFrame = Assert.IsType<AspectRatioDecorator>(
+                FindElement(window, "PreviewAspectFrame"));
+            var calibrationFrame = Assert.IsType<Border>(
+                FindElement(window, "CalibrationFrame"));
             var previewCard = FindElement(previewView, "PreviewCard");
             var previewSurface =
                 FindElement(previewView, "PreviewSurface");
@@ -708,10 +751,23 @@ public sealed class MainWindowLayoutTests
             var cardBounds = GetBounds(previewCard, previewPane);
             var surfaceBounds =
                 GetBounds(previewSurface, previewPane);
-            Assert.Equal(
-                16,
-                calibrationBounds.Width - hostBounds.Width,
-                precision: 6);
+            var frameInset = CombinedFrameInset(calibrationFrame);
+            var dpi = VisualTreeHelper.GetDpi(window);
+            Assert.Equal(new Thickness(8), calibrationFrame.Padding);
+            Assert.Equal(new Thickness(1), calibrationFrame.BorderThickness);
+            Assert.Equal(frameInset, aspectFrame.ContentInset);
+            Assert.InRange(
+                Math.Abs(
+                    (calibrationBounds.Width - hostBounds.Width) -
+                    (frameInset.Left + frameInset.Right)),
+                0,
+                (1 / dpi.DpiScaleX) + 0.000001);
+            Assert.InRange(
+                Math.Abs(
+                    (calibrationBounds.Height - hostBounds.Height) -
+                    (frameInset.Top + frameInset.Bottom)),
+                0,
+                (1 / dpi.DpiScaleY) + 0.000001);
             Assert.True(
                 calibrationBounds.Width >= previewPane.ActualWidth * 0.9,
                 $"Calibration frame width {calibrationBounds.Width:F2} used too little " +
@@ -768,7 +824,7 @@ public sealed class MainWindowLayoutTests
                 hostBounds,
                 surfaceBounds,
                 expectedScale,
-                VisualTreeHelper.GetDpi(window),
+                dpi,
                 previewHost.UseLayoutRounding);
         }
         finally
@@ -796,6 +852,13 @@ public sealed class MainWindowLayoutTests
             DispatcherPriority.ApplicationIdle);
         window.UpdateLayout();
     }
+
+    private static Thickness CombinedFrameInset(Border frame) =>
+        new(
+            frame.Padding.Left + frame.BorderThickness.Left,
+            frame.Padding.Top + frame.BorderThickness.Top,
+            frame.Padding.Right + frame.BorderThickness.Right,
+            frame.Padding.Bottom + frame.BorderThickness.Bottom);
 
     private static MainWindow CreateWindow(
         (MainWindowViewModel ViewModel, IAppTextProvider Text) fixture,

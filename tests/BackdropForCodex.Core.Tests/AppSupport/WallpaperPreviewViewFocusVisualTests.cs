@@ -153,7 +153,8 @@ public sealed class WallpaperPreviewViewFocusVisualTests
                 AssertStyleSetter(
                     overlay.Style,
                     UIElement.OpacityProperty,
-                    0.55d);
+                    0.34d);
+                AssertFocusHoverEmphasis(overlay.Style, 0.62d);
                 Assert.Equal(new Thickness(8), proof.Margin);
                 Assert.Equal(proof.Margin, proofUnderlay.Margin);
                 Assert.Equal(1, proof.StrokeThickness);
@@ -200,6 +201,35 @@ public sealed class WallpaperPreviewViewFocusVisualTests
             style.Setters.OfType<Setter>(),
             candidate => candidate.Property == property);
         Assert.Equal(expectedValue, setter.Value);
+    }
+
+    private static void AssertFocusHoverEmphasis(Style style, double expectedOpacity)
+    {
+        var trigger = Assert.Single(style.Triggers.OfType<MultiDataTrigger>());
+        Assert.Collection(
+            trigger.Conditions.OrderBy(
+                condition => ((Binding)condition.Binding).Path.Path,
+                StringComparer.Ordinal),
+            condition =>
+            {
+                Assert.Equal(
+                    "CanAdjustFocus",
+                    ((Binding)condition.Binding).Path.Path);
+                Assert.Equal("True", condition.Value?.ToString());
+            },
+            condition =>
+            {
+                var binding = (Binding)condition.Binding;
+                Assert.Equal("IsMouseOver", binding.Path.Path);
+                Assert.Equal(
+                    typeof(WallpaperPreviewView),
+                    binding.RelativeSource?.AncestorType);
+                Assert.Equal("True", condition.Value?.ToString());
+            });
+        var setter = Assert.Single(
+            trigger.Setters.OfType<Setter>(),
+            candidate => candidate.Property == UIElement.OpacityProperty);
+        Assert.Equal(expectedOpacity, setter.Value);
     }
 
     private static void AssertHighContrastOverride(
