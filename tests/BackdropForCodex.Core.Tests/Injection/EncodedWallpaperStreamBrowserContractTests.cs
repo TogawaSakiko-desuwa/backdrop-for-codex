@@ -325,6 +325,16 @@ public sealed class EncodedWallpaperStreamBrowserContractTests
             <!doctype html>
             <html><head></head><body><main id="native">Codex</main>
             <script>
+              globalThis.matchMedia = query => ({
+                matches: false,
+                media: query,
+                onchange: null,
+                addEventListener() {},
+                removeEventListener() {},
+                addListener() {},
+                removeListener() {},
+                dispatchEvent() { return true; }
+              });
               globalThis.__testMse = {
                 appendCount: 0,
                 revocationCount: 0,
