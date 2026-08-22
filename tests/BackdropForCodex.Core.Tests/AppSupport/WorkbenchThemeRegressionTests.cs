@@ -216,6 +216,10 @@ public sealed class WorkbenchThemeRegressionTests
                     UriKind.Relative),
             });
         window.Show();
+        window.MaxWidth = double.PositiveInfinity;
+        window.MaxHeight = double.PositiveInfinity;
+        window.Width = 1440;
+        window.Height = 860;
         window.Dispatcher.Invoke(
             static () => { },
             DispatcherPriority.ApplicationIdle);

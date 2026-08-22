@@ -197,6 +197,8 @@ public sealed class MainWindowLayoutTests
                     };
                     window.Show();
 
+                    // Simulate a constrained host before driving each responsive mode explicitly.
+                    window.MaxWidth = 1024;
                     ArrangeWindow(window, width: 1440, height: 860);
                     var library = FindElement(window, "LibraryPane");
                     var preview = FindElement(window, "PreviewPane");
@@ -845,6 +847,8 @@ public sealed class MainWindowLayoutTests
         double width,
         double height)
     {
+        window.MaxWidth = double.PositiveInfinity;
+        window.MaxHeight = double.PositiveInfinity;
         window.Width = width;
         window.Height = height;
         window.Dispatcher.Invoke(
