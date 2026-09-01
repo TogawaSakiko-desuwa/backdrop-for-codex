@@ -375,7 +375,7 @@ public static class CodexSecurityValidator
             package.Version,
             package.ApplicationId,
             ["ChatGPT.exe"],
-            ["Codex"],
+            ["Codex", "ChatGPT"],
             ["chatgpt.com", "codex.openai.com"]);
 
         return CodexSecurityResult.Verified(

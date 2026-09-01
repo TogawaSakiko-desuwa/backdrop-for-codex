@@ -14,6 +14,7 @@ public enum UserFacingErrorCode
     OperationCanceled,
     PreferencesReadFailed,
     PreferencesWriteFailed,
+    PreferencesProtected,
     PreferencesResetFailed,
     WallpaperSettingsReadFailed,
     WallpaperSettingsRecoveryRequired,
@@ -144,6 +145,11 @@ public sealed class UserFacingErrorMapper : IUserFacingErrorMapper
             return UserFacingErrorCode.OperationCanceled;
         }
 
+        if (exception is ProtectedPreferencesException)
+        {
+            return UserFacingErrorCode.PreferencesProtected;
+        }
+
         if (exception is AppPreferencesStoreException preferencesException)
         {
             return preferencesException.Operation switch
@@ -272,6 +278,7 @@ public sealed class UserFacingErrorMapper : IUserFacingErrorMapper
         UserFacingErrorCode.OperationCanceled => true,
         UserFacingErrorCode.PreferencesReadFailed => true,
         UserFacingErrorCode.PreferencesWriteFailed => true,
+        UserFacingErrorCode.PreferencesProtected => false,
         UserFacingErrorCode.PreferencesResetFailed => true,
         UserFacingErrorCode.WallpaperSettingsReadFailed => true,
         UserFacingErrorCode.WallpaperSettingsRecoveryRequired => false,

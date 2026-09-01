@@ -12,6 +12,7 @@ using BackdropForCodex.App;
 using BackdropForCodex.App.Converters;
 using BackdropForCodex.App.Services.Diagnostics;
 using BackdropForCodex.App.Services.Localization;
+using BackdropForCodex.App.Services.Preferences;
 using BackdropForCodex.App.ViewModels;
 using BackdropForCodex.App.Views;
 using Xunit;
@@ -134,6 +135,24 @@ public sealed class MainWindowLayoutTests
                     MetricIconNames,
                     name => Assert.IsType<Wpf.Ui.Controls.SymbolIcon>(
                         inspector.FindName(name)));
+            });
+    }
+
+    [Theory]
+    [InlineData("PanelOpacitySlider")]
+    [InlineData("DarkOverlaySlider")]
+    [InlineData("LightOverlaySlider")]
+    public void InspectorPercentageSlidersUseOnePercentKeyboardSteps(string sliderName)
+    {
+        StaTest.Run(
+            () =>
+            {
+                var inspector = new WallpaperInspectorView();
+                var slider = Assert.IsType<Slider>(inspector.FindName(sliderName));
+
+                Assert.Equal(0.01, slider.TickFrequency, precision: 6);
+                Assert.Equal(0.01, slider.SmallChange, precision: 6);
+                Assert.True(slider.IsSnapToTickEnabled);
             });
     }
 
@@ -536,6 +555,141 @@ public sealed class MainWindowLayoutTests
                 finally
                 {
                     CloseWindow(window, fixture);
+                }
+            });
+    }
+
+    [Fact]
+    public void StatusAnnouncementGateDeduplicatesOneLogicalEventWithoutHidingRetries()
+    {
+        var gate = new StatusAnnouncementGate();
+
+        Assert.True(gate.TryAccept(
+            isStatusOpen: true,
+            statusEventVersion: 4,
+            "Apply failed",
+            "Restore the official background."));
+        Assert.False(gate.TryAccept(
+            isStatusOpen: true,
+            statusEventVersion: 4,
+            "Apply failed",
+            "Restore the official background."));
+        Assert.True(gate.TryAccept(
+            isStatusOpen: true,
+            statusEventVersion: 5,
+            "Apply failed",
+            "Restore the official background."));
+        Assert.True(gate.TryAccept(
+            isStatusOpen: false,
+            statusEventVersion: 5,
+            "Ready",
+            string.Empty));
+        Assert.False(gate.TryAccept(
+            isStatusOpen: false,
+            statusEventVersion: 6,
+            "Ready",
+            string.Empty));
+    }
+
+    [Theory]
+    [InlineData("4")]
+    [InlineData("2147483648")]
+    public async Task ProtectedPreferencesDisableThemeSelectionAndExplainResetRequirement(
+        string schemaVersion)
+    {
+        var preferencesPath = Path.Combine(
+            Path.GetTempPath(),
+            $"backdrop-protected-preferences-ui-{Guid.NewGuid():N}.json");
+        try
+        {
+            await File.WriteAllTextAsync(
+                preferencesPath,
+                $$"""
+                {
+                  "schemaVersion": {{schemaVersion}},
+                  "futurePreference": true
+                }
+                """);
+            using var preferencesStore = new AppPreferencesStore(preferencesPath);
+            var fixture = MainWindowViewModelTests.CreateLayoutFixture(preferencesStore);
+            try
+            {
+                await fixture.ViewModel.InitializeAsync();
+                StaTest.Run(
+                    () =>
+                    {
+                        var content = new SettingsDialogContent(
+                            fixture.ViewModel,
+                            fixture.Text);
+                        var theme = Assert.IsType<ComboBox>(
+                            content.FindName("ThemeComboBox"));
+                        var notice = Assert.IsType<TextBlock>(
+                            content.FindName("ProtectedPreferencesNotice"));
+
+                        Assert.False(theme.IsEnabled);
+                        Assert.Equal(Visibility.Visible, notice.Visibility);
+                        Assert.Contains(
+                            schemaVersion,
+                            notice.Text,
+                            StringComparison.Ordinal);
+                        Assert.Equal(fixture.ViewModel.ThemeMode, theme.SelectedValue);
+                    });
+            }
+            finally
+            {
+                fixture.ViewModel.Dispose();
+            }
+        }
+        finally
+        {
+            File.Delete(preferencesPath);
+        }
+    }
+
+    [Fact]
+    public void OpenSettingsDialogTracksPreferencesProtectionChangesAndUnsubscribes()
+    {
+        StaTest.Run(
+            () =>
+            {
+                var fixture = MainWindowViewModelTests.CreateLayoutFixture();
+                try
+                {
+                    var content = new SettingsDialogContent(
+                        fixture.ViewModel,
+                        fixture.Text);
+                    var theme = Assert.IsType<ComboBox>(
+                        content.FindName("ThemeComboBox"));
+                    var notice = Assert.IsType<TextBlock>(
+                        content.FindName("ProtectedPreferencesNotice"));
+                    content.RaiseEvent(
+                        new RoutedEventArgs(FrameworkElement.LoadedEvent));
+                    var futureVersionProperty =
+                        typeof(SettingsManagementViewModel).GetProperty(
+                            nameof(SettingsManagementViewModel.FuturePreferencesVersionDisplay));
+                    var protectedProperty =
+                        typeof(SettingsManagementViewModel).GetProperty(
+                            nameof(SettingsManagementViewModel.HasProtectedPreferences));
+                    Assert.NotNull(futureVersionProperty);
+                    Assert.NotNull(protectedProperty);
+
+                    futureVersionProperty.SetValue(
+                        fixture.ViewModel.Settings,
+                        "2147483648");
+                    protectedProperty.SetValue(fixture.ViewModel.Settings, true);
+
+                    Assert.False(theme.IsEnabled);
+                    Assert.Equal(Visibility.Visible, notice.Visibility);
+                    Assert.Contains("2147483648", notice.Text, StringComparison.Ordinal);
+
+                    content.RaiseEvent(
+                        new RoutedEventArgs(FrameworkElement.UnloadedEvent));
+                    protectedProperty.SetValue(fixture.ViewModel.Settings, false);
+                    Assert.False(theme.IsEnabled);
+                }
+                finally
+                {
+                    fixture.ViewModel.Dispose();
                 }
             });
     }

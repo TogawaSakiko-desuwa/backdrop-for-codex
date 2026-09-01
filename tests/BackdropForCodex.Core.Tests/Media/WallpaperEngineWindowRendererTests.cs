@@ -233,7 +233,7 @@ public sealed class WallpaperEngineWindowRendererTests
     }
 
     [Fact]
-    public async Task RendererPreservesAuthorizationAndCleanupFailuresFromARejectedPopOut()
+    public async Task RendererTransfersRejectedPopOutCleanupForRetry()
     {
         var fixture = new RendererFixture();
         fixture.Control.ReportedPath = @"C:\WallpaperEngine\projects\other\index.html";
@@ -241,20 +241,25 @@ public sealed class WallpaperEngineWindowRendererTests
         var renderer = fixture.CreateRenderer();
         await using var project = CreateProjectLease();
 
-        var exception = await Assert.ThrowsAsync<AggregateException>(
+        var exception = await Assert.ThrowsAsync<RetainedWallpaperEngineWindowStartException>(
             async () => await renderer.StartAsync(
                 project,
                 new WallpaperEngineWindowOptions(1920, 1080)));
 
-        Assert.Collection(
-            exception.InnerExceptions,
-            failure => Assert.IsType<WallpaperSourceCapabilityException>(failure),
-            failure => Assert.IsType<IOException>(failure));
+        Assert.IsType<WallpaperSourceCapabilityException>(exception.PrimaryFailure);
+        Assert.IsType<IOException>(exception.CleanupFailure);
         Assert.Equal(1, fixture.Audio.AcquireCount);
         Assert.Equal(0, fixture.AudioLease.DisposeCount);
         Assert.Equal(1, fixture.PlacementNative.BottomPlacementCount);
         Assert.Equal(0, fixture.PlacementNative.RollbackCount);
         Assert.Equal(0, fixture.Journal.ClearCount);
+
+        fixture.Control.CloseException = null;
+        await exception.CleanupOwner.DisposeAsync();
+
+        Assert.Equal(1, fixture.AudioLease.DisposeCount);
+        Assert.Equal(0, fixture.PlacementNative.RollbackCount);
+        Assert.Equal(1, fixture.Journal.ClearCount);
     }
 
     [Fact]
@@ -292,6 +297,34 @@ public sealed class WallpaperEngineWindowRendererTests
         Assert.Equal(2, fixture.PlacementNative.BottomPlacementCount);
         Assert.Equal(0, fixture.PlacementNative.RollbackCount);
         Assert.Equal(2, fixture.Verifier.RevalidateCount);
+    }
+
+    [Fact]
+    public async Task ResumeFailureKeepsCleanupOwnershipWithTheExistingLease()
+    {
+        var fixture = new RendererFixture();
+        var renderer = fixture.CreateRenderer();
+        await using var project = CreateProjectLease();
+        var window = await renderer.StartAsync(
+            project,
+            new WallpaperEngineWindowOptions(1920, 1080));
+        await window.SetPausedAsync(paused: true);
+        fixture.Verifier.WaitException = new IOException("resume ownership failed");
+        fixture.Control.CloseException = new IOException("resume cleanup failed");
+
+        var exception = await Assert.ThrowsAsync<AggregateException>(
+            async () => await window.SetPausedAsync(paused: false));
+
+        Assert.Collection(
+            exception.InnerExceptions,
+            failure => Assert.Equal("resume ownership failed", failure.Message),
+            failure => Assert.Equal("resume cleanup failed", failure.Message));
+
+        fixture.Verifier.WaitException = null;
+        fixture.Control.CloseException = null;
+        await window.DisposeAsync();
+
+        Assert.Equal(2, fixture.Journal.ClearCount);
     }
 
     [Fact]
@@ -464,7 +497,7 @@ public sealed class WallpaperEngineWindowRendererTests
     }
 
     [Fact]
-    public async Task StartupAndCloseFailurePreserveBothErrorsAndTheConfinedMutedGraph()
+    public async Task StartupAndCloseFailureTransferTheConfinedMutedGraphForRetry()
     {
         var fixture = new RendererFixture();
         var renderer = fixture.CreateRenderer();
@@ -476,22 +509,28 @@ public sealed class WallpaperEngineWindowRendererTests
             fixture.Control.CloseException = new IOException("close failed");
         };
 
-        var exception = await Assert.ThrowsAsync<AggregateException>(
+        var exception = await Assert.ThrowsAsync<RetainedWallpaperEngineWindowStartException>(
             async () => await renderer.StartAsync(
                 project,
                 new WallpaperEngineWindowOptions(1920, 1080),
                 cancellation.Token));
 
-        Assert.Collection(
-            exception.InnerExceptions,
-            failure => Assert.IsAssignableFrom<OperationCanceledException>(failure),
-            failure => Assert.IsType<IOException>(failure));
+        Assert.IsAssignableFrom<OperationCanceledException>(exception.PrimaryFailure);
+        Assert.IsType<IOException>(exception.CleanupFailure);
         Assert.True(fixture.PlacementNative.WindowExists);
         Assert.Equal(
             new WallpaperEngineWindowRect(-3839, -1080, -1919, 0),
             fixture.PlacementNative.CurrentRect);
         Assert.Equal(0, fixture.AudioLease.DisposeCount);
         Assert.Equal(0, fixture.Journal.ClearCount);
+        Assert.Equal(0, fixture.PlacementNative.RollbackCount);
+
+        fixture.Control.CloseException = null;
+        await exception.CleanupOwner.DisposeAsync();
+
+        Assert.False(fixture.PlacementNative.WindowExists);
+        Assert.Equal(1, fixture.AudioLease.DisposeCount);
+        Assert.Equal(1, fixture.Journal.ClearCount);
         Assert.Equal(0, fixture.PlacementNative.RollbackCount);
     }
 
@@ -583,7 +622,7 @@ public sealed class WallpaperEngineWindowRendererTests
     }
 
     [Fact]
-    public async Task OwnershipFailureRetainsJournalWhenWindowAbsenceCannotBeProven()
+    public async Task OwnershipFailureTransfersJournaledWindowWhenAbsenceCannotBeProven()
     {
         var fixture = new RendererFixture();
         fixture.Verifier.WaitException = new WallpaperEnginePlatformUnavailableException(
@@ -593,20 +632,25 @@ public sealed class WallpaperEngineWindowRendererTests
         var renderer = fixture.CreateRenderer();
         await using var project = CreateProjectLease();
 
-        var exception = await Assert.ThrowsAsync<AggregateException>(
+        var exception = await Assert.ThrowsAsync<RetainedWallpaperEngineWindowStartException>(
             async () => await renderer.StartAsync(
                 project,
                 new WallpaperEngineWindowOptions(1920, 1080)));
 
-        Assert.Collection(
-            exception.InnerExceptions,
-            failure => Assert.IsType<WallpaperEnginePlatformUnavailableException>(failure),
-            failure => Assert.IsType<WallpaperEnginePlatformUnavailableException>(failure));
+        Assert.IsType<WallpaperEnginePlatformUnavailableException>(exception.PrimaryFailure);
+        Assert.IsType<WallpaperEnginePlatformUnavailableException>(exception.CleanupFailure);
         Assert.Equal(1, fixture.Control.CloseCount);
         Assert.Equal(1, fixture.Verifier.AbsenceCount);
         Assert.Equal(0, fixture.Journal.ClearCount);
         Assert.Equal(0, fixture.PlacementNative.BottomPlacementCount);
         Assert.Equal(0, fixture.Audio.AcquireCount);
+
+        fixture.Verifier.AbsenceException = null;
+        await exception.CleanupOwner.DisposeAsync();
+
+        Assert.Equal(2, fixture.Control.CloseCount);
+        Assert.Equal(2, fixture.Verifier.AbsenceCount);
+        Assert.Equal(1, fixture.Journal.ClearCount);
     }
 
     private static TestProjectLease CreateProjectLease()

@@ -18,6 +18,11 @@
                 <TextBlock Margin="0,4,0,12"
                            Style="{StaticResource CaptionTextStyle}"
                            Text="{localization:Loc Settings_ThemeDescription, Fallback='Follow Windows by default, including high contrast.'}" />
+                <TextBlock x:Name="ProtectedPreferencesNotice"
+                           Margin="0,0,0,12"
+                           Style="{StaticResource CaptionTextStyle}"
+                           TextWrapping="Wrap"
+                           Visibility="Collapsed" />
                 <ComboBox x:Name="ThemeComboBox"
                           AutomationProperties.Name="{localization:Loc Label_Theme, Fallback='App theme'}"
                           SelectedValuePath="Tag"

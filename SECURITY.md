@@ -2,7 +2,7 @@
 
 Backdrop for Codex 会连接高权限的本地调试接口。请先阅读[威胁模型](THREAT_MODEL.md)，不要把“仅回环”理解为完整隔离。
 
-本文适用于 Backdrop for Codex `v1.5.0`。
+本文适用于 Backdrop for Codex `v1.5.1`。
 
 ## 支持的版本
 

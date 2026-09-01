@@ -12,6 +12,7 @@ public sealed class CdpTargetClassifierTests
     [InlineData("file:///C:/Program%20Files/WindowsApps/OpenAI.Codex_26.715.10079.0_x64__2p2nqsd0c76g0/app/index.html?route=home")]
     [InlineData("file:///C:/Program%20Files/WindowsApps/OpenAI.Codex_26.715.10079.0_x64__2p2nqsd0c76g0/app/index.html#conversation")]
     [InlineData("https://chatgpt.com/codex")]
+    [InlineData("https://chatgpt.com:443/codex")]
     [InlineData("https://chatgpt.com/CODEX/")]
     [InlineData("https://chatgpt.com/codex/tasks/123?view=workspace#activity")]
     [InlineData("https://chatgpt.com/codex/login-history/authors/oauth-client")]
@@ -26,6 +27,31 @@ public sealed class CdpTargetClassifierTests
 
         Assert.Equal(
             CdpTargetClassification.CodexPage,
+            CdpTargetClassifier.Classify(target, _identity));
+    }
+
+    [Theory]
+    [InlineData("Codex")]
+    [InlineData("ChatGPT")]
+    public void Classify_AcceptsReviewedUnifiedDesktopTitles(string title)
+    {
+        var target = Target("page", title, "app://-/index.html");
+
+        Assert.Equal(
+            CdpTargetClassification.CodexPage,
+            CdpTargetClassifier.Classify(target, _identity));
+    }
+
+    [Theory]
+    [InlineData("app://-/index.html?initialRoute=%2Favatar-overlay")]
+    [InlineData("https://chatgpt.com/")]
+    [InlineData("https://evil.example/codex")]
+    public void Classify_RejectsUnsafePagesForUnifiedDesktopTitle(string url)
+    {
+        var target = Target("page", "ChatGPT", url);
+
+        Assert.Equal(
+            CdpTargetClassification.OtherPage,
             CdpTargetClassifier.Classify(target, _identity));
     }
 
@@ -118,18 +144,28 @@ public sealed class CdpTargetClassifierTests
     [InlineData("file:///C:/Program%20Files/WindowsApps/OpenAI.Codex_26.715.10079.0_x64__2p2nqsd0c76g0/app/index.html?initialRoute=%2Favatar-overlay")]
     [InlineData("app://evil/index.html")]
     [InlineData("app://codex/auth/index.html")]
+    [InlineData("app://codex:123/index.html")]
+    [InlineData("app://user@codex/index.html")]
+    [InlineData("app://codex/index.html?initialRoute=%2Fauth")]
+    [InlineData("app://codex/index.html?initialRoute=%2Fsettings")]
     [InlineData("app://-/index.html?initialRoute=/avatar-overlay")]
     [InlineData("app://-/index.html?initialRoute=%2Favatar-overlay")]
     [InlineData("app://-/index.html?initialRoute=/home&initialRoute=%2Favatar-overlay")]
     [InlineData("app://codex/index.html?initialRoute=%2Favatar-overlay")]
     [InlineData("app://codex/index.html?%69nitialRoute=%2Favatar-overlay")]
     [InlineData("codex://evil/index.html")]
+    [InlineData("codex://desktop:123/index.html")]
+    [InlineData("codex://user@desktop/index.html")]
     [InlineData("codex://desktop/index.html?initialRoute=%2Favatar-overlay")]
+    [InlineData("https://chatgpt.com/codex?initialRoute=%2Favatar-overlay")]
+    [InlineData("https://codex.openai.com/?%69nitialRoute=%2Fsettings")]
     [InlineData("http://127.0.0.2/app")]
     [InlineData("http://127.0.0.1/auth")]
     [InlineData("http://127.0.0.1:4100/app")]
     [InlineData("https://127.0.0.1:4100/index.html")]
     [InlineData("https://chatgpt.com/auth")]
+    [InlineData("https://chatgpt.com:8443/codex")]
+    [InlineData("https://user@chatgpt.com/codex")]
     [InlineData("https://chatgpt.com/codexevil")]
     [InlineData("https://chatgpt.com/codex-evil")]
     [InlineData("https://chatgpt.com/codex/login")]

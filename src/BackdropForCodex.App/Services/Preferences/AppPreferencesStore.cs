@@ -2,6 +2,8 @@ using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
+[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("BackdropForCodex.Core.Tests")]
+
 namespace BackdropForCodex.App.Services.Preferences;
 
 public interface IAppPreferencesStore : IDisposable
@@ -29,18 +31,57 @@ public sealed class AppPreferencesStore : IAppPreferencesStore
 
     public const string SettingsFileName = "ui-settings.json";
 
+    private const string ProtectedExistingDocumentMessage =
+        "The existing UI preferences document cannot be safely classified. " +
+        "Reset it explicitly before saving replacement preferences.";
+
+    private const string ChangedExistingDocumentMessage =
+        "UI preferences changed while an update was being prepared.";
+
+    private const string ChangedDuringReadMessage =
+        "UI preferences changed while they were being read.";
+
+    private const string PendingRecoveryDocumentMessage =
+        "A pending UI preferences recovery document requires an explicit reset.";
+
     private readonly string _preferencesPath;
+    private readonly string _pendingRecoveryPath;
+    private readonly string _pendingRollbackPath;
+    private readonly string _transactionGuardPath;
     private readonly JsonSerializerOptions _serializerOptions;
+    private readonly AppPreferencesStoreTestHooks? _testHooks;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private int _disposeState;
 
     public AppPreferencesStore(
         string preferencesPath,
         JsonSerializerOptions? serializerOptions = null)
+        : this(preferencesPath, serializerOptions, testHooks: null)
+    {
+    }
+
+    internal AppPreferencesStore(
+        string preferencesPath,
+        JsonSerializerOptions? serializerOptions,
+        AppPreferencesStoreTestHooks? testHooks)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(preferencesPath);
         _preferencesPath = Path.GetFullPath(preferencesPath);
+        var directoryPath = Path.GetDirectoryName(_preferencesPath)
+            ?? throw new ArgumentException(
+                "The UI preferences location must have a parent directory.",
+                nameof(preferencesPath));
+        _pendingRecoveryPath = Path.Combine(
+            directoryPath,
+            $".{Path.GetFileName(_preferencesPath)}.pending-recovery");
+        _pendingRollbackPath = Path.Combine(
+            directoryPath,
+            $".{Path.GetFileName(_preferencesPath)}.pending-rollback");
+        _transactionGuardPath = Path.Combine(
+            directoryPath,
+            $".{Path.GetFileName(_preferencesPath)}.transaction-in-progress");
         _serializerOptions = CreateSerializerOptions(serializerOptions);
+        _testHooks = testHooks;
     }
 
     public static AppPreferencesStore CreateForCurrentUser()
@@ -66,30 +107,37 @@ public sealed class AppPreferencesStore : IAppPreferencesStore
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            if (!File.Exists(_preferencesPath))
-            {
-                return AppPreferencesV1.CreateDefault();
-            }
-
+            EnsureNoPendingRecovery(AppPreferencesStoreOperation.Read);
+            _testHooks?.AfterInitialRecoveryCheck?.Invoke();
             try
             {
+                ExpectedDocumentState documentState;
+                try
+                {
+                    documentState = await ReadExistingDocumentStateAsync(cancellationToken)
+                        .ConfigureAwait(false);
+                }
+                catch (PreferencesDocumentTooLargeException exception)
+                {
+                    throw new ProtectedPreferencesDocumentException(
+                        AppPreferencesStoreOperation.Read,
+                        "The UI preferences document exceeds the size limit.",
+                        exception);
+                }
+
+                if (!documentState.Exists)
+                {
+                    await EnsureLoadedDocumentStillCurrentAsync(
+                            documentState,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    return AppPreferencesV1.CreateDefault();
+                }
+
                 AppPreferencesV1? preferences;
                 bool removedDeprecatedInstallRoot;
-                await using (var stream = new FileStream(
-                    _preferencesPath,
-                    FileMode.Open,
-                    FileAccess.Read,
-                    FileShare.Read,
-                    bufferSize: 4096,
-                    FileOptions.Asynchronous | FileOptions.SequentialScan))
+                using (var stream = new MemoryStream(documentState.Bytes, writable: false))
                 {
-                    if (stream.Length > MaximumDocumentBytes)
-                    {
-                        throw new AppPreferencesStoreException(
-                            AppPreferencesStoreOperation.Read,
-                            "The UI preferences document exceeds the size limit.");
-                    }
-
                     (preferences, removedDeprecatedInstallRoot) =
                         await DeserializePreferencesAsync(stream, cancellationToken)
                             .ConfigureAwait(false);
@@ -97,7 +145,7 @@ public sealed class AppPreferencesStore : IAppPreferencesStore
 
                 if (preferences is null)
                 {
-                    throw new AppPreferencesStoreException(
+                    throw new ProtectedPreferencesDocumentException(
                         AppPreferencesStoreOperation.Read,
                         "The UI preferences document is empty.");
                 }
@@ -107,15 +155,22 @@ public sealed class AppPreferencesStore : IAppPreferencesStore
                     var snapshot = preferences.Snapshot();
                     if (removedDeprecatedInstallRoot)
                     {
-                        await WriteSnapshotCoreAsync(snapshot, cancellationToken)
+                        documentState = await WriteSnapshotCoreAsync(
+                                snapshot,
+                                documentState,
+                                cancellationToken)
                             .ConfigureAwait(false);
                     }
 
+                    await EnsureLoadedDocumentStillCurrentAsync(
+                            documentState,
+                            cancellationToken)
+                        .ConfigureAwait(false);
                     return snapshot;
                 }
                 catch (AppPreferencesValidationException exception)
                 {
-                    throw new AppPreferencesStoreException(
+                    throw new ProtectedPreferencesDocumentException(
                         AppPreferencesStoreOperation.Read,
                         "The UI preferences document failed validation.",
                         exception);
@@ -127,7 +182,7 @@ public sealed class AppPreferencesStore : IAppPreferencesStore
             }
             catch (JsonException exception)
             {
-                throw new AppPreferencesStoreException(
+                throw new ProtectedPreferencesDocumentException(
                     AppPreferencesStoreOperation.Read,
                     "The UI preferences document is not valid JSON.",
                     exception);
@@ -166,7 +221,11 @@ public sealed class AppPreferencesStore : IAppPreferencesStore
         {
             try
             {
-                await WriteSnapshotCoreAsync(snapshot, cancellationToken)
+                EnsureNoPendingRecovery(AppPreferencesStoreOperation.Write);
+                var expectedDocument = await EnsureExistingDocumentCanBeReplacedAsync(
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                await WriteSnapshotCoreAsync(snapshot, expectedDocument, cancellationToken)
                     .ConfigureAwait(false);
             }
             catch (AppPreferencesStoreException)
@@ -211,6 +270,9 @@ public sealed class AppPreferencesStore : IAppPreferencesStore
             try
             {
                 File.Delete(_preferencesPath);
+                File.Delete(_pendingRecoveryPath);
+                File.Delete(_pendingRollbackPath);
+                File.Delete(_transactionGuardPath);
             }
             catch (IOException exception)
             {
@@ -260,11 +322,15 @@ public sealed class AppPreferencesStore : IAppPreferencesStore
     private async ValueTask<(AppPreferencesV1? Preferences, bool RemovedDeprecatedInstallRoot)>
         DeserializePreferencesAsync(
             Stream stream,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            AppPreferencesStoreOperation operation = AppPreferencesStoreOperation.Read)
     {
         using var document = await JsonDocument.ParseAsync(
             stream,
             cancellationToken: cancellationToken).ConfigureAwait(false);
+        ThrowIfFutureSchemaVersion(
+            document.RootElement,
+            operation);
         if (document.RootElement.ValueKind != JsonValueKind.Object)
         {
             return (
@@ -307,6 +373,52 @@ public sealed class AppPreferencesStore : IAppPreferencesStore
         return (preferences, RemovedDeprecatedInstallRoot: true);
     }
 
+    private static void ThrowIfFutureSchemaVersion(
+        JsonElement root,
+        AppPreferencesStoreOperation operation)
+    {
+        if (root.ValueKind != JsonValueKind.Object)
+        {
+            return;
+        }
+
+        foreach (var property in root.EnumerateObject())
+        {
+            if (!string.Equals(
+                    property.Name,
+                    nameof(AppPreferencesV1.SchemaVersion),
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (property.Value.ValueKind != JsonValueKind.Number)
+            {
+                return;
+            }
+
+            if (!property.Value.TryGetInt32(out var schemaVersion))
+            {
+                var rawSchemaVersion = property.Value.GetRawText();
+                if (rawSchemaVersion.All(char.IsAsciiDigit))
+                {
+                    throw new FuturePreferencesVersionException(
+                        operation,
+                        rawSchemaVersion);
+                }
+
+                return;
+            }
+
+            if (schemaVersion > AppPreferencesV1.CurrentSchemaVersion)
+            {
+                throw new FuturePreferencesVersionException(operation, schemaVersion);
+            }
+
+            return;
+        }
+    }
+
     private static bool IsDeprecatedWallpaperEngineInstallRootProperty(
         JsonProperty property) =>
         string.Equals(
@@ -314,19 +426,211 @@ public sealed class AppPreferencesStore : IAppPreferencesStore
             DeprecatedWallpaperEngineInstallRootProperty,
             StringComparison.OrdinalIgnoreCase);
 
-    private async Task WriteSnapshotCoreAsync(
+    private async Task<ExpectedDocumentState> EnsureExistingDocumentCanBeReplacedAsync(
+        CancellationToken cancellationToken)
+    {
+        ExpectedDocumentState documentState;
+        try
+        {
+            documentState = await ReadExistingDocumentStateAsync(cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (PreferencesDocumentTooLargeException exception)
+        {
+            throw new ProtectedPreferencesDocumentException(
+                AppPreferencesStoreOperation.Write,
+                ProtectedExistingDocumentMessage,
+                exception);
+        }
+
+        if (!documentState.Exists)
+        {
+            return documentState;
+        }
+
+        await EnsureWritableDocumentAsync(documentState.Bytes, cancellationToken)
+            .ConfigureAwait(false);
+        return documentState;
+    }
+
+    private async Task EnsureWritableDocumentAsync(
+        byte[] documentBytes,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var stream = new MemoryStream(documentBytes, writable: false);
+            var (existing, _) = await DeserializePreferencesAsync(
+                    stream,
+                    cancellationToken,
+                    AppPreferencesStoreOperation.Write)
+                .ConfigureAwait(false);
+            if (existing is null)
+            {
+                throw new ProtectedPreferencesDocumentException(
+                    AppPreferencesStoreOperation.Write,
+                    ProtectedExistingDocumentMessage);
+            }
+
+            try
+            {
+                existing.Validate();
+            }
+            catch (AppPreferencesValidationException exception)
+            {
+                throw new ProtectedPreferencesDocumentException(
+                    AppPreferencesStoreOperation.Write,
+                    ProtectedExistingDocumentMessage,
+                    exception);
+            }
+        }
+        catch (JsonException exception)
+        {
+            throw new ProtectedPreferencesDocumentException(
+                AppPreferencesStoreOperation.Write,
+                ProtectedExistingDocumentMessage,
+                exception);
+        }
+    }
+
+    private async Task EnsureExpectedDocumentUnchangedAsync(
+        ExpectedDocumentState expectedDocument,
+        CancellationToken cancellationToken)
+    {
+        ExpectedDocumentState currentDocument;
+        try
+        {
+            currentDocument = await ReadExistingDocumentStateAsync(cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (PreferencesDocumentTooLargeException exception)
+        {
+            throw new ProtectedPreferencesDocumentException(
+                AppPreferencesStoreOperation.Write,
+                ProtectedExistingDocumentMessage,
+                exception);
+        }
+
+        if (expectedDocument.Matches(currentDocument))
+        {
+            return;
+        }
+
+        if (currentDocument.Exists)
+        {
+            await EnsureWritableDocumentAsync(currentDocument.Bytes, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        throw CreateChangedDocumentException();
+    }
+
+    private async Task EnsureLoadedDocumentStillCurrentAsync(
+        ExpectedDocumentState loadedDocument,
+        CancellationToken cancellationToken)
+    {
+        EnsureNoPendingRecovery(AppPreferencesStoreOperation.Read);
+
+        ExpectedDocumentState currentDocument;
+        try
+        {
+            currentDocument = await ReadExistingDocumentStateAsync(cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (PreferencesDocumentTooLargeException exception)
+        {
+            throw new ProtectedPreferencesDocumentException(
+                AppPreferencesStoreOperation.Read,
+                "The UI preferences document exceeds the size limit.",
+                exception);
+        }
+
+        if (!loadedDocument.Matches(currentDocument))
+        {
+            throw new AppPreferencesStoreException(
+                AppPreferencesStoreOperation.Read,
+                ChangedDuringReadMessage);
+        }
+
+        EnsureNoPendingRecovery(AppPreferencesStoreOperation.Read);
+    }
+
+    private async Task<ExpectedDocumentState> ReadExistingDocumentStateAsync(
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var documentBytes = await ReadDocumentBytesAsync(
+                    _preferencesPath,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            return ExpectedDocumentState.Present(documentBytes);
+        }
+        catch (FileNotFoundException)
+        {
+            return ExpectedDocumentState.Missing;
+        }
+        catch (DirectoryNotFoundException)
+        {
+            return ExpectedDocumentState.Missing;
+        }
+    }
+
+    private static async Task<byte[]> ReadDocumentBytesAsync(
+        string path,
+        CancellationToken cancellationToken)
+    {
+        await using var stream = new FileStream(
+            path,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.Read,
+            bufferSize: 4096,
+            FileOptions.Asynchronous | FileOptions.SequentialScan);
+        if (stream.Length > MaximumDocumentBytes)
+        {
+            throw new PreferencesDocumentTooLargeException();
+        }
+
+        using var memory = new MemoryStream(
+            capacity: checked((int)Math.Min(stream.Length, MaximumDocumentBytes)));
+        var buffer = new byte[4096];
+        while (true)
+        {
+            var bytesRead = await stream.ReadAsync(buffer, cancellationToken)
+                .ConfigureAwait(false);
+            if (bytesRead == 0)
+            {
+                return memory.ToArray();
+            }
+
+            if (memory.Length + bytesRead > MaximumDocumentBytes)
+            {
+                throw new PreferencesDocumentTooLargeException();
+            }
+
+            memory.Write(buffer, 0, bytesRead);
+        }
+    }
+
+    private async Task<ExpectedDocumentState> WriteSnapshotCoreAsync(
         AppPreferencesV1 snapshot,
+        ExpectedDocumentState expectedDocument,
         CancellationToken cancellationToken)
     {
         var directoryPath = Path.GetDirectoryName(_preferencesPath)
             ?? throw new IOException("The UI preferences location is unavailable.");
         string? temporaryPath = null;
+        string? recoveryPath = null;
+        string? guardPath = null;
+        var ownsRecovery = false;
+        var ownsGuard = false;
+        var preserveRecovery = false;
+        var preserveGuard = false;
         try
         {
             Directory.CreateDirectory(directoryPath);
-            temporaryPath = Path.Combine(
-                directoryPath,
-                $".{Path.GetFileName(_preferencesPath)}.{Guid.NewGuid():N}.tmp");
+            temporaryPath = CreatePrivatePath(directoryPath, "tmp");
 
             await using (var stream = new FileStream(
                 temporaryPath,
@@ -346,29 +650,416 @@ public sealed class AppPreferencesStore : IAppPreferencesStore
             }
 
             cancellationToken.ThrowIfCancellationRequested();
-            PublishTemporaryFile(temporaryPath);
+            _testHooks?.AfterTemporaryFilePrepared?.Invoke();
+            byte[] candidateBytes;
+            try
+            {
+                candidateBytes = await ReadDocumentBytesAsync(temporaryPath, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (PreferencesDocumentTooLargeException exception)
+            {
+                throw new AppPreferencesStoreException(
+                    AppPreferencesStoreOperation.Write,
+                    "The serialized UI preferences document exceeds the size limit.",
+                    exception);
+            }
+
+            await EnsureExpectedDocumentUnchangedAsync(expectedDocument, cancellationToken)
+                .ConfigureAwait(false);
+            _testHooks?.BeforePublish?.Invoke();
+            cancellationToken.ThrowIfCancellationRequested();
+
+            recoveryPath = _pendingRecoveryPath;
+            guardPath = _transactionGuardPath;
+            CreateTransactionGuard();
+            ownsGuard = true;
+            CreatePendingRecoveryMarker();
+            ownsRecovery = true;
+            if (!expectedDocument.Exists)
+            {
+                await PublishMissingExpectedDocumentAsync(temporaryPath)
+                    .ConfigureAwait(false);
+                temporaryPath = null;
+                preserveRecovery = true;
+                preserveGuard = true;
+                File.Delete(recoveryPath);
+                ownsRecovery = false;
+                recoveryPath = null;
+                preserveRecovery = false;
+                File.Delete(guardPath);
+                ownsGuard = false;
+                guardPath = null;
+                preserveGuard = false;
+                return ExpectedDocumentState.Present(candidateBytes);
+            }
+
+            preserveRecovery = true;
+            preserveGuard = true;
+            try
+            {
+                ReplaceFile(
+                    temporaryPath,
+                    _preferencesPath,
+                    recoveryPath);
+            }
+            catch (Exception exception) when (
+                exception is IOException or UnauthorizedAccessException)
+            {
+                if (await CanProveInitialReplaceDidNotTransitionAsync(
+                        expectedDocument,
+                        candidateBytes,
+                        temporaryPath,
+                        recoveryPath)
+                    .ConfigureAwait(false))
+                {
+                    preserveRecovery = false;
+                    preserveGuard = false;
+                }
+
+                throw;
+            }
+
             temporaryPath = null;
+            _testHooks?.AfterReplace?.Invoke();
+
+            await CompleteExistingDocumentPublicationAsync(
+                    expectedDocument,
+                    candidateBytes,
+                    recoveryPath)
+                .ConfigureAwait(false);
+            ownsRecovery = false;
+            ownsGuard = false;
+            preserveRecovery = false;
+            preserveGuard = false;
+            return ExpectedDocumentState.Present(candidateBytes);
         }
         finally
         {
             TryDeleteTemporaryFile(temporaryPath);
+            if (ownsRecovery && !preserveRecovery)
+            {
+                TryDeleteTemporaryFile(recoveryPath);
+            }
+
+            if (ownsGuard && !preserveGuard)
+            {
+                TryDeleteTemporaryFile(guardPath);
+            }
         }
     }
 
-    private void PublishTemporaryFile(string temporaryPath)
+    private async Task PublishMissingExpectedDocumentAsync(string temporaryPath)
     {
-        if (File.Exists(_preferencesPath))
+        try
         {
-            File.Replace(
-                temporaryPath,
-                _preferencesPath,
-                destinationBackupFileName: null,
-                ignoreMetadataErrors: true);
+            File.Move(temporaryPath, _preferencesPath);
+        }
+        catch (IOException exception)
+        {
+            await ThrowClassifiedPublishConflictAsync(exception).ConfigureAwait(false);
+            throw;
+        }
+    }
+
+    private async Task ThrowClassifiedPublishConflictAsync(IOException publishException)
+    {
+        ExpectedDocumentState competingDocument;
+        try
+        {
+            competingDocument = await ReadExistingDocumentStateAsync(CancellationToken.None)
+                .ConfigureAwait(false);
+        }
+        catch (PreferencesDocumentTooLargeException exception)
+        {
+            throw new ProtectedPreferencesDocumentException(
+                AppPreferencesStoreOperation.Write,
+                ProtectedExistingDocumentMessage,
+                exception);
+        }
+
+        if (!competingDocument.Exists)
+        {
+            throw publishException;
+        }
+
+        await EnsureWritableDocumentAsync(competingDocument.Bytes, CancellationToken.None)
+            .ConfigureAwait(false);
+        throw CreateChangedDocumentException(publishException);
+    }
+
+    private async Task<bool> CanProveInitialReplaceDidNotTransitionAsync(
+        ExpectedDocumentState expectedDocument,
+        byte[] candidateBytes,
+        string temporaryPath,
+        string recoveryPath)
+    {
+        try
+        {
+            var currentDocument = await ReadExistingDocumentStateAsync(CancellationToken.None)
+                .ConfigureAwait(false);
+            if (!expectedDocument.Matches(currentDocument))
+            {
+                return false;
+            }
+
+            var recoveryBytes = await ReadDocumentBytesAsync(
+                    recoveryPath,
+                    CancellationToken.None)
+                .ConfigureAwait(false);
+            if (recoveryBytes.Length != 0)
+            {
+                return false;
+            }
+
+            var currentCandidateBytes = await ReadDocumentBytesAsync(
+                    temporaryPath,
+                    CancellationToken.None)
+                .ConfigureAwait(false);
+            return candidateBytes.AsSpan().SequenceEqual(currentCandidateBytes);
+        }
+        catch (Exception exception) when (
+            exception is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    private async Task CompleteExistingDocumentPublicationAsync(
+        ExpectedDocumentState expectedDocument,
+        byte[] candidateBytes,
+        string recoveryPath)
+    {
+        byte[]? displacedDocumentBytes = null;
+        var displacedDocumentIsOversized = false;
+        try
+        {
+            displacedDocumentBytes = await ReadDocumentBytesAsync(
+                    recoveryPath,
+                    CancellationToken.None)
+                .ConfigureAwait(false);
+        }
+        catch (PreferencesDocumentTooLargeException)
+        {
+            displacedDocumentIsOversized = true;
+        }
+
+        var displacedDocumentMatchesExpected =
+            !displacedDocumentIsOversized &&
+            expectedDocument.Bytes.AsSpan().SequenceEqual(displacedDocumentBytes);
+
+        ExpectedDocumentState publishedDocument;
+        try
+        {
+            publishedDocument = await ReadExistingDocumentStateAsync(CancellationToken.None)
+                .ConfigureAwait(false);
+        }
+        catch (PreferencesDocumentTooLargeException exception)
+        {
+            throw CreateChangedDocumentException(exception);
+        }
+
+        if (displacedDocumentMatchesExpected)
+        {
+            if (!publishedDocument.Exists ||
+                !candidateBytes.AsSpan().SequenceEqual(publishedDocument.Bytes))
+            {
+                throw CreateChangedDocumentException();
+            }
+
+            File.Delete(recoveryPath);
+            File.Delete(_transactionGuardPath);
             return;
         }
 
-        File.Move(temporaryPath, _preferencesPath);
+        if (!publishedDocument.Exists ||
+            !candidateBytes.AsSpan().SequenceEqual(publishedDocument.Bytes))
+        {
+            throw CreateChangedDocumentException();
+        }
+
+        var rollbackPath = _pendingRollbackPath;
+        var ownsRollback = false;
+        var preserveRollback = false;
+        try
+        {
+            CreateDurableMarker(rollbackPath);
+            ownsRollback = true;
+            _testHooks?.BeforeRollback?.Invoke();
+            preserveRollback = true;
+            ReplaceFile(
+                recoveryPath,
+                _preferencesPath,
+                rollbackPath);
+            _testHooks?.AfterRollback?.Invoke();
+
+            byte[] rolledAsideBytes;
+            try
+            {
+                rolledAsideBytes = await ReadDocumentBytesAsync(
+                        rollbackPath,
+                        CancellationToken.None)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception exception) when (
+                exception is IOException or UnauthorizedAccessException)
+            {
+                if (TryPromoteRollbackToPendingRecovery(rollbackPath))
+                {
+                    ownsRollback = false;
+                    preserveRollback = false;
+                }
+
+                throw CreateChangedDocumentException(exception);
+            }
+
+            if (!candidateBytes.AsSpan().SequenceEqual(rolledAsideBytes))
+            {
+                if (TryPromoteRollbackToPendingRecovery(rollbackPath))
+                {
+                    ownsRollback = false;
+                    preserveRollback = false;
+                }
+
+                throw CreateChangedDocumentException();
+            }
+
+            File.Delete(rollbackPath);
+            ownsRollback = false;
+            preserveRollback = false;
+        }
+        finally
+        {
+            if (ownsRollback && !preserveRollback)
+            {
+                TryDeleteTemporaryFile(rollbackPath);
+            }
+        }
+
+        File.Delete(_transactionGuardPath);
+
+        if (displacedDocumentIsOversized)
+        {
+            throw new ProtectedPreferencesDocumentException(
+                AppPreferencesStoreOperation.Write,
+                ProtectedExistingDocumentMessage);
+        }
+
+        await EnsureWritableDocumentAsync(
+                displacedDocumentBytes!,
+                CancellationToken.None)
+            .ConfigureAwait(false);
+        throw CreateChangedDocumentException();
     }
+
+    private void EnsureNoPendingRecovery(AppPreferencesStoreOperation operation)
+    {
+        EnsureRecoveryPathIsMissing(_transactionGuardPath, operation);
+        EnsureRecoveryPathIsMissing(_pendingRecoveryPath, operation);
+        EnsureRecoveryPathIsMissing(_pendingRollbackPath, operation);
+    }
+
+    private static void EnsureRecoveryPathIsMissing(
+        string path,
+        AppPreferencesStoreOperation operation)
+    {
+        try
+        {
+            _ = File.GetAttributes(path);
+        }
+        catch (FileNotFoundException)
+        {
+            return;
+        }
+        catch (DirectoryNotFoundException)
+        {
+            return;
+        }
+        catch (IOException exception)
+        {
+            throw new ProtectedPreferencesDocumentException(
+                operation,
+                PendingRecoveryDocumentMessage,
+                exception);
+        }
+        catch (UnauthorizedAccessException exception)
+        {
+            throw new ProtectedPreferencesDocumentException(
+                operation,
+                PendingRecoveryDocumentMessage,
+                exception);
+        }
+
+        throw new ProtectedPreferencesDocumentException(
+            operation,
+            PendingRecoveryDocumentMessage);
+    }
+
+    private void CreateTransactionGuard() =>
+        CreateDurableMarker(_transactionGuardPath);
+
+    private void CreatePendingRecoveryMarker() =>
+        CreateDurableMarker(_pendingRecoveryPath);
+
+    private static void CreateDurableMarker(string path)
+    {
+        using var marker = new FileStream(
+            path,
+            FileMode.CreateNew,
+            FileAccess.Write,
+            FileShare.None,
+            bufferSize: 1,
+            FileOptions.WriteThrough);
+        marker.Flush(flushToDisk: true);
+    }
+
+    private void ReplaceFile(string sourcePath, string destinationPath, string backupPath)
+    {
+        if (_testHooks?.ReplaceFile is { } replaceFile)
+        {
+            replaceFile(sourcePath, destinationPath, backupPath);
+            return;
+        }
+
+        File.Replace(
+            sourcePath,
+            destinationPath,
+            backupPath,
+            ignoreMetadataErrors: true);
+    }
+
+    private bool TryPromoteRollbackToPendingRecovery(string rollbackPath)
+    {
+        try
+        {
+            File.Move(rollbackPath, _pendingRecoveryPath);
+            return true;
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    private string CreatePrivatePath(string directoryPath, string suffix) =>
+        Path.Combine(
+            directoryPath,
+            $".{Path.GetFileName(_preferencesPath)}.{Guid.NewGuid():N}.{suffix}");
+
+    private static AppPreferencesStoreException CreateChangedDocumentException(
+        Exception? innerException = null) =>
+        innerException is null
+            ? new AppPreferencesStoreException(
+                AppPreferencesStoreOperation.Write,
+                ChangedExistingDocumentMessage)
+            : new AppPreferencesStoreException(
+                AppPreferencesStoreOperation.Write,
+                ChangedExistingDocumentMessage,
+                innerException);
 
     private static void TryDeleteTemporaryFile(string? temporaryPath)
     {
@@ -391,9 +1082,35 @@ public sealed class AppPreferencesStore : IAppPreferencesStore
         }
     }
 
+    private sealed record ExpectedDocumentState(bool Exists, byte[] Bytes)
+    {
+        internal static ExpectedDocumentState Missing { get; } =
+            new(Exists: false, Array.Empty<byte>());
+
+        internal static ExpectedDocumentState Present(byte[] bytes) =>
+            new(Exists: true, bytes.ToArray());
+
+        internal bool Matches(ExpectedDocumentState other) =>
+            Exists == other.Exists &&
+            (!Exists || Bytes.AsSpan().SequenceEqual(other.Bytes));
+    }
+
+    private sealed class PreferencesDocumentTooLargeException : IOException
+    {
+    }
+
     private void ThrowIfDisposed() =>
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposeState) != 0, this);
 }
+
+internal sealed record AppPreferencesStoreTestHooks(
+    Action? AfterInitialRecoveryCheck = null,
+    Action? AfterTemporaryFilePrepared = null,
+    Action? BeforePublish = null,
+    Action? AfterReplace = null,
+    Action? BeforeRollback = null,
+    Action? AfterRollback = null,
+    Action<string, string, string>? ReplaceFile = null);
 
 public enum AppPreferencesStoreOperation
 {
@@ -402,7 +1119,7 @@ public enum AppPreferencesStoreOperation
     Reset,
 }
 
-public sealed class AppPreferencesStoreException : IOException
+public class AppPreferencesStoreException : IOException
 {
     public AppPreferencesStoreException(
         AppPreferencesStoreOperation operation,
@@ -422,4 +1139,100 @@ public sealed class AppPreferencesStoreException : IOException
     }
 
     public AppPreferencesStoreOperation Operation { get; }
+}
+
+public abstract class ProtectedPreferencesException : AppPreferencesStoreException
+{
+    protected ProtectedPreferencesException(
+        AppPreferencesStoreOperation operation,
+        string message)
+        : base(operation, message)
+    {
+    }
+
+    protected ProtectedPreferencesException(
+        AppPreferencesStoreOperation operation,
+        string message,
+        Exception innerException)
+        : base(operation, message, innerException)
+    {
+    }
+}
+
+public sealed class ProtectedPreferencesMutationException : ProtectedPreferencesException
+{
+    public ProtectedPreferencesMutationException()
+        : base(
+            AppPreferencesStoreOperation.Write,
+            "UI preferences are protected and read-only. " +
+            "Reset the app explicitly before replacing them.")
+    {
+    }
+}
+
+public class ProtectedPreferencesDocumentException : ProtectedPreferencesException
+{
+    public ProtectedPreferencesDocumentException(
+        AppPreferencesStoreOperation operation,
+        string message)
+        : base(operation, message)
+    {
+    }
+
+    public ProtectedPreferencesDocumentException(
+        AppPreferencesStoreOperation operation,
+        string message,
+        Exception innerException)
+        : base(operation, message, innerException)
+    {
+    }
+}
+
+public sealed class FuturePreferencesVersionException : ProtectedPreferencesDocumentException
+{
+    private const int MaximumSchemaVersionDisplayDigits = 64;
+
+    public FuturePreferencesVersionException(
+        AppPreferencesStoreOperation operation,
+        int schemaVersion)
+        : base(
+            operation,
+            $"UI preferences schema version {schemaVersion} is newer than the supported " +
+            $"version {AppPreferencesV1.CurrentSchemaVersion}.")
+    {
+        SchemaVersion = schemaVersion;
+        SchemaVersionDisplay = schemaVersion.ToString(
+            System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    public FuturePreferencesVersionException(
+        AppPreferencesStoreOperation operation,
+        string schemaVersionDisplay)
+        : base(
+            operation,
+            $"UI preferences schema version {FormatSchemaVersionDisplay(schemaVersionDisplay)} " +
+            "is unsupported by " +
+            $"version {AppPreferencesV1.CurrentSchemaVersion}.")
+    {
+        SchemaVersionDisplay = FormatSchemaVersionDisplay(schemaVersionDisplay);
+    }
+
+    public int? SchemaVersion { get; }
+
+    public string SchemaVersionDisplay { get; }
+
+    private static string FormatSchemaVersionDisplay(string schemaVersionDisplay)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(schemaVersionDisplay);
+        if (!schemaVersionDisplay.All(char.IsAsciiDigit))
+        {
+            throw new ArgumentException(
+                "The schema version display must contain only ASCII digits.",
+                nameof(schemaVersionDisplay));
+        }
+
+        return schemaVersionDisplay.Length <= MaximumSchemaVersionDisplayDigits
+            ? schemaVersionDisplay
+            : schemaVersionDisplay[..MaximumSchemaVersionDisplayDigits] + "...";
+    }
 }

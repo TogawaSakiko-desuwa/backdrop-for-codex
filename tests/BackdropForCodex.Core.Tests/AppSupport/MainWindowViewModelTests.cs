@@ -20,6 +20,244 @@ namespace BackdropForCodex.Core.Tests.AppSupport;
 public sealed class MainWindowViewModelTests
 {
     [Fact]
+    public async Task MediaInvalidationRefreshesProfileCardAfterFileIsDeletedAndRestored()
+    {
+        var mediaPath = CreateTemporaryMediaFile(".png");
+        try
+        {
+            var wallpaper = new FakeWallpaperApplicationService(
+                CreateSettings(mediaPath, MediaKind.Image));
+            using var preferencesStore = new FakeAppPreferencesStore();
+            using var viewModel = CreateViewModel(wallpaper, preferencesStore);
+            await viewModel.InitializeAsync();
+            Assert.False(Assert.Single(viewModel.ProfileCards).IsMissing);
+            var collectionChanges = 0;
+            viewModel.ProfileCards.CollectionChanged +=
+                (_, _) => Interlocked.Increment(ref collectionChanges);
+
+            File.Delete(mediaPath);
+            viewModel.NotifyProfileMediaChanged(mediaPath);
+            Assert.True(
+                SpinWait.SpinUntil(
+                    () => viewModel.ProfileCards.Count == 1 &&
+                        viewModel.ProfileCards[0].IsMissing,
+                    TimeSpan.FromSeconds(5)));
+
+            File.WriteAllBytes(mediaPath, [0x01]);
+            viewModel.NotifyProfileMediaChanged(mediaPath);
+            Assert.True(
+                SpinWait.SpinUntil(
+                    () => viewModel.ProfileCards.Count == 1 &&
+                        !viewModel.ProfileCards[0].IsMissing,
+                    TimeSpan.FromSeconds(5)));
+            Assert.True(collectionChanges >= 4);
+        }
+        finally
+        {
+            File.Delete(mediaPath);
+        }
+    }
+
+    [Fact]
+    public async Task MediaInvalidationRevivesProfileCardThatWasInitiallyMissing()
+    {
+        var mediaPath = Path.Combine(
+            Path.GetTempPath(),
+            $"backdrop-missing-profile-{Guid.NewGuid():N}.png");
+        try
+        {
+            var wallpaper = new FakeWallpaperApplicationService(
+                CreateSettings(mediaPath, MediaKind.Image));
+            using var preferencesStore = new FakeAppPreferencesStore();
+            using var viewModel = CreateViewModel(wallpaper, preferencesStore);
+            await viewModel.InitializeAsync();
+            Assert.True(Assert.Single(viewModel.ProfileCards).IsMissing);
+
+            File.WriteAllBytes(mediaPath, [0x01]);
+
+            Assert.True(
+                SpinWait.SpinUntil(
+                    () => viewModel.ProfileCards.Count == 1 &&
+                        !viewModel.ProfileCards[0].IsMissing,
+                    TimeSpan.FromSeconds(5)));
+        }
+        finally
+        {
+            File.Delete(mediaPath);
+        }
+    }
+
+    [Fact]
+    public async Task MissingMediaProbeContainsUnexpectedProviderFailures()
+    {
+        var mediaPath = Path.Combine(
+            Path.GetTempPath(),
+            $"backdrop-missing-profile-fault-{Guid.NewGuid():N}.png");
+        var wallpaper = new FakeWallpaperApplicationService(
+            CreateSettings(mediaPath, MediaKind.Image));
+        using var preferencesStore = new FakeAppPreferencesStore();
+        var preview = new ReferenceOnlyPreviewService
+        {
+            IsAvailableResult = false,
+        };
+        using var viewModel = CreateViewModel(
+            wallpaper,
+            preferencesStore,
+            previewMedia: preview);
+        await viewModel.InitializeAsync();
+
+        Assert.True(Assert.Single(viewModel.ProfileCards).IsMissing);
+        var foregroundProbeCount = preview.ProbeCount;
+        preview.AvailabilityException =
+            new System.Security.SecurityException("provider fault");
+        preview.ThrowAfterProbeCount = foregroundProbeCount;
+        Assert.True(
+            SpinWait.SpinUntil(
+                () => preview.ProbeCount > foregroundProbeCount,
+                TimeSpan.FromSeconds(5)));
+        Assert.True(Assert.Single(viewModel.ProfileCards).IsMissing);
+    }
+
+    [Fact]
+    public async Task BurstMediaInvalidationsRebuildProfileCardsOnlyOnce()
+    {
+        var mediaPath = Path.Combine(
+            Path.GetTempPath(),
+            $"backdrop-profile-burst-{Guid.NewGuid():N}.png");
+        var wallpaper = new FakeWallpaperApplicationService(
+            CreateSettings(mediaPath, MediaKind.Image));
+        using var preferencesStore = new FakeAppPreferencesStore();
+        var preview = new ReferenceOnlyPreviewService();
+        using var viewModel = CreateViewModel(
+            wallpaper,
+            preferencesStore,
+            previewMedia: preview);
+        await viewModel.InitializeAsync();
+        var initialProbeCount = preview.ProbedReferences.Count;
+        preview.IsAvailableResult = false;
+
+        for (var index = 0; index < 8; index++)
+        {
+            viewModel.NotifyProfileMediaChanged(mediaPath);
+        }
+
+        await Task.Delay(TimeSpan.FromMilliseconds(500));
+
+        Assert.True(Assert.Single(viewModel.ProfileCards).IsMissing);
+        Assert.Equal(initialProbeCount + 1, preview.ProbedReferences.Count);
+    }
+
+    [Fact]
+    public async Task DistinctMediaInvalidationOverflowFallsBackToOneFullRefresh()
+    {
+        var mediaPath = Path.Combine(
+            Path.GetTempPath(),
+            $"backdrop-profile-overflow-{Guid.NewGuid():N}.png");
+        var wallpaper = new FakeWallpaperApplicationService(
+            CreateSettings(mediaPath, MediaKind.Image));
+        using var preferencesStore = new FakeAppPreferencesStore();
+        var preview = new ReferenceOnlyPreviewService();
+        using var viewModel = CreateViewModel(
+            wallpaper,
+            preferencesStore,
+            previewMedia: preview);
+        await viewModel.InitializeAsync();
+        var initialProbeCount = preview.ProbedReferences.Count;
+        preview.IsAvailableResult = false;
+
+        MediaThumbnailInvalidationHub.InvalidateSource(mediaPath);
+        for (var index = 0; index < 256; index++)
+        {
+            MediaThumbnailInvalidationHub.InvalidateSource(
+                Path.Combine(
+                    Path.GetTempPath(),
+                    $"backdrop-profile-overflow-junk-{Guid.NewGuid():N}-{index}.png"));
+        }
+
+        await Task.Delay(TimeSpan.FromMilliseconds(500));
+
+        Assert.True(Assert.Single(viewModel.ProfileCards).IsMissing);
+        Assert.Equal(initialProbeCount + 1, preview.ProbedReferences.Count);
+    }
+
+    [Fact]
+    public async Task MediaInvalidationTimerContainsCollectionSubscriberFailures()
+    {
+        var mediaPath = Path.Combine(
+            Path.GetTempPath(),
+            $"backdrop-profile-callback-fault-{Guid.NewGuid():N}.png");
+        var wallpaper = new FakeWallpaperApplicationService(
+            CreateSettings(mediaPath, MediaKind.Image));
+        using var preferencesStore = new FakeAppPreferencesStore();
+        var preview = new ReferenceOnlyPreviewService();
+        using var viewModel = CreateViewModel(
+            wallpaper,
+            preferencesStore,
+            previewMedia: preview);
+        await viewModel.InitializeAsync();
+        var callbackEntered = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        viewModel.ProfileCards.CollectionChanged += (_, _) =>
+        {
+            callbackEntered.TrySetResult();
+            throw new InvalidOperationException("Simulated collection subscriber failure.");
+        };
+        preview.IsAvailableResult = false;
+
+        viewModel.NotifyProfileMediaChanged(mediaPath);
+
+        await callbackEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+    }
+
+    [Fact]
+    public async Task StyleChangeRefreshesProfileCardAfterLocalizedTextChanges()
+    {
+        var wallpaper = new FakeWallpaperApplicationService(SettingsV3.CreateDefault());
+        using var preferencesStore = new FakeAppPreferencesStore();
+        var text = new MutableTextProvider();
+        using var viewModel = new MainWindowViewModel(
+            wallpaper,
+            preferencesStore,
+            new StubErrorMapper(),
+            text,
+            new FileExistencePreviewService(),
+            new WallpaperSourceProviderRegistry([new LocalFileWallpaperSourceProvider()]));
+        await viewModel.InitializeAsync();
+        var original = Assert.Single(viewModel.ProfileCards);
+
+        text.Values["Profile_Official"] = "Localized official background";
+        viewModel.Editor.PanelOpacity -= 0.01;
+
+        var refreshed = Assert.Single(viewModel.ProfileCards);
+        Assert.NotSame(original, refreshed);
+        Assert.Equal("Localized official background", refreshed.Subtitle);
+    }
+
+    [Fact]
+    public async Task StyleOnlyDraftChangesDoNotRebuildProfileCardsOrProbeMedia()
+    {
+        var media = CreateWorkshopMedia("123456");
+        var wallpaper = new FakeWallpaperApplicationService(
+            WithSelectedMedia(SettingsV3.CreateDefault(), media));
+        using var preferencesStore = new FakeAppPreferencesStore();
+        var preview = new ReferenceOnlyPreviewService();
+        using var viewModel = CreateViewModel(
+            wallpaper,
+            preferencesStore,
+            previewMedia: preview,
+            sourceRegistry: new WallpaperSourceProviderRegistry(
+                [new RegisteredWorkshopProvider()]));
+        await viewModel.InitializeAsync();
+        var originalCard = Assert.Single(viewModel.ProfileCards);
+        var initialProbeCount = preview.ProbedReferences.Count;
+
+        viewModel.Editor.PanelOpacity = viewModel.Editor.PanelOpacity - 0.01;
+
+        Assert.Same(originalCard, Assert.Single(viewModel.ProfileCards));
+        Assert.Equal(initialProbeCount, preview.ProbedReferences.Count);
+    }
+
+    [Fact]
     public async Task StartupResolvesCurrentWallpaperEngineReferenceWithoutDiscoveringLibrary()
     {
         var media = CreateWorkshopMedia("123456");
@@ -918,6 +1156,31 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public async Task RepeatedIdenticalApplyFailurePublishesANewStatusAnnouncementEvent()
+    {
+        var wallpaper = new FakeWallpaperApplicationService(
+            SettingsV3.CreateDefault())
+        {
+            ApplyFailure = new IOException("Simulated preflight failure."),
+        };
+        using var preferencesStore = new FakeAppPreferencesStore();
+        using var viewModel = CreateViewModel(wallpaper, preferencesStore);
+        await viewModel.InitializeAsync();
+
+        Assert.False(await viewModel.ApplyAsync());
+        var firstVersion = viewModel.StatusAnnouncementVersion;
+        var firstTitle = viewModel.StatusTitle;
+        var firstMessage = viewModel.StatusMessage;
+        viewModel.IsStatusOpen = false;
+
+        Assert.False(await viewModel.ApplyAsync());
+
+        Assert.Equal(firstTitle, viewModel.StatusTitle);
+        Assert.Equal(firstMessage, viewModel.StatusMessage);
+        Assert.True(viewModel.StatusAnnouncementVersion > firstVersion);
+    }
+
+    [Fact]
     public async Task AcceptRiskAsyncPersistsAcknowledgementImmediately()
     {
         var wallpaper = new FakeWallpaperApplicationService(
@@ -1233,6 +1496,242 @@ public sealed class MainWindowViewModelTests
         Assert.True(preferencesStore.Current.HasShownTrayTip);
         Assert.Equal(ThemeMode.Dark, viewModel.ThemeMode);
         Assert.True(viewModel.HasShownTrayTip);
+    }
+
+    [Fact]
+    public async Task TransientPreferencesReadFailureReloadsBeforeTheFirstMutation()
+    {
+        var wallpaper = new FakeWallpaperApplicationService(
+            SettingsV3.CreateDefault());
+        var persisted = AppPreferencesV1.CreateDefault() with
+        {
+            ThemeMode = ThemeMode.Dark,
+            HasShownTrayTip = true,
+            HasAcknowledgedWebWallpaperPrivacyNotice = true,
+        };
+        using var preferencesStore = new FakeAppPreferencesStore(persisted)
+        {
+            LoadFailure = new AppPreferencesStoreException(
+                AppPreferencesStoreOperation.Read,
+                "Temporary preferences read failure.",
+                new IOException("Sharing violation.")),
+        };
+        using var viewModel = CreateViewModel(wallpaper, preferencesStore);
+
+        await viewModel.InitializeAsync();
+
+        Assert.False(viewModel.HasProtectedPreferences);
+        preferencesStore.LoadFailure = null;
+
+        await viewModel.SetThemeModeAsync(ThemeMode.Light);
+
+        Assert.Equal(2, preferencesStore.LoadCallCount);
+        Assert.Equal(ThemeMode.Light, preferencesStore.Current.ThemeMode);
+        Assert.True(preferencesStore.Current.HasShownTrayTip);
+        Assert.True(
+            preferencesStore.Current.HasAcknowledgedWebWallpaperPrivacyNotice);
+    }
+
+    [Fact]
+    public async Task TransientPreferencesWriteFailureReloadsBeforeTheNextMutation()
+    {
+        var wallpaper = new FakeWallpaperApplicationService(
+            SettingsV3.CreateDefault());
+        using var preferencesStore = new FakeAppPreferencesStore();
+        using var viewModel = CreateViewModel(wallpaper, preferencesStore);
+        await viewModel.InitializeAsync();
+        preferencesStore.Current = AppPreferencesV1.CreateDefault() with
+        {
+            ThemeMode = ThemeMode.Dark,
+            HasShownTrayTip = true,
+            HasAcknowledgedWebWallpaperPrivacyNotice = true,
+        };
+        preferencesStore.SaveFailure = new AppPreferencesStoreException(
+            AppPreferencesStoreOperation.Write,
+            "Temporary preferences write failure.",
+            new IOException("Sharing violation."));
+
+        await Assert.ThrowsAsync<AppPreferencesStoreException>(
+            () => viewModel.SetThemeModeAsync(ThemeMode.Dark));
+        preferencesStore.SaveFailure = null;
+
+        await viewModel.SetThemeModeAsync(ThemeMode.Light);
+
+        Assert.Equal(2, preferencesStore.LoadCallCount);
+        Assert.Equal(ThemeMode.Light, preferencesStore.Current.ThemeMode);
+        Assert.True(preferencesStore.Current.HasShownTrayTip);
+        Assert.True(
+            preferencesStore.Current.HasAcknowledgedWebWallpaperPrivacyNotice);
+    }
+
+    [Fact]
+    public async Task FuturePreferencesRemainByteForByteIntactWhenFallbackMutationIsRejected()
+    {
+        var preferencesPath = Path.Combine(
+            Path.GetTempPath(),
+            $"backdrop-future-preferences-{Guid.NewGuid():N}.json");
+        var originalBytes = System.Text.Encoding.UTF8.GetBytes(
+            """
+            {
+              "schemaVersion": 2,
+              "themeMode": "FutureTheme",
+              "hasShownTrayTip": false,
+              "futurePreference": { "preserve": true }
+            }
+            """);
+        try
+        {
+            await File.WriteAllBytesAsync(preferencesPath, originalBytes);
+            var wallpaper = new FakeWallpaperApplicationService(
+                SettingsV3.CreateDefault());
+            using var preferencesStore = new AppPreferencesStore(preferencesPath);
+            using var viewModel = CreateViewModel(wallpaper, preferencesStore);
+
+            await viewModel.InitializeAsync();
+            Assert.Equal(ThemeMode.System, viewModel.ThemeMode);
+            Assert.False(viewModel.HasShownTrayTip);
+            Assert.False(viewModel.ShouldShowFirstCloseTip);
+
+            await Assert.ThrowsAsync<ProtectedPreferencesMutationException>(
+                () => viewModel.SetThemeModeAsync(ThemeMode.Dark));
+            await viewModel.MarkTrayTipShownAsync();
+
+            Assert.Equal(
+                originalBytes,
+                await File.ReadAllBytesAsync(preferencesPath));
+        }
+        finally
+        {
+            File.Delete(preferencesPath);
+        }
+    }
+
+    [Fact]
+    public async Task FuturePreferencesProtectionIsClearedOnlyByExplicitReset()
+    {
+        var preferencesPath = Path.Combine(
+            Path.GetTempPath(),
+            $"backdrop-future-preferences-reset-{Guid.NewGuid():N}.json");
+        try
+        {
+            await File.WriteAllTextAsync(
+                preferencesPath,
+                """
+                {
+                  "schemaVersion": 4,
+                  "futurePreference": true
+                }
+                """);
+            var wallpaper = new FakeWallpaperApplicationService(
+                SettingsV3.CreateDefault());
+            using var preferencesStore = new AppPreferencesStore(preferencesPath);
+            using var viewModel = CreateViewModel(wallpaper, preferencesStore);
+
+            await viewModel.InitializeAsync();
+
+            Assert.True(viewModel.HasProtectedPreferences);
+            Assert.Equal(4, viewModel.FuturePreferencesVersion);
+            Assert.False(viewModel.HasShownTrayTip);
+            Assert.False(viewModel.ShouldShowFirstCloseTip);
+
+            await viewModel.Settings.ResetPreferencesAsync(CancellationToken.None);
+
+            Assert.False(viewModel.HasProtectedPreferences);
+            Assert.Null(viewModel.FuturePreferencesVersion);
+            Assert.False(viewModel.HasShownTrayTip);
+            Assert.True(viewModel.ShouldShowFirstCloseTip);
+            Assert.False(File.Exists(preferencesPath));
+
+            await viewModel.SetThemeModeAsync(ThemeMode.Dark);
+
+            Assert.Equal(ThemeMode.Dark, viewModel.ThemeMode);
+            Assert.Equal(ThemeMode.Dark, (await preferencesStore.LoadAsync()).ThemeMode);
+        }
+        finally
+        {
+            File.Delete(preferencesPath);
+        }
+    }
+
+    [Fact]
+    public async Task OversizedPreferencesInitializeProtectedWithoutRepeatingTrayTip()
+    {
+        var preferencesPath = Path.Combine(
+            Path.GetTempPath(),
+            $"backdrop-oversized-preferences-{Guid.NewGuid():N}.json");
+        var oversizedPayload = new string(
+            'x',
+            checked((int)AppPreferencesStore.MaximumDocumentBytes));
+        var originalBytes = System.Text.Encoding.UTF8.GetBytes(
+            $$"""
+            {
+              "schemaVersion": 2,
+              "futurePayload": "{{oversizedPayload}}"
+            }
+            """);
+        try
+        {
+            await File.WriteAllBytesAsync(preferencesPath, originalBytes);
+            var wallpaper = new FakeWallpaperApplicationService(
+                SettingsV3.CreateDefault());
+            using var preferencesStore = new AppPreferencesStore(preferencesPath);
+            using var viewModel = CreateViewModel(wallpaper, preferencesStore);
+
+            await viewModel.InitializeAsync();
+
+            Assert.True(viewModel.HasProtectedPreferences);
+            Assert.Null(viewModel.FuturePreferencesVersion);
+            Assert.False(viewModel.HasShownTrayTip);
+            Assert.False(viewModel.ShouldShowFirstCloseTip);
+
+            await viewModel.MarkTrayTipShownAsync();
+
+            Assert.Equal(originalBytes, await File.ReadAllBytesAsync(preferencesPath));
+        }
+        finally
+        {
+            File.Delete(preferencesPath);
+        }
+    }
+
+    [Fact]
+    public async Task ProtectedPreferencesCannotSilentlyAcknowledgeWebPrivacyNotice()
+    {
+        var preferencesPath = Path.Combine(
+            Path.GetTempPath(),
+            $"backdrop-protected-preferences-privacy-{Guid.NewGuid():N}.json");
+        var originalBytes = System.Text.Encoding.UTF8.GetBytes(
+            """
+            {
+              "schemaVersion": 4,
+              "hasAcknowledgedWebWallpaperPrivacyNotice": false,
+              "futurePreference": true
+            }
+            """);
+        try
+        {
+            await File.WriteAllBytesAsync(preferencesPath, originalBytes);
+            var wallpaper = new FakeWallpaperApplicationService(
+                SettingsV3.CreateDefault());
+            using var preferencesStore = new AppPreferencesStore(preferencesPath);
+            using var viewModel = CreateViewModel(wallpaper, preferencesStore);
+            await viewModel.InitializeAsync();
+
+            var exception = await Assert.ThrowsAsync<ProtectedPreferencesMutationException>(
+                () => viewModel.Settings.AcknowledgeWebWallpaperPrivacyNoticeAsync(
+                    CancellationToken.None));
+
+            var storeException = Assert.IsAssignableFrom<AppPreferencesStoreException>(
+                exception);
+            Assert.Equal(AppPreferencesStoreOperation.Write, storeException.Operation);
+            Assert.False(
+                viewModel.Settings.HasAcknowledgedWebWallpaperPrivacyNotice);
+            Assert.Equal(originalBytes, await File.ReadAllBytesAsync(preferencesPath));
+        }
+        finally
+        {
+            File.Delete(preferencesPath);
+        }
     }
 
     [Fact]
@@ -1648,12 +2147,12 @@ public sealed class MainWindowViewModelTests
     }
 
     internal static (MainWindowViewModel ViewModel, IAppTextProvider Text)
-        CreateLayoutFixture()
+        CreateLayoutFixture(IAppPreferencesStore? preferencesStore = null)
     {
         var text = new FallbackTextProvider();
         var viewModel = new MainWindowViewModel(
             new FakeWallpaperApplicationService(SettingsV3.CreateDefault()),
-            new FakeAppPreferencesStore(),
+            preferencesStore ?? new FakeAppPreferencesStore(),
             new StubErrorMapper(),
             text);
         return (viewModel, text);
@@ -2428,18 +2927,34 @@ public sealed class MainWindowViewModelTests
 
         public bool BlockFirstSave { get; init; }
 
+        public Exception? LoadFailure { get; set; }
+
+        public int LoadCallCount { get; private set; }
+
         public TaskCompletionSource FirstSaveEntered { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public TaskCompletionSource ReleaseFirstSave { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        public AppPreferencesV1 Current => _preferences;
+        public AppPreferencesV1 Current
+        {
+            get => _preferences;
+            set => _preferences = value;
+        }
+
+        public Exception? SaveFailure { get; set; }
 
         public Task<AppPreferencesV1> LoadAsync(
             CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            LoadCallCount++;
+            if (LoadFailure is not null)
+            {
+                throw LoadFailure;
+            }
+
             return Task.FromResult(_preferences);
         }
 
@@ -2448,6 +2963,11 @@ public sealed class MainWindowViewModelTests
             CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (SaveFailure is not null)
+            {
+                throw SaveFailure;
+            }
+
             if (Interlocked.Increment(ref _saveCallCount) == 1 &&
                 BlockFirstSave)
             {
@@ -2629,9 +3149,19 @@ public sealed class MainWindowViewModelTests
 
     private sealed class ReferenceOnlyPreviewService : ISafeMediaPreviewService
     {
+        private int _probeCount;
+
         public List<MediaReference> ProbedReferences { get; } = [];
 
+        public int ProbeCount => Volatile.Read(ref _probeCount);
+
         public int PathProbeCount { get; private set; }
+
+        public bool IsAvailableResult { get; set; } = true;
+
+        public Exception? AvailabilityException { get; set; }
+
+        public int ThrowAfterProbeCount { get; set; } = int.MaxValue;
 
         public ISafeMediaPreviewLease Acquire(MediaReference reference) =>
             throw new NotSupportedException(reference.SourceIdentifier);
@@ -2641,8 +3171,19 @@ public sealed class MainWindowViewModelTests
 
         public bool IsAvailable(MediaReference reference)
         {
-            ProbedReferences.Add(reference.Snapshot());
-            return true;
+            var probeCount = Interlocked.Increment(ref _probeCount);
+            lock (ProbedReferences)
+            {
+                ProbedReferences.Add(reference.Snapshot());
+            }
+
+            if (probeCount > ThrowAfterProbeCount &&
+                AvailabilityException is { } exception)
+            {
+                throw exception;
+            }
+
+            return IsAvailableResult;
         }
 
         public bool IsAvailable(string mediaPath)
@@ -2723,6 +3264,13 @@ public sealed class MainWindowViewModelTests
     private sealed class FallbackTextProvider : IAppTextProvider
     {
         public string GetString(string key) => key;
+    }
+
+    private sealed class MutableTextProvider : IAppTextProvider
+    {
+        public Dictionary<string, string> Values { get; } = [];
+
+        public string GetString(string key) => Values.GetValueOrDefault(key, key);
     }
 
     private sealed class StubErrorMapper : IUserFacingErrorMapper

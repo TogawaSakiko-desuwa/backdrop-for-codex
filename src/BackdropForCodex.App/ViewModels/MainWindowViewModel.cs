@@ -1,6 +1,8 @@
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
+using System.Globalization;
+using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using BackdropForCodex.App.Models;
@@ -25,6 +27,8 @@ namespace BackdropForCodex.App.ViewModels;
 /// </summary>
 public sealed class MainWindowViewModel : ObservableObject, IDisposable
 {
+    private const int MaximumPendingProfileMediaInvalidations = 256;
+
     private readonly record struct WebWallpaperPrivacyAuthorization(
         bool IsAuthorized,
         WallpaperSourceResolution? ExpectedSourceResolution)
@@ -63,11 +67,23 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private readonly IWallpaperApplicationCapabilitySource? _capabilitySource;
     private readonly IUserFacingErrorMapper _errorMapper;
     private readonly IAppTextProvider _text;
+    private readonly ISafeMediaPreviewService _previewMedia;
     private readonly WallpaperProfileCardProjection _profileProjection;
     private readonly IWallpaperSourceProviderRegistry _sourceRegistry;
     private readonly SynchronizationContext? _uiContext;
     private readonly object _initializationLock = new();
     private readonly object _webPrivacyPromptLock = new();
+    private readonly object _profileMediaInvalidationLock = new();
+    private readonly HashSet<string> _pendingProfileMediaInvalidations =
+        new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, MediaReference> _missingProfileMedia =
+        new(StringComparer.OrdinalIgnoreCase);
+    private Timer? _profileMediaInvalidationTimer;
+    private Timer? _missingProfileMediaProbeTimer;
+    private bool _missingProfileMediaProbeScheduled;
+    private bool _missingProfileMediaProbeRunning;
+    private bool _refreshAllProfileCardsForMediaInvalidation;
+    private int _missingProfileMediaProbeFailureCount;
     private Task? _initializationTask;
     private Task<WebWallpaperPrivacyAuthorization>? _webPrivacyPromptTask;
     private CancellationTokenSource? _operationCancellation;
@@ -86,8 +102,11 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private WallpaperRuntimePhase _runtimePhase = WallpaperRuntimePhase.Idle;
     private WallpaperProfileCardItem? _selectedProfileCard;
     private bool _isSynchronizingProfileSelection;
+    private Guid? _profileCardsGlobalProfileId;
+    private string _profileCardsTextSignature = string.Empty;
     private bool _sourceDiscoveryStatusActive;
     private long _latestApplySequence;
+    private long _statusAnnouncementVersion;
 
     public MainWindowViewModel(
         IWallpaperApplicationService wallpaper,
@@ -104,6 +123,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         _errorMapper = errorMapper ?? throw new ArgumentNullException(nameof(errorMapper));
         _text = text ?? throw new ArgumentNullException(nameof(text));
         var mediaPreview = previewMedia ?? AppWallpaperSources.Preview;
+        _previewMedia = mediaPreview;
         _sourceRegistry = sourceRegistry ??
             (mediaPreview as SafeMediaPreviewService)?.SourceRegistry ??
             AppWallpaperSources.Registry;
@@ -128,6 +148,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         SourceLibrary.PropertyChanged += SourceLibrary_PropertyChanged;
         _uiContext = SynchronizationContext.Current;
         _wallpaper.StatusChanged += Wallpaper_StatusChanged;
+        MediaThumbnailInvalidationHub.SourceInvalidated += MediaThumbnail_SourceInvalidated;
         if (_capabilitySource is not null)
         {
             _capabilitySource.CapabilitiesChanged += Wallpaper_CapabilitiesChanged;
@@ -247,6 +268,12 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     public bool HasShownTrayTip => Settings.HasShownTrayTip;
 
+    public bool ShouldShowFirstCloseTip => Settings.ShouldShowFirstCloseTip;
+
+    public int? FuturePreferencesVersion => Settings.FuturePreferencesVersion;
+
+    public bool HasProtectedPreferences => Settings.HasProtectedPreferences;
+
     public bool IsBusy => OperationProgress.IsBusy;
 
     public bool CanEditDraft =>
@@ -351,6 +378,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         get => _statusTone;
         private set => SetProperty(ref _statusTone, value);
     }
+
+    public long StatusAnnouncementVersion => _statusAnnouncementVersion;
 
     public bool IsStatusOpen
     {
@@ -1665,7 +1694,12 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         if (eventArgs.PropertyName is
             nameof(SettingsManagementViewModel.ConfigurationState))
         {
-            RefreshProfileCards();
+            var draft = _wallpaper.Workspace.Draft;
+            if (!ProfileCardsMatchDraft(draft))
+            {
+                RefreshProfileCards();
+            }
+
             OnPropertyChanged(nameof(ApplyButtonText));
             OnPropertyChanged(nameof(WorkspaceStatusText));
             OnPropertyChanged(nameof(FooterStatusText));
@@ -1806,7 +1840,353 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             _isSynchronizingProfileSelection = false;
         }
 
+        _profileCardsGlobalProfileId = draft.RegionBindings[SemanticRegion.Global];
+        _profileCardsTextSignature = GetProfileCardsTextSignature();
+        UpdateMissingProfileMediaProbe(cards);
         DeleteProfileCommand.NotifyCanExecuteChanged();
+    }
+
+    private bool ProfileCardsMatchDraft(SettingsV3 draft)
+    {
+        var profiles = draft.Profiles;
+        if (ProfileCards.Count != profiles.Count ||
+            !draft.RegionBindings.TryGetValue(
+                SemanticRegion.Global,
+                out var globalProfileId) ||
+            _profileCardsGlobalProfileId != globalProfileId ||
+            !string.Equals(
+                _profileCardsTextSignature,
+                GetProfileCardsTextSignature(),
+                StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var mediaById = draft.MediaCatalog.ToDictionary(media => media.MediaId);
+        for (var index = 0; index < profiles.Count; index++)
+        {
+            var profile = profiles[index];
+            var card = ProfileCards[index];
+            if (card.ProfileId != profile.ProfileId ||
+                !string.Equals(card.Name, profile.Name, StringComparison.Ordinal) ||
+                card.MediaId != profile.MediaId)
+            {
+                return false;
+            }
+
+            MediaReference? expectedMedia = null;
+            if (profile.MediaId is { } mediaId &&
+                !mediaById.TryGetValue(mediaId, out expectedMedia))
+            {
+                return false;
+            }
+
+            if (!Equals(card.MediaReference, expectedMedia))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private string GetProfileCardsTextSignature() =>
+        string.Join(
+            '\u001F',
+            CultureInfo.CurrentCulture.Name,
+            CultureInfo.CurrentUICulture.Name,
+            _text.GetString("Profile_DefaultName"),
+            _text.GetString("Profile_Official"),
+            _text.GetString("Profile_MediaMissing"),
+            _text.GetString("Media_Image"),
+            _text.GetString("Media_Video"),
+            _text.GetString("Profile_Media"),
+            _text.GetString("Profile_AutomationName"),
+            _text.GetString("Profile_ActionsAutomationName"));
+
+    private void UpdateMissingProfileMediaProbe(
+        IReadOnlyList<WallpaperProfileCardItem> cards)
+    {
+        var missingMedia = cards
+            .Where(
+                card => card.IsMissing &&
+                    card.MediaReference is { SourceKind: MediaSourceKind.LocalFile })
+            .Select(card => card.MediaReference!)
+            .GroupBy(
+                reference => reference.SourceIdentifier,
+                StringComparer.OrdinalIgnoreCase)
+            .Take(256)
+            .ToDictionary(
+                group => group.Key,
+                group => group.First(),
+                StringComparer.OrdinalIgnoreCase);
+
+        lock (_profileMediaInvalidationLock)
+        {
+            if (_isDisposed)
+            {
+                return;
+            }
+
+            var changed =
+                _missingProfileMedia.Count != missingMedia.Count ||
+                missingMedia.Any(
+                    entry => !_missingProfileMedia.TryGetValue(entry.Key, out var current) ||
+                        !Equals(current, entry.Value));
+            _missingProfileMedia.Clear();
+            foreach (var entry in missingMedia)
+            {
+                _missingProfileMedia.Add(entry.Key, entry.Value);
+            }
+
+            if (_missingProfileMedia.Count == 0)
+            {
+                _missingProfileMediaProbeFailureCount = 0;
+                _missingProfileMediaProbeScheduled = false;
+                _missingProfileMediaProbeTimer?.Change(
+                    Timeout.InfiniteTimeSpan,
+                    Timeout.InfiniteTimeSpan);
+                return;
+            }
+
+            if (changed)
+            {
+                _missingProfileMediaProbeFailureCount = 0;
+            }
+
+            ScheduleMissingProfileMediaProbeLocked();
+        }
+    }
+
+    private void ScheduleMissingProfileMediaProbeLocked()
+    {
+        if (_isDisposed ||
+            _missingProfileMedia.Count == 0 ||
+            _missingProfileMediaProbeScheduled ||
+            _missingProfileMediaProbeRunning)
+        {
+            return;
+        }
+
+        _missingProfileMediaProbeTimer ??= new Timer(
+            static state => ((MainWindowViewModel)state!).ProbeMissingProfileMediaSafely(),
+            this,
+            Timeout.InfiniteTimeSpan,
+            Timeout.InfiniteTimeSpan);
+        var delayMilliseconds = Math.Min(
+            1_000L << Math.Min(_missingProfileMediaProbeFailureCount, 6),
+            60_000L);
+        _missingProfileMediaProbeScheduled = true;
+        _missingProfileMediaProbeTimer.Change(
+            TimeSpan.FromMilliseconds(delayMilliseconds),
+            Timeout.InfiniteTimeSpan);
+    }
+
+    private void ProbeMissingProfileMediaSafely()
+    {
+        try
+        {
+            ProbeMissingProfileMedia();
+        }
+        catch (Exception exception) when (
+            exception is not OutOfMemoryException and not AccessViolationException)
+        {
+            // An availability provider is an optional background signal. A provider defect must
+            // not escape a ThreadPool timer callback and terminate the process; the next bounded
+            // backoff probe remains scheduled by ProbeMissingProfileMedia's finally block.
+        }
+    }
+
+    private void ProbeMissingProfileMedia()
+    {
+        KeyValuePair<string, MediaReference>[] candidates;
+        lock (_profileMediaInvalidationLock)
+        {
+            _missingProfileMediaProbeScheduled = false;
+            if (_isDisposed || _missingProfileMedia.Count == 0)
+            {
+                return;
+            }
+
+            _missingProfileMediaProbeRunning = true;
+            candidates = [.. _missingProfileMedia];
+        }
+
+        var available = new List<KeyValuePair<string, MediaReference>>();
+        try
+        {
+            foreach (var candidate in candidates)
+            {
+                if (IsProfileMediaAvailable(candidate.Value))
+                {
+                    available.Add(candidate);
+                }
+            }
+        }
+        finally
+        {
+            lock (_profileMediaInvalidationLock)
+            {
+                _missingProfileMediaProbeRunning = false;
+                if (!_isDisposed)
+                {
+                    foreach (var candidate in available)
+                    {
+                        if (_missingProfileMedia.TryGetValue(candidate.Key, out var current) &&
+                            Equals(current, candidate.Value))
+                        {
+                            _missingProfileMedia.Remove(candidate.Key);
+                        }
+                    }
+
+                    _missingProfileMediaProbeFailureCount = available.Count == 0
+                        ? Math.Min(_missingProfileMediaProbeFailureCount + 1, 6)
+                        : 0;
+                    ScheduleMissingProfileMediaProbeLocked();
+                }
+            }
+        }
+
+        foreach (var candidate in available)
+        {
+            MediaThumbnailInvalidationHub.InvalidateSource(candidate.Key);
+        }
+    }
+
+    private bool IsProfileMediaAvailable(MediaReference reference)
+    {
+        try
+        {
+            return _previewMedia.IsAvailable(reference);
+        }
+        catch (Exception exception) when (
+            exception is not OutOfMemoryException and not AccessViolationException)
+        {
+            // IsAvailable is a non-throwing advisory boundary. Treat an unexpected provider fault
+            // as unavailable here; foreground acquisition still reports its typed error normally.
+            return false;
+        }
+    }
+
+    internal void NotifyProfileMediaChanged(string path)
+    {
+        path = Path.GetFullPath(path);
+        if (IsProfileMediaPath(path))
+        {
+            MediaThumbnailInvalidationHub.InvalidateSource(path);
+        }
+    }
+
+    private void MediaThumbnail_SourceInvalidated(
+        object? sender,
+        MediaThumbnailSourceInvalidatedEventArgs eventArgs)
+    {
+        _ = sender;
+        lock (_profileMediaInvalidationLock)
+        {
+            if (_isDisposed)
+            {
+                return;
+            }
+
+            if (!_refreshAllProfileCardsForMediaInvalidation &&
+                _pendingProfileMediaInvalidations.Count <
+                    MaximumPendingProfileMediaInvalidations)
+            {
+                _pendingProfileMediaInvalidations.Add(eventArgs.Path);
+            }
+            else
+            {
+                _refreshAllProfileCardsForMediaInvalidation = true;
+                _pendingProfileMediaInvalidations.Clear();
+            }
+
+            _profileMediaInvalidationTimer ??= new Timer(
+                _ => DispatchPendingProfileCardRefreshSafely(),
+                state: null,
+                Timeout.InfiniteTimeSpan,
+                Timeout.InfiniteTimeSpan);
+            _ = _profileMediaInvalidationTimer.Change(
+                TimeSpan.FromMilliseconds(150),
+                Timeout.InfiniteTimeSpan);
+        }
+    }
+
+    private void DispatchPendingProfileCardRefreshSafely()
+    {
+        try
+        {
+            DispatchPendingProfileCardRefresh();
+        }
+        catch (Exception exception) when (
+            exception is not OutOfMemoryException and not AccessViolationException)
+        {
+            // A change notification is advisory. Never let a provider, projection, or dispatch
+            // failure escape a ThreadPool timer callback and terminate the process.
+        }
+    }
+
+    private void DispatchPendingProfileCardRefresh()
+    {
+        string[] invalidatedPaths;
+        bool refreshAll;
+        lock (_profileMediaInvalidationLock)
+        {
+            if (_isDisposed ||
+                (!_refreshAllProfileCardsForMediaInvalidation &&
+                    _pendingProfileMediaInvalidations.Count == 0))
+            {
+                return;
+            }
+
+            invalidatedPaths = [.. _pendingProfileMediaInvalidations];
+            _pendingProfileMediaInvalidations.Clear();
+            refreshAll = _refreshAllProfileCardsForMediaInvalidation;
+            _refreshAllProfileCardsForMediaInvalidation = false;
+        }
+
+        void Refresh()
+        {
+            try
+            {
+                if (!_isDisposed &&
+                    (refreshAll || invalidatedPaths.Any(IsProfileMediaPath)))
+                {
+                    RefreshProfileCards(SelectedProfileCard?.ProfileId);
+                }
+            }
+            catch (Exception exception) when (
+                exception is not OutOfMemoryException and not AccessViolationException)
+            {
+                // The UI synchronization context runs after the timer callback returns, so guard
+                // the posted action independently as well.
+            }
+        }
+
+        if (_uiContext is null || ReferenceEquals(SynchronizationContext.Current, _uiContext))
+        {
+            Refresh();
+        }
+        else
+        {
+            _uiContext.Post(_ => Refresh(), null);
+        }
+    }
+
+    private bool IsProfileMediaPath(string path)
+    {
+        var draft = _wallpaper.Workspace.Draft;
+        var referencedMediaIds = draft.Profiles
+            .Where(profile => profile.MediaId is not null)
+            .Select(profile => profile.MediaId!.Value)
+            .ToHashSet();
+        return draft.MediaCatalog.Any(
+            media => referencedMediaIds.Contains(media.MediaId) &&
+                media.SourceKind == MediaSourceKind.LocalFile &&
+                string.Equals(
+                    media.SourceIdentifier,
+                    path,
+                    StringComparison.OrdinalIgnoreCase));
     }
 
     private void BeginOperation(
@@ -1934,6 +2314,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         StatusMessage = message;
         StatusTone = tone;
         IsStatusOpen = true;
+        _ = Interlocked.Increment(ref _statusAnnouncementVersion);
+        OnPropertyChanged(nameof(StatusAnnouncementVersion));
     }
 
     private void Wallpaper_CapabilitiesChanged(
@@ -2082,6 +2464,19 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         Settings.PropertyChanged -= Settings_PropertyChanged;
         Settings.Recents.CollectionChanged -= Recents_CollectionChanged;
         SourceLibrary.PropertyChanged -= SourceLibrary_PropertyChanged;
+        MediaThumbnailInvalidationHub.SourceInvalidated -= MediaThumbnail_SourceInvalidated;
+        lock (_profileMediaInvalidationLock)
+        {
+            _pendingProfileMediaInvalidations.Clear();
+            _refreshAllProfileCardsForMediaInvalidation = false;
+            _missingProfileMedia.Clear();
+            _profileMediaInvalidationTimer?.Dispose();
+            _profileMediaInvalidationTimer = null;
+            _missingProfileMediaProbeTimer?.Dispose();
+            _missingProfileMediaProbeTimer = null;
+            _missingProfileMediaProbeScheduled = false;
+        }
+
         SourceLibrary.Dispose();
         Settings.Dispose();
         _operationCancellation?.Cancel();
