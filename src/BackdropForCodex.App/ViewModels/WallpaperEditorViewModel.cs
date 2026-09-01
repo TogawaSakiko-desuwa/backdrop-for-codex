@@ -379,8 +379,24 @@ public sealed class WallpaperEditorViewModel : ObservableObject
 
     public void SetFocus(double focusX, double focusY)
     {
-        FocusX = focusX;
-        FocusY = focusY;
+        if (!double.IsFinite(focusX) || !double.IsFinite(focusY))
+        {
+            return;
+        }
+
+        var normalizedX = Math.Clamp(focusX, 0, 1);
+        var normalizedY = Math.Clamp(focusY, 0, 1);
+        if (_focusX.Equals(normalizedX) && _focusY.Equals(normalizedY))
+        {
+            return;
+        }
+
+        RunBatch(
+            () =>
+            {
+                FocusX = normalizedX;
+                FocusY = normalizedY;
+            });
     }
 
     public void ResetFocus() => SetFocus(0.5, 0.5);

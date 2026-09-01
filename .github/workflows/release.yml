@@ -16,7 +16,7 @@ env:
   DOTNET_CLI_TELEMETRY_OPTOUT: "1"
   DOTNET_NOLOGO: "1"
   NUGET_XMLDOC_MODE: skip
-  RELEASE_RUNTIME_PACK_VERSION: "10.0.10"
+  RELEASE_RUNTIME_PACK_VERSION: "10.0.11"
 
 jobs:
   release:
@@ -54,6 +54,42 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Require tag at matching release branch tip
+        run: |
+          $releaseBranch = "release-$($env:RELEASE_VERSION)"
+          $remoteReleaseRef = "refs/remotes/origin/$releaseBranch"
+          git fetch --no-tags origin "+refs/heads/${releaseBranch}:$remoteReleaseRef"
+          if ($LASTEXITCODE -ne 0) {
+            throw "Unable to refresh origin/$releaseBranch before release validation."
+          }
+
+          $tagCommitOutput = @(git rev-parse "$($env:GITHUB_REF_NAME)^{}")
+          if ($LASTEXITCODE -ne 0 -or $tagCommitOutput.Count -ne 1) {
+            throw "Unable to resolve tag $($env:GITHUB_REF_NAME) to exactly one commit."
+          }
+          $tagCommit = $tagCommitOutput[0].Trim()
+
+          $headCommitOutput = @(git rev-parse HEAD)
+          if ($LASTEXITCODE -ne 0 -or $headCommitOutput.Count -ne 1) {
+            throw "Unable to resolve the checked-out release commit."
+          }
+          $headCommit = $headCommitOutput[0].Trim()
+          if ($headCommit -ne $tagCommit) {
+            throw "Checked-out commit $headCommit does not match tag commit $tagCommit."
+          }
+
+          $releaseBranchCommitOutput = @(git rev-parse $remoteReleaseRef)
+          if ($LASTEXITCODE -ne 0 -or $releaseBranchCommitOutput.Count -ne 1) {
+            throw "Unable to resolve origin/$releaseBranch to exactly one commit."
+          }
+          $releaseBranchCommit = $releaseBranchCommitOutput[0].Trim()
+
+          if ($releaseBranchCommit -ne $tagCommit) {
+            throw "Tag $($env:GITHUB_REF_NAME) points to $tagCommit, but origin/$releaseBranch points to $releaseBranchCommit."
+          }
+
+          Write-Output "Verified tag commit $tagCommit at origin/$releaseBranch."
+
       - name: Match tag to project version
         run: |
           [xml]$buildProperties = Get-Content -LiteralPath .\Directory.Build.props -Raw
@@ -71,22 +107,22 @@ jobs:
       - name: Set up .NET
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
-          # The locked SBOM tool targets net8.0; 10.0.302 remains the exact build SDK.
+          # The locked SBOM tool targets net8.0; 10.0.303 remains the exact build SDK.
           dotnet-version: |
             8.0.x
-            10.0.302
+            10.0.303
 
       - name: Pin and verify release SDK
         run: |
           $configuration = Get-Content -LiteralPath .\global.json -Raw | ConvertFrom-Json
-          $configuration.sdk.version = "10.0.302"
+          $configuration.sdk.version = "10.0.303"
           $configuration.sdk.rollForward = "disable"
           $configuration | ConvertTo-Json -Depth 4 |
             Set-Content -LiteralPath .\global.json -Encoding utf8NoBOM
 
           $actualSdk = dotnet --version
-          if ($actualSdk -ne "10.0.302") {
-            throw "Release requires .NET SDK 10.0.302 but resolved $actualSdk."
+          if ($actualSdk -ne "10.0.303") {
+            throw "Release requires .NET SDK 10.0.303 but resolved $actualSdk."
           }
 
           $installedRuntimes = @(dotnet --list-runtimes)
@@ -130,6 +166,16 @@ jobs:
           --no-build
           --no-restore
           --filter "Category=BrowserContract"
+
+      - name: Run startup-readiness contracts in Microsoft Edge
+        env:
+          BACKDROP_FOR_CODEX_RUN_STARTUP_RACE_TESTS: "1"
+        run: >-
+          dotnet test .\tests\BackdropForCodex.Core.Tests\BackdropForCodex.Core.Tests.csproj
+          --configuration Release
+          --no-build
+          --no-restore
+          --filter "FullyQualifiedName~PuppeteerWallpaperSessionStartupReadinessTests"
 
       - name: Publish self-contained single-file app
         run: |

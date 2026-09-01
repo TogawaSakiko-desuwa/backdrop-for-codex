@@ -48,17 +48,50 @@ public sealed class SafeMediaPreviewServiceTests
     }
 
     [Fact]
+    public void Acquire_RegistersMonitoringOnlyWhileTheValidatedLeaseIsHeld()
+    {
+        var provider = new RecordingSourceProvider
+        {
+            ResolvedPathOverride = @"C:\resolved-wallpapers\sky.png",
+        };
+        (string SourceIdentifier, string ValidatedPath)? registration = null;
+        var service = new SafeMediaPreviewService(
+            new WallpaperSourceProviderRegistry([provider]),
+            (sourceIdentifier, validatedPath) =>
+            {
+                Assert.False(provider.LeaseDisposed);
+                registration = (sourceIdentifier, validatedPath);
+            });
+
+        using (service.Acquire(@"C:\wallpapers\sky.png"))
+        {
+            Assert.True(registration.HasValue);
+            var tracked = registration.Value;
+            Assert.Equal(Path.GetFullPath(@"C:\wallpapers\sky.png"), tracked.SourceIdentifier);
+            Assert.Equal(
+                Path.GetFullPath(@"C:\resolved-wallpapers\sky.png"),
+                tracked.ValidatedPath);
+        }
+
+        Assert.True(provider.LeaseDisposed);
+    }
+
+    [Fact]
     public void IsAvailable_MapsReferenceValidationFailureToUnavailable()
     {
         var provider = new RecordingSourceProvider
         {
             Failure = new MediaReferenceValidationException("Invalid reference."),
         };
-        var service = CreateService(provider);
+        var registrationCount = 0;
+        var service = new SafeMediaPreviewService(
+            new WallpaperSourceProviderRegistry([provider]),
+            (_, _) => registrationCount++);
 
         var available = service.IsAvailable(@"C:\wallpapers\sky.png");
 
         Assert.False(available);
+        Assert.Equal(0, registrationCount);
     }
 
     [Fact]
@@ -180,6 +213,8 @@ public sealed class SafeMediaPreviewServiceTests
 
         public Exception? Failure { get; init; }
 
+        public string? ResolvedPathOverride { get; init; }
+
         public MediaFileMetadata Metadata { get; init; } =
             new(MediaFormat.Png, MediaKind.Image, "image/png", 128, 4000, 2000);
 
@@ -207,6 +242,14 @@ public sealed class SafeMediaPreviewServiceTests
             }
 
             var snapshot = reference.Snapshot();
+            if (SourceKind == MediaSourceKind.LocalFile &&
+                ResolvedPathOverride is { } resolvedPath)
+            {
+                snapshot = snapshot with
+                {
+                    SourceIdentifier = Path.GetFullPath(resolvedPath),
+                };
+            }
             var descriptor = new WallpaperSourceDescriptor(
                 SourceKind,
                 snapshot.SourceIdentifier,
@@ -230,6 +273,7 @@ public sealed class SafeMediaPreviewServiceTests
                 new RecordingLease(
                     AcquiredReference,
                     Metadata,
+                    ResolvedPathOverride,
                     () => LeaseDisposed = true));
         }
     }
@@ -237,11 +281,14 @@ public sealed class SafeMediaPreviewServiceTests
     private sealed class RecordingLease(
         MediaReference reference,
         MediaFileMetadata metadata,
+        string? resolvedPath,
         Action onDispose) : IDirectMediaLease
     {
         public MediaReference Reference { get; } = reference;
 
-        public string ResolvedPath => Reference.SourceIdentifier;
+        public string ResolvedPath { get; } = resolvedPath is null
+            ? reference.SourceIdentifier
+            : Path.GetFullPath(resolvedPath);
 
         public LocalFileIdentity FileIdentity { get; } = new(123, 456);
 

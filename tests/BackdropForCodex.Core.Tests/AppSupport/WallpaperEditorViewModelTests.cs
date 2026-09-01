@@ -302,6 +302,45 @@ public sealed class WallpaperEditorViewModelTests
         Assert.Equal(0.5, editor.FocusY);
     }
 
+    [Fact]
+    public void SetFocusPublishesOneAtomicDraftChange()
+    {
+        var editor = new WallpaperEditorViewModel(new FallbackTextProvider());
+        var draftChangedCount = 0;
+        editor.DraftChanged += (_, _) => draftChangedCount++;
+
+        editor.SetFocus(0.25, 0.75);
+
+        Assert.Equal(1, draftChangedCount);
+        Assert.Equal(0.25, editor.FocusX);
+        Assert.Equal(0.75, editor.FocusY);
+    }
+
+    [Fact]
+    public void SetFocusIgnoresNonFiniteCoordinatesWithoutPoisoningTheDraft()
+    {
+        var invalidCoordinates = new (double X, double Y)[]
+        {
+            (double.NaN, 0.25),
+            (0.25, double.PositiveInfinity),
+            (double.NegativeInfinity, 0.75),
+        };
+
+        foreach (var coordinates in invalidCoordinates)
+        {
+            var editor = new WallpaperEditorViewModel(new FallbackTextProvider());
+            editor.SetFocus(0.2, 0.8);
+            var draftChangedCount = 0;
+            editor.DraftChanged += (_, _) => draftChangedCount++;
+
+            editor.SetFocus(coordinates.X, coordinates.Y);
+
+            Assert.Equal(0.2, editor.FocusX);
+            Assert.Equal(0.8, editor.FocusY);
+            Assert.Equal(0, draftChangedCount);
+        }
+    }
+
     private static SettingsV3 CreateSettings(
         string? mediaPath,
         MediaKind mediaKind,

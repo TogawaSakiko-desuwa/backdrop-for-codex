@@ -22,14 +22,14 @@ The product combines a local-first wallpaper workbench with guarded Codex activa
 - Windows 11 x64 and the official x64 Microsoft Store / MSIX Codex app are the supported environment.
 - Users create and switch named background profiles, choose media, adjust crop and readability effects in a live preview, and then apply the selected profile while launching Codex.
 - The application can remain in the notification area after its workbench window closes and provides explicit restore and exit actions.
-- Version 1.5.0 supports local PNG, JPEG, WebP, MP4, and WebM files, plus installed Wallpaper Engine Image and Video projects from Workshop and Local Projects. Scene and Web support is experimental and still being improved.
+- Version 1.5.1 supports local PNG, JPEG, WebP, MP4, and WebM files, plus installed Wallpaper Engine Image and Video projects from Workshop and Local Projects. Scene and Web support is experimental and still being improved.
 - Local video is muted and loops. Wallpaper Engine projects may play audio through Wallpaper Engine; Backdrop does not mute or forward audio into Codex.
 
 ## Capabilities and Constraints
 
 - Local media remains on the device; Backdrop does not run a media HTTP service.
 - Activation stops when Codex, the selected media, or the target page cannot be verified.
-- Image and Video are the stable Wallpaper Engine content types. Scene and Web are experimental in version 1.5.0. Application and unknown project types are not launched.
+- Image and Video are the stable Wallpaper Engine content types. Scene and Web are experimental in version 1.5.1. Application and unknown project types are not launched.
 - Image and Video use validated local media. Experimental Scene and Web support sends only captured pixels into Codex; project HTML, JavaScript, executables, input, and audio are not forwarded.
 - Experimental Scene and Web support requires Wallpaper Engine to be running. Their audio is left to Wallpaper Engine and may be audible; Backdrop transports pixels only.
 - Users can restore the official background at any time. Settings upgrades preserve older settings before migration.

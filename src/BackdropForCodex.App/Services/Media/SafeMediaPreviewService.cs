@@ -36,11 +36,26 @@ public interface ISafeMediaPreviewService
 public sealed class SafeMediaPreviewService : ISafeMediaPreviewService
 {
     private readonly IWallpaperSourceProviderRegistry _sourceRegistry;
+    private readonly Action<string, string> _trackValidatedSource;
 
     public SafeMediaPreviewService(IWallpaperSourceProviderRegistry sourceRegistry)
+        : this(
+            sourceRegistry,
+            static (sourceIdentifier, validatedPath) =>
+                _ = MediaThumbnailInvalidationHub.TrackValidatedSource(
+                    sourceIdentifier,
+                    validatedPath))
+    {
+    }
+
+    internal SafeMediaPreviewService(
+        IWallpaperSourceProviderRegistry sourceRegistry,
+        Action<string, string> trackValidatedSource)
     {
         _sourceRegistry = sourceRegistry ??
             throw new ArgumentNullException(nameof(sourceRegistry));
+        _trackValidatedSource = trackValidatedSource ??
+            throw new ArgumentNullException(nameof(trackValidatedSource));
     }
 
     public IWallpaperSourceProviderRegistry SourceRegistry => _sourceRegistry;
@@ -94,8 +109,9 @@ public sealed class SafeMediaPreviewService : ISafeMediaPreviewService
 
     private async Task<ISafeMediaPreviewLease> AcquireAsync(MediaReference reference)
     {
+        var requestedReference = reference.Snapshot();
         var resolution = await _sourceRegistry
-            .ResolveRequiredAsync(reference)
+            .ResolveRequiredAsync(requestedReference)
             .ConfigureAwait(false);
         var provider = resolution.Descriptor.DeliveryKind switch
         {
@@ -122,6 +138,16 @@ public sealed class SafeMediaPreviewService : ISafeMediaPreviewService
             {
                 throw new WallpaperSourceCapabilityException(
                     "The preview provider acquired a different source identity.");
+            }
+
+            if (requestedReference.SourceKind == MediaSourceKind.LocalFile)
+            {
+                // Monitoring is authorized only while the provider still retains the validated
+                // local-file lease. The hub watches the resolved final path but publishes the
+                // durable source identifier expected by view-model and converter caches.
+                _trackValidatedSource(
+                    requestedReference.SourceIdentifier,
+                    lease.ResolvedPath);
             }
 
             return new SafeMediaPreviewLease(lease);

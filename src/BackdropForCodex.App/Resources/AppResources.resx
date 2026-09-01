@@ -256,6 +256,8 @@
   <data name="Risk_NotAcknowledged" xml:space="preserve"><value>Not confirmed. You will be asked before enhanced launch.</value></data>
   <data name="Risk_Revoked" xml:space="preserve"><value>The acknowledgement has been revoked. You will be asked again before the next enhanced launch.</value></data>
   <data name="Settings_ThemeDescription" xml:space="preserve"><value>Follow Windows by default, including high-contrast mode.</value></data>
+  <data name="Settings_ProtectedPreferencesFuture" xml:space="preserve"><value>App preferences use newer schema version {0} and are read-only. Use Reset app to replace them.</value></data>
+  <data name="Settings_ProtectedPreferencesUnreadable" xml:space="preserve"><value>App preferences could not be safely read and are protected from replacement. Use Reset app to replace them.</value></data>
   <data name="Settings_RiskDescription" xml:space="preserve"><value>Review or revoke the local debugging acknowledgement.</value></data>
   <data name="Settings_PrivacyDescription" xml:space="preserve"><value>Backdrop uses no media HTTP server. Local files stay on this device. Scene and Web projects run only inside Wallpaper Engine and may play sound. Backdrop does not enumerate, mute, or change Wallpaper Engine audio sessions, and sends no audio into Codex. Third-party Web wallpapers may access the network. Backdrop sends only captured pixels into Codex and never exposes Codex content to the wallpaper.</value></data>
   <data name="Settings_RecoveryTitle" xml:space="preserve"><value>Settings recovery</value></data>
@@ -294,6 +296,8 @@
   <data name="Error_PreferencesReadFailed_Recovery" xml:space="preserve"><value>Choose your preferences again to replace the unreadable file.</value></data>
   <data name="Error_PreferencesWriteFailed_Message" xml:space="preserve"><value>Appearance preferences could not be saved.</value></data>
   <data name="Error_PreferencesWriteFailed_Recovery" xml:space="preserve"><value>Check access to your local app-data folder, then retry.</value></data>
+  <data name="Error_PreferencesProtected_Message" xml:space="preserve"><value>Existing appearance preferences are protected and read-only.</value></data>
+  <data name="Error_PreferencesProtected_Recovery" xml:space="preserve"><value>Open Settings and explicitly reset the app before changing preferences.</value></data>
   <data name="Error_PreferencesResetFailed_Message" xml:space="preserve"><value>Appearance preferences could not be reset.</value></data>
   <data name="Error_PreferencesResetFailed_Recovery" xml:space="preserve"><value>Close other instances and retry.</value></data>
   <data name="Error_WallpaperSettingsReadFailed_Message" xml:space="preserve"><value>Wallpaper settings could not be loaded. The existing document was left untouched.</value></data>

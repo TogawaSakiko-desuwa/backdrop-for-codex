@@ -20,6 +20,41 @@ using TextBlock = System.Windows.Controls.TextBlock;
 
 namespace BackdropForCodex.App;
 
+internal sealed class StatusAnnouncementGate
+{
+    private bool _lastIsStatusOpen;
+    private long _lastStatusEventVersion;
+    private string? _lastName;
+    private string? _lastHelpText;
+    private bool _hasAcceptedValue;
+
+    internal bool TryAccept(
+        bool isStatusOpen,
+        long statusEventVersion,
+        string name,
+        string helpText)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+        ArgumentNullException.ThrowIfNull(helpText);
+        if (_hasAcceptedValue &&
+            (isStatusOpen
+                ? _lastIsStatusOpen && _lastStatusEventVersion == statusEventVersion
+                : !_lastIsStatusOpen &&
+                  string.Equals(_lastName, name, StringComparison.Ordinal) &&
+                  string.Equals(_lastHelpText, helpText, StringComparison.Ordinal)))
+        {
+            return false;
+        }
+
+        _lastIsStatusOpen = isStatusOpen;
+        _lastStatusEventVersion = statusEventVersion;
+        _lastName = name;
+        _lastHelpText = helpText;
+        _hasAcceptedValue = true;
+        return true;
+    }
+}
+
 [SuppressMessage(
     "Design",
     "CA1001:Types that own disposable fields should be disposable",
@@ -44,6 +79,7 @@ public partial class MainWindow : FluentWindow
     private readonly IAppTextProvider _text;
     private readonly IDiagnosticReportService _diagnosticReports;
     private readonly ThemeController _themeController;
+    private readonly StatusAnnouncementGate _statusAnnouncementGate = new();
     private bool _allowClose;
     private bool _closeTipInProgress;
     private bool _isLibraryDrawerOpen;
@@ -198,7 +234,8 @@ public partial class MainWindow : FluentWindow
             nameof(MainWindowViewModel.FooterStatusText) or
             nameof(MainWindowViewModel.StatusTitle) or
             nameof(MainWindowViewModel.StatusMessage) or
-            nameof(MainWindowViewModel.IsStatusOpen))
+            nameof(MainWindowViewModel.IsStatusOpen) or
+            nameof(MainWindowViewModel.StatusAnnouncementVersion))
         {
             QueueStatusAnnouncement();
         }
@@ -219,6 +256,18 @@ public partial class MainWindow : FluentWindow
                 {
                     _statusAnnouncementPending = false;
                     if (!IsVisible)
+                    {
+                        return;
+                    }
+
+                    var name = AutomationProperties.GetName(StatusLiveRegion) ?? string.Empty;
+                    var helpText =
+                        AutomationProperties.GetHelpText(StatusLiveRegion) ?? string.Empty;
+                    if (!_statusAnnouncementGate.TryAccept(
+                            _viewModel.IsStatusOpen,
+                            _viewModel.StatusAnnouncementVersion,
+                            name,
+                            helpText))
                     {
                         return;
                     }
@@ -1107,7 +1156,7 @@ public partial class MainWindow : FluentWindow
         _closeTipInProgress = true;
         try
         {
-            if (!_viewModel.HasShownTrayTip)
+            if (_viewModel.ShouldShowFirstCloseTip)
             {
                 var dialog = new ContentDialog(DialogHost)
                 {

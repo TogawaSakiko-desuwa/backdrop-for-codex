@@ -1,6 +1,6 @@
 # 隐私说明
 
-最后更新：2026-08-21
+最后更新：2026-09-01
 
 Backdrop for Codex 是在用户计算机上运行的开源桌面伴侣。本说明描述项目自身的设计；它不覆盖 OpenAI Codex、Microsoft Store、Windows、GitHub 或其他第三方服务的数据处理。
 
@@ -26,7 +26,7 @@ Backdrop for Codex 是在用户计算机上运行的开源桌面伴侣。本说�
 
 设置会保留 Wallpaper Engine 项目最近已知的内容类型和受限显示名称，以便项目暂时缺失时仍能在方案中显示。它不会保存 Steam 根目录、Workshop 派生目录、缩略图路径、进程或窗口标识、渲染器状态或动态流状态。
 
-界面偏好另存于同一用户范围目录下的 `ui-settings.json`，包含主题、托盘提示状态和 Web wallpaper 隐私确认。手动选择的 Wallpaper Engine 安装位置只在当前运行中使用，不写入设置、壁纸方案或诊断导出；重启后程序会重新自动定位。
+界面偏好另存于同一用户范围目录下的 `ui-settings.json`，包含主题、托盘提示状态和 Web wallpaper 隐私确认。原子发布期间，程序会在同目录短暂创建以点号开头的 `.ui-settings.json.transaction-in-progress` 事务哨兵，以及 `.ui-settings.json.pending-recovery`、`.ui-settings.json.pending-rollback` 恢复旁路文件；后两者可能暂存发布或回滚时被替换文档的完整原始字节。若发布中断后留下任一旁路文件，界面偏好会保持只读保护，直到用户显式重置。这些文件不会上传，完整重置会删除它们。手动选择的 Wallpaper Engine 安装位置只在当前运行中使用，不写入设置、壁纸方案或诊断导出；重启后程序会重新自动定位。
 
 首次读取 schema 1 或 2 时，程序先把原文件的精确原始字节分别写入同目录的只读 `settings.v1.backup.json` 或 `settings.v2.backup.json` 并核验一致性，再原子发布迁移后的 schema 3。迁移只转换元数据，不扫描 Steam、Wallpaper Engine 或媒体文件。备份包含旧文件原本持有的同类路径和偏好；“只读”用于防止普通误改，不是对当前用户其他进程的访问控制。损坏、不可读取、超大、迁移失败或备份冲突会进入显式恢复状态，不会以默认值静默覆盖。高于 schema 3 的文件只识别为未来版本只读状态，不会被当前版本自动保存或降级覆盖。
 
@@ -35,6 +35,8 @@ Backdrop for Codex 是在用户计算机上运行的开源桌面伴侣。本说�
 ### 本地媒体与 Wallpaper Engine 项目
 
 程序只在用户选择后访问 PNG、JPEG、WebP、MP4 或 WebM 文件。宿主打开所选本地绝对路径，确认它是受支持本地卷上的普通磁盘文件，并核对格式和大小；图片上限为 512 MiB，视频上限为 8 GiB。网络、目录、设备和解析后落到不受支持卷的路径会被拒绝。文件使用期间保持只读句柄，因此编辑、替换、重命名或删除可能暂时被 Windows 拒绝；关闭或更换壁纸后句柄会释放。
+
+只有在上述只读 lease 已经解析并验证最终本地文件、且句柄仍保持打开时，程序才会为方案缩略图建立非递归目录变更通知。通知只用于让已选择文件的进程内缩略图和“媒体缺失”状态失效；程序不读取无关文件内容，不保存或记录同目录其他文件名，也不上传通知。监视状态最多覆盖 256 个已选择来源和 64 个目录。最初缺失或无法验证的路径不会创建目录监视器，而是在后台退避后通过同一受验证 lease 边界重新探测；窗口模型释放后停止这类缺失文件探测。
 
 打开 Wallpaper Engine 来源库或解析已保存引用时，程序会在本机读取 Steam 与 Wallpaper Engine 的安装元数据，并扫描已安装 Workshop 目录以及 `projects/myprojects`、`projects/backup`。来源库会按需读取项目预览图，并在当前进程内最多缓存 64 项、合计 48 MiB；缓存不写入磁盘，也不会由项目上传。它不浏览在线 Workshop，不自动订阅或下载，也不修改 Steam 配置。Application / Unknown 项目会被过滤并拒绝执行。仓库与 Release 不分发 Wallpaper Engine 二进制、Workshop 内容或用户项目。
 
@@ -48,13 +50,13 @@ Scene / Web 只在 Wallpaper Engine 已经运行且项目窗口通过验证时�
 
 Codex 页面当前的 CSP 不允许从回环 HTTP 地址加载这些图片或视频。本项目不修改、不放宽也不绕过该 CSP。宿主经本机 CDP 把已校验、由 lease 锁定的文件绑定到页面内本项目拥有的隐藏文件输入，页面再生成 CSP 原生允许的 `blob:` URL。页面脚本在这段时间可以访问所选文件的内容，以及浏览器提供的文件名、大小、MIME type 和修改时间；它不能取得宿主传给 CDP 的完整绝对路径。宿主本身仍知道该路径，并按上一节所述保存设置。
 
-媒体 lease 组件不运行 Kestrel、不监听临时 HTTP 端口，也不生成媒体 endpoint 或媒体访问令牌。媒体文件内容不经过 HTTP、项目自有服务或维护者控制的基础设施。详见 [v1.5.0 威胁模型](https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/blob/v1.5.0/THREAT_MODEL.md)。
+媒体 lease 组件不运行 Kestrel、不监听临时 HTTP 端口，也不生成媒体 endpoint 或媒体访问令牌。媒体文件内容不经过 HTTP、项目自有服务或维护者控制的基础设施。详见 [v1.5.1 威胁模型](https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/blob/v1.5.1/THREAT_MODEL.md)。
 
 ### CDP 与 Codex 页面
 
 项目通过回环 CDP 给经过验证的 Codex 主工作窗口添加表现层。程序不解析或保存聊天内容，也不从页面读取媒体的完整本机路径。关闭、更换或失联时会移除本项目创建的媒体节点和样式。CDP 能够控制页面，请只使用本仓库发布的可信构建。
 
-程序会先验证官方包、进程、当前会话、严格 IPv4 回环端点和唯一工作页。原始 DOM、页面 URL 与内部选择器不会被保存或导出。
+程序会先验证官方包、进程、当前会话、严格 IPv4 回环端点和唯一工作页。候选页面的 origin 带 userinfo 或非默认端口时会被拒绝；任何带尚未明确审查的 `initialRoute` 的页面也按辅助页面拒绝。原始 DOM、页面 URL 与内部选择器不会被保存或导出。
 
 ### 日志和诊断信息
 
@@ -92,4 +94,4 @@ Codex 页面当前的 CSP 不允许从回环 HTTP 地址加载这些图片或视
 
 本说明会随数据处理方式的变化更新。版本历史可通过 Git 查看。
 
-隐私或安全问题请按 [v1.5.0 安全策略](https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/blob/v1.5.0/SECURITY.md) 私下报告。
+隐私或安全问题请按 [v1.5.1 安全策略](https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/blob/v1.5.1/SECURITY.md) 私下报告。

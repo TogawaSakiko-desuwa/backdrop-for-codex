@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - "release-*"
   pull_request:
     branches:
       - main
@@ -47,19 +48,19 @@ jobs:
       - name: Set up .NET
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
-          dotnet-version: 10.0.302
+          dotnet-version: 10.0.303
 
       - name: Pin and verify analysis SDK
         run: |
           $configuration = Get-Content -LiteralPath .\global.json -Raw | ConvertFrom-Json
-          $configuration.sdk.version = "10.0.302"
+          $configuration.sdk.version = "10.0.303"
           $configuration.sdk.rollForward = "disable"
           $configuration | ConvertTo-Json -Depth 4 |
             Set-Content -LiteralPath .\global.json -Encoding utf8NoBOM
 
           $actualSdk = dotnet --version
-          if ($actualSdk -ne "10.0.302") {
-            throw "CodeQL build requires .NET SDK 10.0.302 but resolved $actualSdk."
+          if ($actualSdk -ne "10.0.303") {
+            throw "CodeQL build requires .NET SDK 10.0.303 but resolved $actualSdk."
           }
 
       - name: Initialize CodeQL

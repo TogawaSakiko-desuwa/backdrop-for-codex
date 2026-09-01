@@ -19,7 +19,7 @@ dotnet test .\BackdropForCodex.slnx `
   --filter "Category!=Integration&Category!=BrowserContract"
 ```
 
-CI runs the same sequence with .NET SDK `10.0.301` and `10.0.302`. Do not infer that one SDK passed because the other did; record both matrix legs.
+CI runs the same sequence with the .NET SDK `10.0.301` compatibility baseline and the current `10.0.303` security patch. Do not infer that one SDK passed because the other did; record both matrix legs.
 
 Verify the win-x64 self-contained, single-file shape with:
 
@@ -79,7 +79,7 @@ dotnet test .\tests\BackdropForCodex.Core.Tests\BackdropForCodex.Core.Tests.cspr
   --filter "Category=BrowserContract"
 ```
 
-These contracts use the browser's CSSOM, `querySelectorAll`, and computed styles for reviewed positive, near-miss, protected-surface, Glass-downgrade, and Advanced-downgrade behavior. Set `BACKDROP_FOR_CODEX_EDGE_PATH` only when `msedge.exe` is outside the standard installation paths. CI runs this category explicitly on the .NET 10.0.301 Windows leg; a missing Edge executable fails that leg.
+These contracts use the browser's CSSOM, `querySelectorAll`, and computed styles for reviewed positive, near-miss, protected-surface, Glass-downgrade, and Advanced-downgrade behavior. Set `BACKDROP_FOR_CODEX_EDGE_PATH` only when `msedge.exe` is outside the standard installation paths. CI runs this category explicitly on the .NET 10.0.303 Windows leg; a missing Edge executable fails that leg.
 
 ### Current-machine Codex identity
 
@@ -103,7 +103,7 @@ dotnet test .\BackdropForCodex.slnx `
   --filter "FullyQualifiedName~PuppeteerWallpaperSessionStartupReadinessTests"
 ```
 
-Record cold start, unique/zero/multiple targets, CSP-native media loading, generation-scoped cleanup, adaptive Markdown wide-table glass in LTR/RTL at 900, 960, and 1280 px (single glass owner, matching scroller bounds, reachable horizontal scrolling, and no document-level overflow), and version-independent DOM-contract observations that were actually exercised. If Edge, the reviewed package, or the required desktop/session state is absent, list the affected cases as not verified.
+CI and Release run this five-case class explicitly with .NET SDK `10.0.303`; a missing Edge executable fails the step. Record cold start, unique/zero/multiple targets, CSP-native media loading, generation-scoped cleanup, adaptive Markdown wide-table glass in LTR/RTL at 900, 960, and 1280 px (single glass owner, matching scroller bounds, reachable horizontal scrolling, and no document-level overflow), and version-independent DOM-contract observations that were actually exercised. Outside those automated gates, if Edge, the reviewed package, or the required desktop/session state is absent, list the affected cases as not verified.
 
 ### Wallpaper Engine and real dynamic media
 

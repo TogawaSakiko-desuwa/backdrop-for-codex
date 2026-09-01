@@ -9,7 +9,7 @@
     <AssemblyTitle>Backdrop for Codex</AssemblyTitle>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <PublishSingleFile>true</PublishSingleFile>
-    <!-- Avoid an SDK-patch-specific ILLink analyzer package in the shared 10.0.301/302 lock. -->
+    <!-- Avoid an SDK-patch-specific ILLink analyzer package in the shared 10.0.301/303 lock. -->
     <EnableSingleFileAnalyzer>false</EnableSingleFileAnalyzer>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>

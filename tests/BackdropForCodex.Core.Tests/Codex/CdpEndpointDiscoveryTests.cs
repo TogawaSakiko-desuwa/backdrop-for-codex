@@ -28,6 +28,28 @@ public sealed class CdpEndpointDiscoveryTests
     }
 
     [Fact]
+    public async Task DiscoverAsync_VerifiesUnifiedChatGptDesktopPage()
+    {
+        var candidate = Candidate("http://127.0.0.1:9222/");
+        var transport = new StubTransport(new Dictionary<string, string>
+        {
+            ["/json/version"] = VersionJson(9222),
+            ["/json/list"] = TargetJson(9222, "app://-/index.html", "ChatGPT"),
+        });
+        var discovery = new CdpEndpointDiscovery(
+            new StubCandidateSource([candidate]),
+            transport);
+
+        var result = await discovery.DiscoverAsync(CodexSecurityValidatorTests.GetIdentity());
+
+        var endpoint = Assert.Single(result.Endpoints);
+        Assert.Empty(result.Rejections);
+        var target = Assert.Single(endpoint.InjectableTargets);
+        Assert.Equal("ChatGPT", target.Title);
+        Assert.Equal("app://-/index.html", target.Url);
+    }
+
+    [Fact]
     public async Task DiscoverAsync_ExcludesAvatarOverlayFromInjectableTargets()
     {
         var candidate = Candidate("http://127.0.0.1:9222/");
@@ -351,11 +373,14 @@ public sealed class CdpEndpointDiscoveryTests
         }
         """;
 
-    private static string TargetJson(int port, string? pageUrl = null) => $$"""
+    private static string TargetJson(
+        int port,
+        string? pageUrl = null,
+        string pageTitle = "Codex") => $$"""
         [{
           "id":"codex-page",
           "type":"page",
-          "title":"Codex",
+          "title":"{{pageTitle}}",
           "url":"{{pageUrl ?? "file:///C:/Program%20Files/WindowsApps/OpenAI.Codex_26.715.10079.0_x64__2p2nqsd0c76g0/app/index.html"}}",
           "webSocketDebuggerUrl":"ws://127.0.0.1:{{port}}/devtools/page/codex-page"
         }]

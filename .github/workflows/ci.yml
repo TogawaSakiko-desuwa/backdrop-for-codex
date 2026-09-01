@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - "release-*"
   pull_request:
   workflow_dispatch:
 
@@ -76,7 +77,7 @@ jobs:
       matrix:
         sdk:
           - 10.0.301
-          - 10.0.302
+          - 10.0.303
 
     defaults:
       run:
@@ -130,7 +131,7 @@ jobs:
           --filter "Category!=Integration&Category!=BrowserContract"
 
       - name: Run reviewed selector contracts in Microsoft Edge
-        if: matrix.sdk == '10.0.301'
+        if: matrix.sdk == '10.0.303'
         env:
           BACKDROP_FOR_CODEX_RUN_BROWSER_CONTRACTS: "1"
         run: >-
@@ -139,6 +140,17 @@ jobs:
           --no-build
           --no-restore
           --filter "Category=BrowserContract"
+
+      - name: Run startup-readiness contracts in Microsoft Edge
+        if: matrix.sdk == '10.0.303'
+        env:
+          BACKDROP_FOR_CODEX_RUN_STARTUP_RACE_TESTS: "1"
+        run: >-
+          dotnet test .\tests\BackdropForCodex.Core.Tests\BackdropForCodex.Core.Tests.csproj
+          --configuration Release
+          --no-build
+          --no-restore
+          --filter "FullyQualifiedName~PuppeteerWallpaperSessionStartupReadinessTests"
 
       - name: Verify self-contained single-file publish
         run: |

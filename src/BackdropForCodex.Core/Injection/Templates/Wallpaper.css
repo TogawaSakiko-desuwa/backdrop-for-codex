@@ -233,14 +233,17 @@
        * exact current wrappers so the outer main and nested cards stay native.
        */
       __BFC_GLASS_BODY_SELECTOR__ [class~="relative"][class~="isolate"][class~="flex"][class~="max-h-full"][class~="min-h-0"][class~="w-full"][class~="flex-1"]:has([class~="app-shell-left-panel"] [data-settings-panel-slug])
-        > main[data-app-shell-main-surface="default"]
+        main[data-app-shell-main-surface="default"]
         > [class~="relative"][class~="isolate"][class~="flex"][class~="min-h-0"][class~="flex-1"][class~="overflow-hidden"]
         > [data-app-shell-main-content-layout][data-app-shell-right-panel-full-width]
         > [data-app-shell-thread-edge-divider]
         > [class~="relative"][class~="flex"][class~="min-h-0"][class~="flex-1"]
         > [class~="h-full"][class~="min-h-0"][class~="min-w-0"][class~="flex-1"]
         > [class~="h-full"][class~="min-w-0"][class~="overflow-visible"]
-        > div[class~="flex"][class~="h-full"][class~="min-h-0"][class~="flex-col"][class~="electron:overflow-hidden"][class~="electron:bg-token-main-surface-primary"][class~="electron:elevation-prominent"][class~="windows:rounded-tl-lg"] {
+        > div[class~="flex"][class~="h-full"][class~="min-h-0"][class~="flex-col"][class~="electron:overflow-hidden"][class~="electron:elevation-prominent"][class~="windows:rounded-tl-lg"]:is(
+          [class~="electron:bg-token-main-surface-primary"],
+          [class~="electron:bg-surface"]
+        ) {
         background-color: var(--codex-wallpaper-glass) !important;
         -webkit-backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
         backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
@@ -270,7 +273,13 @@
       /* codex-wallpaper-glass:start */
       __BFC_GLASS_BODY_SELECTOR__ aside[data-app-shell-focus-area="right-panel"]
         > div:has([role="tabpanel"][data-app-shell-tab-panel-controller="right"])
-        > div[class~="bg-token-main-surface-primary"] {
+        > div[class~="bg-token-main-surface-primary"],
+      __BFC_GLASS_BODY_SELECTOR__ aside[data-app-shell-focus-area="right-panel"]
+        > div[class~="absolute"][class~="inset-x-0"][class~="bottom-0"][class~="min-h-0"][class~="min-w-0"][class~="overflow-visible"]
+        > div[class~="absolute"][class~="inset-0"][class~="min-h-0"][class~="min-w-0"][class~="overflow-hidden"]
+        > div[class~="absolute"][class~="top-0"][class~="bottom-0"][class~="left-0"][class~="min-w-0"][class~="bg-[var(--app-shell-panel-background,var(--color-surface))]"]:has(
+          [data-app-shell-tabs="true"] [role="tabpanel"][data-app-shell-tab-panel-controller="right"]
+        ) {
         background-color: var(--codex-wallpaper-glass) !important;
         -webkit-backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
         backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
@@ -284,7 +293,11 @@
        */
       __BFC_GLASS_BODY_SELECTOR__ aside[data-app-shell-focus-area="right-panel"]:not(:has([data-app-shell-tab-panel-controller]))
         > div
-        > div[class~="bg-token-main-surface-primary"]:has([data-app-shell-tabs="true"]) {
+        > div[class~="bg-token-main-surface-primary"]:has([data-app-shell-tabs="true"]),
+      __BFC_GLASS_BODY_SELECTOR__ aside[data-app-shell-focus-area="right-panel"]:not(:has([data-app-shell-tab-panel-controller]))
+        > div[class~="absolute"][class~="inset-x-0"][class~="bottom-0"][class~="min-h-0"][class~="min-w-0"][class~="overflow-visible"]
+        > div[class~="absolute"][class~="inset-0"][class~="min-h-0"][class~="min-w-0"][class~="overflow-hidden"]
+        > div[class~="absolute"][class~="top-0"][class~="bottom-0"][class~="left-0"][class~="min-w-0"][class~="bg-[var(--app-shell-panel-background,var(--color-surface))]"]:has([data-app-shell-tabs="true"]) {
         background-color: var(--codex-wallpaper-glass) !important;
         -webkit-backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
         backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
@@ -298,10 +311,40 @@
         background-color: transparent !important;
       }
       __BFC_GLASS_BODY_SELECTOR__ aside[data-app-shell-focus-area="right-panel"]
+        [data-app-shell-tabs="true"][class~="bg-[var(--app-shell-panel-background,var(--color-surface))]"]:has([role="tabpanel"][data-app-shell-tab-panel-controller="right"]),
+      __BFC_GLASS_BODY_SELECTOR__ aside[data-app-shell-focus-area="right-panel"]
+        [data-app-shell-tabs="true"][class~="bg-[var(--app-shell-panel-background,var(--color-surface))]"]:has([role="tabpanel"][data-app-shell-tab-panel-controller="right"])
+        > [class~="bg-[var(--app-shell-panel-background,var(--color-surface))]"]:has([data-app-shell-tab-strip-controller="right"]) {
+        background-color: transparent !important;
+      }
+      __BFC_GLASS_BODY_SELECTOR__ aside[data-app-shell-focus-area="right-panel"]
         [data-app-shell-tabs="true"][class~="bg-token-main-surface-primary"]:not(:has([data-app-shell-tab-panel-controller])),
       __BFC_GLASS_BODY_SELECTOR__ aside[data-app-shell-focus-area="right-panel"]
         [data-app-shell-tabs="true"]:not(:has([data-app-shell-tab-panel-controller]))
         [class~="bg-token-main-surface-primary"] {
+        background-color: transparent !important;
+      }
+      __BFC_GLASS_BODY_SELECTOR__ aside[data-app-shell-focus-area="right-panel"]
+        [data-app-shell-tabs="true"][class~="bg-[var(--app-shell-panel-background,var(--color-surface))]"]:not(:has([data-app-shell-tab-panel-controller])),
+      __BFC_GLASS_BODY_SELECTOR__ aside[data-app-shell-focus-area="right-panel"]
+        [data-app-shell-tabs="true"]:not(:has([data-app-shell-tab-panel-controller]))
+        [class~="bg-[var(--app-shell-panel-background,var(--color-surface))]"] {
+        background-color: transparent !important;
+      }
+      /*
+       * Current launcher empty states use a unique full-height bg-surface root
+       * and sticky group. The same launcher is reused by Browser's new-tab
+       * panel, so match its audited structure rather than controller presence;
+       * action cards and ordinary active-tool surfaces remain native.
+       */
+      __BFC_GLASS_BODY_SELECTOR__ aside[data-app-shell-focus-area="right-panel"]
+        [data-app-shell-tabs="true"]
+        [class~="flex"][class~="h-full"][class~="min-h-0"][class~="flex-col"][class~="overflow-x-hidden"][class~="overflow-y-auto"][class~="bg-surface"][class~="p-2"][class~="select-none"],
+      __BFC_GLASS_BODY_SELECTOR__ aside[data-app-shell-focus-area="right-panel"]
+        [data-app-shell-tabs="true"]
+        [class~="flex"][class~="h-full"][class~="min-h-0"][class~="flex-col"][class~="overflow-x-hidden"][class~="overflow-y-auto"][class~="bg-surface"][class~="p-2"][class~="select-none"]
+        > [class~="flex"][class~="w-full"][class~="flex-1"][class~="flex-col"][class~="justify-center"]
+        > [class~="sticky"][class~="top-0"][class~="z-10"][class~="flex"][class~="flex-col"][class~="gap-6"][class~="bg-surface"] {
         background-color: transparent !important;
       }
       /* codex-wallpaper-glass:end */
@@ -361,7 +404,11 @@
         background-image: none !important;
       }
       __BFC_ADVANCED_BODY_SELECTOR__ main .thread-scroll-container
-        [class~="bg-gradient-to-t"][class~="from-token-main-surface-primary"][class~="via-token-main-surface-primary"] {
+        [class~="bg-gradient-to-t"][class~="from-token-main-surface-primary"][class~="via-token-main-surface-primary"],
+      __BFC_ADVANCED_BODY_SELECTOR__ main
+        .thread-scroll-container:has(> [data-thread-scroll-footer="true"])
+        [class~="sticky"][class~="bottom-0"][class~="z-10"][class~="w-full"][class~="mt-auto"][class~="shrink-0"]
+        > [aria-hidden="true"][class~="pointer-events-none"][class~="absolute"][class~="inset-x-0"][class~="bottom-0"][class~="z-0"][class~="h-full"][class~="bg-gradient-to-t"][class~="from-surface"][class~="via-surface"] {
         background: transparent !important;
       }
       /*

@@ -264,7 +264,7 @@ public sealed class WallpaperEngineDynamicRuntimeTests
     }
 
     [Fact]
-    public async Task DisposeAggregatesIndependentCleanupFailuresAndRetriesOnlyRetainedOwners()
+    public async Task DisposeRetainsTheOwnedResourceUntilInnerCleanupCompletesAndRetriesBothBoundaries()
     {
         var inner = new FakeActivationFactory { DisposeFailures = 1 };
         var owned = new FakeOwnedResource { DisposeFailures = 1 };
@@ -275,11 +275,13 @@ public sealed class WallpaperEngineDynamicRuntimeTests
             inner,
             ownedResource: owned);
 
-        var failure = await Assert.ThrowsAsync<AggregateException>(
-            () => runtime.DisposeAsync().AsTask());
-
-        Assert.Equal(2, failure.InnerExceptions.Count);
+        await Assert.ThrowsAsync<IOException>(() => runtime.DisposeAsync().AsTask());
         Assert.Equal(1, inner.DisposeCount);
+        Assert.Equal(0, owned.DisposeCount);
+
+        await Assert.ThrowsAsync<IOException>(() => runtime.DisposeAsync().AsTask());
+
+        Assert.Equal(2, inner.DisposeCount);
         Assert.Equal(1, owned.DisposeCount);
 
         await runtime.DisposeAsync();

@@ -73,14 +73,16 @@ public static class CdpTargetClassifier
 
         if (string.Equals(uri.Scheme, "app", StringComparison.OrdinalIgnoreCase))
         {
-            return (string.Equals(uri.Host, "codex", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(uri.Host, "-", StringComparison.Ordinal)) &&
+            return HasUnambiguousAuthority(uri) &&
+                   (string.Equals(uri.Host, "codex", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(uri.Host, "-", StringComparison.Ordinal)) &&
                    IsMainApplicationPath(uri.AbsolutePath);
         }
 
         if (string.Equals(uri.Scheme, "codex", StringComparison.OrdinalIgnoreCase))
         {
-            return string.Equals(uri.Host, "desktop", StringComparison.OrdinalIgnoreCase) &&
+            return HasUnambiguousAuthority(uri) &&
+                   string.Equals(uri.Host, "desktop", StringComparison.OrdinalIgnoreCase) &&
                    IsMainApplicationPath(uri.AbsolutePath);
         }
 
@@ -89,7 +91,8 @@ public static class CdpTargetClassifier
             return false;
         }
 
-        if (!identity.AllowedRemotePageHosts.Contains(uri.IdnHost))
+        if (!HasUnambiguousAuthority(uri) ||
+            !identity.AllowedRemotePageHosts.Contains(uri.IdnHost))
         {
             return false;
         }
@@ -155,6 +158,9 @@ public static class CdpTargetClassifier
     private static bool IsWithinRouteBoundary(string path, string boundary) =>
         string.Equals(path, boundary, StringComparison.OrdinalIgnoreCase) ||
         path.StartsWith($"{boundary}/", StringComparison.OrdinalIgnoreCase);
+
+    private static bool HasUnambiguousAuthority(Uri uri) =>
+        uri.IsDefaultPort && uri.UserInfo.Length == 0;
 
     private static bool ContainsNonWorkspacePathSegment(string path)
     {
@@ -223,19 +229,10 @@ public static class CdpTargetClassifier
     internal static bool IsAuxiliaryApplicationPage(Uri uri)
     {
         ArgumentNullException.ThrowIfNull(uri);
-        if (!string.Equals(uri.Scheme, Uri.UriSchemeFile, StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(uri.Scheme, "app", StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(uri.Scheme, "codex", StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
         var query = uri.Query.TrimStart('?');
         foreach (var parameter in query.Split('&', StringSplitOptions.RemoveEmptyEntries))
         {
-            var separator = parameter.IndexOf('=');
-            var encodedName = separator < 0 ? parameter : parameter[..separator];
-            var encodedValue = separator < 0 ? string.Empty : parameter[(separator + 1)..];
+            var encodedName = parameter.Split('=', 2)[0];
             string name;
             try
             {
@@ -251,21 +248,10 @@ public static class CdpTargetClassifier
                 continue;
             }
 
-            try
-            {
-                if (string.Equals(
-                        Uri.UnescapeDataString(encodedValue).TrimEnd('/'),
-                        "/avatar-overlay",
-                        StringComparison.OrdinalIgnoreCase))
-                {
-                    return true;
-                }
-            }
-            catch (UriFormatException)
-            {
-                // A malformed initial route is never evidence for the main work page.
-                return true;
-            }
+            // No initialRoute value has been reviewed as the primary work page. Treat every such
+            // target, including malformed values, as auxiliary until an observed route receives
+            // an explicit allowlist entry.
+            return true;
         }
 
         return false;

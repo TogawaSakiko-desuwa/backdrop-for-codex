@@ -2,6 +2,25 @@
 
 本项目的所有重要变更记录在此文件中。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
+## [1.5.1] - 2026-09-01
+
+### Changed
+
+- 界面偏好改为可验证的原子发布与显式恢复状态；损坏、未来版本、并发修改或中断事务不会再被默认值静默覆盖，设置页会保持只读并引导完整重置。
+- 方案缩略图使用受验证本地文件 lease 和有界目录通知刷新；最初缺失的已选媒体会在后台退避重试，文件恢复、替换或同尺寸同时间戳变化后可正确更新。
+- CI、CodeQL 与正式发布门禁更新到 .NET SDK `10.0.303` 和 runtime `10.0.11`，并要求发布 tag 精确指向匹配版本的远端 release 分支顶端。
+
+### Fixed
+
+- 适配 Codex `26.825` 的当前应用壳结构，恢复右侧 Browser/启动器、设置画布、对话底部渐变和相关顶栏的玻璃效果；启动器操作项与实际浏览器内容继续保留原生表面。
+- 修复 Wallpaper Engine 动态窗口启动或回滚失败时可能遗失窗口清理所有权，以及窗口尺寸/放置检查未完整收敛的问题。
+- 修复缩略图缓存可能在源文件变化后继续显示旧图、方案媒体重新出现后状态不刷新，以及部分 WPF 初始化在共享 STA 上同步等待的问题。
+
+### Security
+
+- CDP 目标分类改为精确校验 origin、authority 与受审核路由；拒绝 userinfo、非默认端口、辅助 `initialRoute` 页面和未识别路径。
+- 偏好发布通过固定事务哨兵、恢复旁路和精确字节状态校验保持失败关闭；完整重置会清理这些应用自有恢复文件。
+
 ## [1.5.0] - 2026-08-22
 
 ### Added
@@ -272,6 +291,7 @@
 - 复验完整 MSIX 包名、激活 PID、进程启动时间、Windows 会话和监听器所有权；媒体服务保持已校验文件的只读句柄。
 - 明确禁止 CSP bypass；关闭、更换或 lease 到期时移除媒体 `src`、撤销 `blob:` URL，并仅删除带有本项目 owner/generation 的节点和样式。
 
+[1.5.1]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.5.0...v1.5.1
 [1.5.0]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.4.5...v1.5.0
 [1.4.5]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.4.4...v1.4.5
 [1.4.4]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.4.3...v1.4.4

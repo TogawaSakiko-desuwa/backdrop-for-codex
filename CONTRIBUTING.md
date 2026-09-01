@@ -11,7 +11,7 @@
 
 ## 开发环境
 
-需要 Windows 11 x64、Git 和 .NET SDK `10.0.301` 或同一 feature band 的更新补丁。`global.json` 以 `10.0.301` 为下限并使用 `latestPatch`；CI 必须同时保持 `10.0.301`、`10.0.302` 通过，正式发布固定使用 `10.0.302`。Release job 还安装 .NET 8 SDK/runtime 来托管锁定的 `Microsoft.Sbom.DotNetTool`；这不会改变应用的 SDK 锁定版本。在实际 Codex 上进行手工兼容性验证时，还需要已安装的官方 Store/MSIX x64 Codex；验证过程不得读取或公开真实账号的聊天数据。
+需要 Windows 11 x64、Git 和 .NET SDK `10.0.301` 或同一 feature band 的更新补丁。`global.json` 以 `10.0.301` 为兼容下限并使用 `latestPatch`，因此安装了 `10.0.303` 的开发机仍会选用更新补丁；CI 以 `10.0.303` 作为当前安全补丁门禁，正式发布也固定使用 `10.0.303` 和 .NET runtime `10.0.11`。Release job 还安装 .NET 8 SDK/runtime 来托管锁定的 `Microsoft.Sbom.DotNetTool`；这不会改变应用的 SDK 锁定版本。在实际 Codex 上进行手工兼容性验证时，还需要已安装的官方 Store/MSIX x64 Codex；验证过程不得读取或公开真实账号的聊天数据。
 
 ```powershell
 git clone <your-fork-url>

@@ -190,10 +190,20 @@ public sealed class ReviewedSelectorBrowserContractTests
             AssertGlass(snapshots, "left-panel-lookalike");
             AssertGlass(snapshots, "right-panel-glass-shell");
             AssertGlass(snapshots, "launcher-glass-shell");
+            AssertGlass(snapshots, "current-right-panel-glass-shell");
+            AssertGlass(snapshots, "current-launcher-glass-shell");
             AssertGlass(snapshots, "top-app-bar");
 
             AssertClear(snapshots, "current-tabs-root");
             AssertClear(snapshots, "current-toolbar");
+            AssertClear(snapshots, "current-right-tabs-root");
+            AssertClear(snapshots, "current-right-toolbar");
+            AssertClear(snapshots, "current-launcher-tabs-root");
+            AssertClear(snapshots, "current-launcher-toolbar");
+            AssertClear(snapshots, "current-launcher-empty-scroll-surface");
+            AssertClear(snapshots, "current-launcher-empty-sticky-surface");
+            AssertClear(snapshots, "current-browser-launcher-empty-scroll-surface");
+            AssertClear(snapshots, "current-browser-launcher-empty-sticky-surface");
             AssertClear(snapshots, "file-layout-shell");
             AssertClear(snapshots, "markdown-shell-legacy");
             AssertClear(snapshots, "markdown-shell-module");
@@ -215,8 +225,13 @@ public sealed class ReviewedSelectorBrowserContractTests
                 "right-panel-near-miss",
                 "current-selected-tab",
                 "launcher-review-card",
+                "current-launcher-review-card",
+                "current-browser-launcher-review-card",
                 "left-launcher-glass-shell",
                 "wrong-controller-glass-shell",
+                "current-right-content",
+                "current-active-browser-content-surface",
+                "current-right-panel-wrong-controller",
                 "populated-editor-surface",
                 "wrong-orientation-topbar",
                 "css-module-header-without-data-markers");
@@ -235,6 +250,12 @@ public sealed class ReviewedSelectorBrowserContractTests
             Assert.True(cssom.RuleCount > 20);
             Assert.Contains("right-panel-glass-shell", cssom.MatchedFixtureIds);
             Assert.Contains("launcher-glass-shell", cssom.MatchedFixtureIds);
+            Assert.Contains("current-right-panel-glass-shell", cssom.MatchedFixtureIds);
+            Assert.Contains("current-launcher-glass-shell", cssom.MatchedFixtureIds);
+            Assert.Contains("current-launcher-empty-scroll-surface", cssom.MatchedFixtureIds);
+            Assert.Contains("current-launcher-empty-sticky-surface", cssom.MatchedFixtureIds);
+            Assert.Contains("current-browser-launcher-empty-scroll-surface", cssom.MatchedFixtureIds);
+            Assert.Contains("current-browser-launcher-empty-sticky-surface", cssom.MatchedFixtureIds);
             Assert.Contains("top-app-bar", cssom.MatchedFixtureIds);
         });
     }
@@ -251,7 +272,17 @@ public sealed class ReviewedSelectorBrowserContractTests
             var snapshots = await ReadSnapshotsAsync(page);
             Assert.Equal("none", snapshots["main-content-top-fade"].BackgroundImage);
             Assert.Equal("none", snapshots["composer-surface-fade"].BackgroundImage);
+            Assert.Equal("none", snapshots["current-thread-bottom-fade"].BackgroundImage);
             Assert.Equal("none", snapshots["changed-files-composer-fade"].BackgroundImage);
+            Assert.NotEqual(
+                "none",
+                snapshots["current-thread-bottom-fade-outside-thread"].BackgroundImage);
+            Assert.NotEqual(
+                "none",
+                snapshots["current-thread-bottom-fade-without-footer"].BackgroundImage);
+            Assert.NotEqual(
+                "none",
+                snapshots["current-thread-bottom-fade-other-token"].BackgroundImage);
             AssertGlass(snapshots, "fallback-assistant-message");
             AssertGlass(snapshots, "annotated-assistant-message");
             AssertGlass(snapshots, "codex-current-regular-assistant");
@@ -279,6 +310,7 @@ public sealed class ReviewedSelectorBrowserContractTests
                 "wide-table-outside-assistant",
                 "codex-current-wide-table-outside-assistant",
                 "ordinary-table",
+                "current-thread-bottom-chrome",
                 "composer-surface-chrome");
             Assert.NotEqual(
                 NativeBackground,
@@ -290,6 +322,7 @@ public sealed class ReviewedSelectorBrowserContractTests
             Assert.Contains("wide-fallback-assistant", cssom.MatchedFixtureIds);
             Assert.Contains("codex-current-regular-assistant", cssom.MatchedFixtureIds);
             Assert.Contains("codex-current-wide-table-message", cssom.MatchedFixtureIds);
+            Assert.Contains("current-thread-bottom-fade", cssom.MatchedFixtureIds);
             Assert.Contains("changed-files-composer-fade", cssom.MatchedFixtureIds);
         });
     }
@@ -315,6 +348,7 @@ public sealed class ReviewedSelectorBrowserContractTests
             AssertClear(snapshots, "pull-request-detail-section");
             AssertClear(snapshots, "pull-request-detail-root");
             AssertGlass(snapshots, "settings-content-canvas");
+            AssertGlass(snapshots, "settings-current-content-canvas");
             AssertClearWithAfter(snapshots, "keyboard-search-sticky");
             Assert.Equal("none", snapshots["changed-files-route-fade"].BackgroundImage);
 
@@ -336,7 +370,10 @@ public sealed class ReviewedSelectorBrowserContractTests
                 "settings-permissions-card",
                 "settings-general-card",
                 "settings-browser-canvas",
+                "settings-current-browser-canvas",
                 "settings-canvas-without-data-anchor",
+                "settings-current-card",
+                "settings-current-canvas-without-data-anchor",
                 "keyboard-search-input",
                 "keyboard-shortcut-row",
                 "keyboard-sticky-non-text-input",
@@ -349,6 +386,7 @@ public sealed class ReviewedSelectorBrowserContractTests
             Assert.Contains("sites-route-root", cssom.MatchedFixtureIds);
             Assert.Contains("pull-request-detail-shell", cssom.MatchedFixtureIds);
             Assert.Contains("settings-content-canvas", cssom.MatchedFixtureIds);
+            Assert.Contains("settings-current-content-canvas", cssom.MatchedFixtureIds);
         });
     }
 
@@ -799,6 +837,85 @@ public sealed class ReviewedSelectorBrowserContractTests
               </div></div>
             </aside>
 
+            <aside data-app-shell-focus-area="right-panel">
+              <div class="absolute inset-x-0 bottom-0 min-h-0 min-w-0 overflow-visible top-0">
+                <div class="absolute inset-0 min-h-0 min-w-0 overflow-hidden">
+                  <div class="absolute top-0 bottom-0 left-0 min-w-0 bg-[var(--app-shell-panel-background,var(--color-surface))]"
+                       data-fixture-id="current-right-panel-glass-shell">
+                    <div class="isolate flex h-full min-h-0 flex-col bg-[var(--app-shell-panel-background,var(--color-surface))]"
+                         data-app-shell-tabs="true"
+                         data-fixture-id="current-right-tabs-root">
+                      <div class="bg-[var(--app-shell-panel-background,var(--color-surface))]"
+                           data-fixture-id="current-right-toolbar">
+                        <div data-app-shell-tab-strip-controller="right"></div>
+                      </div>
+                       <div role="tabpanel"
+                            data-app-shell-tab-panel-controller="right">
+                         <div class="bg-[var(--app-shell-panel-background,var(--color-surface))]"
+                              data-fixture-id="current-right-content">
+                           <div class="bg-surface"
+                                data-fixture-id="current-active-browser-content-surface"></div>
+                         </div>
+                         <div class="flex h-full min-h-0 flex-col overflow-x-hidden overflow-y-auto bg-surface p-2 select-none"
+                              data-fixture-id="current-browser-launcher-empty-scroll-surface">
+                           <div class="flex w-full flex-1 flex-col justify-center">
+                             <div class="sticky top-0 z-10 flex flex-col gap-6 bg-surface"
+                                  data-fixture-id="current-browser-launcher-empty-sticky-surface">
+                               <button class="bg-primary-soft-alpha"
+                                       data-fixture-id="current-browser-launcher-review-card"></button>
+                             </div>
+                           </div>
+                         </div>
+                       </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </aside>
+
+            <aside data-app-shell-focus-area="right-panel">
+              <div class="absolute inset-x-0 bottom-0 min-h-0 min-w-0 overflow-visible top-0">
+                <div class="absolute inset-0 min-h-0 min-w-0 overflow-hidden">
+                  <div class="absolute top-0 bottom-0 left-0 min-w-0 bg-[var(--app-shell-panel-background,var(--color-surface))]"
+                       data-fixture-id="current-launcher-glass-shell">
+                    <div class="isolate flex h-full min-h-0 flex-col bg-[var(--app-shell-panel-background,var(--color-surface))]"
+                         data-app-shell-tabs="true"
+                         data-fixture-id="current-launcher-tabs-root">
+                       <div class="bg-[var(--app-shell-panel-background,var(--color-surface))]"
+                            data-fixture-id="current-launcher-toolbar"></div>
+                       <div class="relative min-h-0 flex-1">
+                         <div class="flex h-full min-h-0 flex-col overflow-x-hidden overflow-y-auto bg-surface p-2 select-none"
+                              data-fixture-id="current-launcher-empty-scroll-surface">
+                           <div class="flex w-full flex-1 flex-col justify-center">
+                             <div class="sticky top-0 z-10 flex flex-col gap-6 bg-surface"
+                                  data-fixture-id="current-launcher-empty-sticky-surface">
+                               <button class="bg-primary-soft-alpha"
+                                       data-fixture-id="current-launcher-review-card"></button>
+                             </div>
+                           </div>
+                         </div>
+                       </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </aside>
+
+            <aside data-app-shell-focus-area="right-panel">
+              <div class="absolute inset-x-0 bottom-0 min-h-0 min-w-0 overflow-visible top-0">
+                <div class="absolute inset-0 min-h-0 min-w-0 overflow-hidden">
+                  <div class="absolute top-0 bottom-0 left-0 min-w-0 bg-[var(--app-shell-panel-background,var(--color-surface))]"
+                       data-fixture-id="current-right-panel-wrong-controller">
+                    <div class="isolate flex h-full min-h-0 flex-col bg-[var(--app-shell-panel-background,var(--color-surface))]"
+                         data-app-shell-tabs="true">
+                      <div role="tabpanel"
+                           data-app-shell-tab-panel-controller="left"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </aside>
+
             <div data-browser-sidebar-webview-host-root
                  data-fixture-id="browser-host-current"></div>
             <div data-browser-sidebar-webview-host-root
@@ -828,6 +945,36 @@ public sealed class ReviewedSelectorBrowserContractTests
                 <div class="bg-gradient-to-t from-token-main-surface-primary via-token-main-surface-primary"
                      data-native-fade
                      data-fixture-id="composer-surface-fade"></div>
+                <div class="flex min-h-full flex-col">
+                  <div class="sticky bottom-0 z-10 mt-auto w-full shrink-0">
+                    <div aria-hidden="true"
+                         class="pointer-events-none absolute inset-x-0 bottom-0 z-0 h-full bg-gradient-to-t from-surface via-surface extension:from-surface-secondary extension:via-surface-secondary"
+                         data-native-fade
+                         data-fixture-id="current-thread-bottom-fade"></div>
+                  </div>
+                </div>
+                <div data-thread-scroll-footer="true"
+                     data-fixture-id="current-thread-bottom-chrome"></div>
+                <div class="sticky bottom-0 z-10 mt-auto w-full shrink-0">
+                  <div aria-hidden="true"
+                       class="pointer-events-none absolute inset-x-0 bottom-0 z-0 h-full bg-gradient-to-t from-accent via-accent"
+                       data-native-fade
+                       data-fixture-id="current-thread-bottom-fade-other-token"></div>
+                </div>
+              </div>
+              <div class="thread-scroll-container">
+                <div class="sticky bottom-0 z-10 mt-auto w-full shrink-0">
+                  <div aria-hidden="true"
+                       class="pointer-events-none absolute inset-x-0 bottom-0 z-0 h-full bg-gradient-to-t from-surface via-surface extension:from-surface-secondary extension:via-surface-secondary"
+                       data-native-fade
+                       data-fixture-id="current-thread-bottom-fade-without-footer"></div>
+                </div>
+              </div>
+              <div class="sticky bottom-0 z-10 mt-auto w-full shrink-0">
+                <div aria-hidden="true"
+                     class="pointer-events-none absolute inset-x-0 bottom-0 z-0 h-full bg-gradient-to-t from-surface via-surface extension:from-surface-secondary extension:via-surface-secondary"
+                     data-native-fade
+                     data-fixture-id="current-thread-bottom-fade-outside-thread"></div>
               </div>
               <div data-codex-composer-root>
                 <div data-above-composer-portal>
@@ -1113,6 +1260,54 @@ public sealed class ReviewedSelectorBrowserContractTests
               </main>
             </div>
             <div class="relative isolate flex max-h-full min-h-0 w-full flex-1">
+              <aside class="app-shell-left-panel">
+                <button data-settings-panel-slug="browser-use"></button>
+              </aside>
+              <div>
+                <main data-app-shell-main-surface="browser">
+                  <div class="relative isolate flex min-h-0 flex-1 overflow-hidden">
+                    <div data-app-shell-main-content-layout data-app-shell-right-panel-full-width>
+                      <div data-app-shell-thread-edge-divider>
+                        <div class="relative flex min-h-0 flex-1">
+                          <div class="h-full min-h-0 min-w-0 flex-1">
+                            <div class="h-full min-w-0 overflow-visible">
+                              <div class="flex h-full min-h-0 flex-col electron:overflow-hidden electron:bg-surface electron:elevation-prominent windows:rounded-tl-lg"
+                                   data-fixture-id="settings-current-browser-canvas"></div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </main>
+              </div>
+            </div>
+            <div class="relative isolate flex max-h-full min-h-0 w-full flex-1">
+              <aside class="app-shell-left-panel">
+                <button data-settings-panel-slug="browser-use"></button>
+              </aside>
+              <div>
+                <main data-app-shell-main-surface="default">
+                  <div class="relative isolate flex min-h-0 flex-1 overflow-hidden">
+                    <div data-app-shell-main-content-layout data-app-shell-right-panel-full-width>
+                      <div data-app-shell-thread-edge-divider>
+                        <div class="relative flex min-h-0 flex-1">
+                          <div class="h-full min-h-0 min-w-0 flex-1">
+                            <div class="h-full min-w-0 overflow-visible">
+                              <div class="flex h-full min-h-0 flex-col electron:overflow-hidden electron:bg-surface electron:elevation-prominent windows:rounded-tl-lg"
+                                   data-fixture-id="settings-current-content-canvas">
+                                <section data-fixture-id="settings-current-card"></section>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </main>
+              </div>
+            </div>
+            <div class="relative isolate flex max-h-full min-h-0 w-full flex-1">
               <aside class="app-shell-left-panel"><button data-settings-panel-slug="general"></button></aside>
               <main data-app-shell-main-surface="browser">
                 <div class="relative isolate flex min-h-0 flex-1 overflow-hidden">
@@ -1136,6 +1331,21 @@ public sealed class ReviewedSelectorBrowserContractTests
                       <div class="h-full min-h-0 min-w-0 flex-1"><div class="h-full min-w-0 overflow-visible">
                         <div class="flex h-full min-h-0 flex-col electron:overflow-hidden electron:bg-token-main-surface-primary electron:elevation-prominent windows:rounded-tl-lg"
                              data-fixture-id="settings-canvas-without-data-anchor"></div>
+                      </div></div>
+                    </div></div>
+                  </div>
+                </div>
+              </main>
+            </div>
+            <div class="relative isolate flex max-h-full min-h-0 w-full flex-1">
+              <aside class="app-shell-left-panel"></aside>
+              <main data-app-shell-main-surface="default">
+                <div class="relative isolate flex min-h-0 flex-1 overflow-hidden">
+                  <div data-app-shell-main-content-layout data-app-shell-right-panel-full-width>
+                    <div data-app-shell-thread-edge-divider><div class="relative flex min-h-0 flex-1">
+                      <div class="h-full min-h-0 min-w-0 flex-1"><div class="h-full min-w-0 overflow-visible">
+                        <div class="flex h-full min-h-0 flex-col electron:overflow-hidden electron:bg-surface electron:elevation-prominent windows:rounded-tl-lg"
+                             data-fixture-id="settings-current-canvas-without-data-anchor"></div>
                       </div></div>
                     </div></div>
                   </div>
