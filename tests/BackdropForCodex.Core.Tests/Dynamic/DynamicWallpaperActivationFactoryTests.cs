@@ -2321,6 +2321,39 @@ public sealed class DynamicWallpaperActivationFactoryTests
     }
 
     [Fact]
+    public async Task RetainedWindowStartCleanupIsRetriedBeforeTheNextActivation()
+    {
+        var events = new List<string>();
+        var window = new FakeWindowRenderer(events)
+        {
+            RetainedStartFailures = 1,
+            DisposeFailures = 1,
+        };
+        var factory = new DynamicWallpaperActivationFactory(
+            window,
+            new FakeCaptureFactory(events),
+            new FakeEncoderFactory(events),
+            new FakePageSessionFactory(events));
+
+        var failedResolution = Resolution();
+        await Assert.ThrowsAsync<AggregateException>(() =>
+            factory.ActivateAsync(
+                Request(failedResolution),
+                new FakeProjectLease(failedResolution, events)).AsTask());
+
+        Assert.Single(window.Options);
+        Assert.Equal(1, events.Count(item => item == "window-dispose"));
+
+        var recoveredResolution = Resolution();
+        await using var active = (await factory.ActivateAsync(
+            Request(recoveredResolution),
+            new FakeProjectLease(recoveredResolution, events))).Lease;
+
+        Assert.Equal(2, window.Options.Count);
+        Assert.Equal(2, events.Count(item => item == "window-dispose"));
+    }
+
+    [Fact]
     public async Task FactoryDisposeRetainsFailedStartupResourcesAndCanBeRetried()
     {
         var events = new List<string>();
@@ -2488,6 +2521,8 @@ public sealed class DynamicWallpaperActivationFactoryTests
 
         public int DisposeFailures { get; set; }
 
+        public int RetainedStartFailures { get; set; }
+
         public bool BlockDispose { get; set; }
 
         public TaskCompletionSource DisposeBlocked { get; } =
@@ -2508,14 +2543,20 @@ public sealed class DynamicWallpaperActivationFactoryTests
         {
             cancellationToken.ThrowIfCancellationRequested();
             Options.Add(options);
-            return ValueTask.FromResult<IWallpaperEngineWindowLease>(
-                new FakeWindowLease(
-                    Interlocked.Increment(ref _nextHandle),
-                    events,
-                    () => DisposeFailures-- > 0,
-                    BlockDispose,
-                    DisposeBlocked,
-                    ReleaseDispose));
+            var lease = new FakeWindowLease(
+                Interlocked.Increment(ref _nextHandle),
+                events,
+                () => DisposeFailures-- > 0,
+                BlockDispose,
+                DisposeBlocked,
+                ReleaseDispose);
+            return RetainedStartFailures-- > 0
+                ? ValueTask.FromException<IWallpaperEngineWindowLease>(
+                    new RetainedWallpaperEngineWindowStartException(
+                        new OperationCanceledException("fixture window startup failed"),
+                        new IOException("fixture initial window close failed"),
+                        lease))
+                : ValueTask.FromResult<IWallpaperEngineWindowLease>(lease);
         }
     }
 

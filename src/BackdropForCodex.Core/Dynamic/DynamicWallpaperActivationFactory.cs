@@ -567,12 +567,26 @@ public sealed class DynamicWallpaperActivationFactory :
         var cleanupOwner = new FailedDynamicPipelineCleanupOwner(this);
         try
         {
-            var window = await _windowRenderer
-                .StartAsync(
-                    projectLease,
-                    new WallpaperEngineWindowOptions(profile.Width, profile.Height),
-                    cancellationToken)
-                .ConfigureAwait(false);
+            IWallpaperEngineWindowLease window;
+            try
+            {
+                window = await _windowRenderer
+                    .StartAsync(
+                        projectLease,
+                        new WallpaperEngineWindowOptions(profile.Width, profile.Height),
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (RetainedWallpaperEngineWindowStartException exception)
+            {
+                cleanupOwner.SetWindow(exception.CleanupOwner);
+                throw new AggregateException(
+                    "Wallpaper Engine window startup failed and its retained resources " +
+                    "require cleanup.",
+                    exception.PrimaryFailure,
+                    exception.CleanupFailure);
+            }
+
             cleanupOwner.SetWindow(window);
             if (window.CaptureTarget is null)
             {

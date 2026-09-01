@@ -12,11 +12,11 @@ Backdrop for Codex is an unofficial, open-source companion for **Windows 11 x64*
 [![CI](https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/actions/workflows/ci.yml/badge.svg)](https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-[Quick start](#download-and-quick-start) · [What's new](#whats-new-in-v150) · [Features](#features) · [Compatibility](#compatibility-and-limitations) · [Build](#build-from-source)
+[Quick start](#download-and-quick-start) · [What's new](#whats-new-in-v151) · [Features](#features) · [Compatibility](#compatibility-and-limitations) · [Build](#build-from-source)
 
 [**Download the Windows 11 x64 portable build →**](https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/releases/latest)
 
-`v1.5.0` · No installer · Runs as a standard user · Supports local media, Wallpaper Engine Image/Video, and experimental Scene/Web
+`v1.5.1` · No installer · Runs as a standard user · Supports local media, Wallpaper Engine Image/Video, and experimental Scene/Web
 
 > [!CAUTION]
 > Backdrop for Codex is an independent community project. It is not affiliated with, sponsored, endorsed, or supported by OpenAI or Microsoft. It works through the Chrome DevTools Protocol (CDP) on a local loopback address. Never run the companion as administrator or expose the debugging port beyond loopback, and fully exit Codex when finished. See the [security policy](SECURITY.md) and [threat model](THREAT_MODEL.md).
@@ -44,42 +44,41 @@ Backdrop for Codex is an unofficial, open-source companion for **Windows 11 x64*
 
 <p align="center"><sub>Example media is shown only to demonstrate local backdrop rendering and is not distributed with the project or its releases.</sub></p>
 
-## What's new in v1.5.0
+## What's new in v1.5.1
 
-### Wallpaper Engine sources
+### Current Codex compatibility
+
+- Updated for the Codex `26.825` app shell, restoring glass across the right-side Browser/launcher, settings canvas, conversation bottom fade, and related headers.
+- Launcher actions, real browser content, and other interactive surfaces retain their native styling instead of being cleared by a broad rule.
+
+### Local reliability and recovery
+
+- UI preferences now use verifiable atomic publication. Damage, future schemas, concurrent edits, or interrupted transactions enter read-only protection and can be cleared with an explicit full reset.
+- Selected-media thumbnails and missing-state probes refresh within the validated file-lease boundary, including after a file is restored or replaced.
+- Fixed cleanup ownership after Wallpaper Engine dynamic-window startup/rollback failures, and tightened CDP page origin, authority, and route validation.
 
 > [!IMPORTANT]
-> Scene/Web is experimental in v1.5.0 and is still being improved. Image/Video is the stable path.
+> Scene/Web remains experimental in v1.5.1. Image/Video is the stable path.
 
-- Browse installed Workshop items and Local Projects, filter them by type or origin, and choose projects from their thumbnails.
-- Use Image/Video and experimental Scene/Web projects. Image/Video play directly; start Wallpaper Engine before using Scene/Web.
-
-### Workbench and playback
-
-- A redesigned workbench brings profiles, sources, recent media, preview, Apply, and Restore Official into one workflow.
-- The source, settings, activation, and cleanup paths now use one profile model for local media and Wallpaper Engine projects. Existing profiles migrate automatically.
-- Experimental Scene/Web steps down through quality profiles after recoverable failures and attempts to recover from brief capture, encoding, or page-connection interruptions.
-- Updated compatibility for the current Codex conversation and Markdown table structure, with dark-theme contrast and dialog interaction fixes.
-
-[Read the full changelog](CHANGELOG.md#150---2026-08-22)
+[Read the full changelog](CHANGELOG.md#151---2026-09-01)
 
 ## Download and quick start
 
 | Release file | Purpose |
 | --- | --- |
-| `BackdropForCodex-v1.5.0-win-x64.zip` | The portable app most users should download |
-| `BackdropForCodex-v1.5.0-SHA256SUMS.txt` | SHA-256 checksums for downloaded artifacts |
-| `BackdropForCodex-v1.5.0-win-x64.spdx.json` | Machine-readable SPDX SBOM |
+| `BackdropForCodex-v1.5.1-win-x64.zip` | The portable app most users should download |
+| `BackdropForCodex-v1.5.1-SHA256SUMS.txt` | SHA-256 checksums for downloaded artifacts |
+| `BackdropForCodex-v1.5.1-win-x64.spdx.json` | Machine-readable SPDX SBOM |
 
 1. Install the official Microsoft Store/MSIX x64 Codex desktop app on Windows 11 x64.
-2. Download `BackdropForCodex-v1.5.0-win-x64.zip` from [GitHub Releases](https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/releases/latest), then extract it into an empty directory writable by your standard user account.
+2. Download `BackdropForCodex-v1.5.1-win-x64.zip` from [GitHub Releases](https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/releases/latest), then extract it into an empty directory writable by your standard user account.
 3. Fully exit every Codex process, then start `BackdropForCodex.exe`.
 4. Create or select a backdrop profile, add local media or an installed Wallpaper Engine project, adjust the preview, and select **Apply & launch Codex**.
 5. Read the CDP risk notice that appears next. After you accept it, the companion launches Codex and applies the backdrop.
 6. After the first successful media activation, the companion attempts to create `Codex（动态背景）.lnk` on your desktop for future enhanced launches.
 
 > [!NOTE]
-> The `v1.5.0` portable build is not Authenticode-signed. If Windows SmartScreen appears, first confirm that the file came from this repository's Release page and verify its SHA-256 or GitHub artifact attestation.
+> The `v1.5.1` portable build is not Authenticode-signed. If Windows SmartScreen appears, first confirm that the file came from this repository's Release page and verify its SHA-256 or GitHub artifact attestation.
 
 <details>
 <summary><strong>Verify SHA-256 and GitHub build provenance</strong></summary>
@@ -87,14 +86,14 @@ Backdrop for Codex is an unofficial, open-source companion for **Windows 11 x64*
 Open PowerShell in the download directory:
 
 ```powershell
-Get-FileHash .\BackdropForCodex-v1.5.0-win-x64.zip -Algorithm SHA256
-Get-Content .\BackdropForCodex-v1.5.0-SHA256SUMS.txt
+Get-FileHash .\BackdropForCodex-v1.5.1-win-x64.zip -Algorithm SHA256
+Get-Content .\BackdropForCodex-v1.5.1-SHA256SUMS.txt
 ```
 
 Confirm that the ZIP hash exactly matches the checksum manifest. If [GitHub CLI](https://cli.github.com/) is installed, you can also verify build provenance:
 
 ```powershell
-gh attestation verify .\BackdropForCodex-v1.5.0-win-x64.zip `
+gh attestation verify .\BackdropForCodex-v1.5.1-win-x64.zip `
   --repo TogawaSakiko-desuwa/backdrop-for-codex
 ```
 
@@ -169,6 +168,8 @@ Restore Official is available in both the workbench and the notification-area me
 
 ### How do I completely reset or uninstall the companion?
 
+If UI preferences are from a future schema, are damaged, or have an unfinished concurrent/interrupted publication, the app keeps them read-only and requires an explicit full reset from the Danger zone instead of silently overwriting them.
+
 1. Open Settings and select Reset app in the Danger zone. This restores the official background and deletes settings, recent media, risk acknowledgement, UI preferences, and the desktop shortcut owned by the app.
 2. Exit Backdrop for Codex from the notification-area menu, then fully exit Codex.
 3. Delete the directory where you extracted `win-x64.zip`.
@@ -179,10 +180,11 @@ App-owned settings are stored under `%LOCALAPPDATA%\CodexWallpaper`. If Reset re
 
 - The companion accepts only a verified official Store/MSIX Codex package and a strict IPv4 loopback CDP endpoint. Loopback is not a security boundary against another process running as the same Windows user.
 - Verified local media is loaded through a controlled file input and a `blob:` URL; the companion starts no media HTTP server.
+- Profile thumbnails create bounded, non-recursive change notification for a final local directory only while a validated file lease is active. An initially missing file is retried in the background through the same safety boundary instead of watching an unvalidated path.
 - Scene/Web sends only the image from a verified project window into Codex. It does not forward Wallpaper Engine scripts, keyboard/mouse input, audio, or Codex content. A third-party Web wallpaper may still make its own network requests and play audio through Wallpaper Engine.
 - It does not alter or bypass Codex Content Security Policy (CSP), read chats, or proxy Codex/OpenAI traffic.
 - It sends no telemetry, behavioral analytics, or project-operated crash report. A diagnostic report is created only after an explicit user export.
-- Replacement, Restore Official, and Exit remove only resources owned by this companion. A CDP port owned by Codex closes only when Codex fully exits.
+- Replacement, Restore Official, and Exit remove only resources owned by this companion. A target page with userinfo, a non-default port, or an unreviewed `initialRoute` is rejected. A CDP port owned by Codex closes only when Codex fully exits.
 
 See the following documents for the complete data flow and security boundaries:
 
@@ -198,7 +200,7 @@ See the following documents for the complete data flow and security boundaries:
 
 ## Build from source
 
-Prerequisites: Windows 11 x64 and .NET SDK `10.0.301` or a later patch in the same feature band. SDK selection follows [`global.json`](global.json).
+Prerequisites: Windows 11 x64 and .NET SDK `10.0.301` or a later patch in the same feature band. SDK selection follows [`global.json`](global.json); CI and official releases still pin `10.0.303` exactly.
 
 ```powershell
 dotnet restore .\BackdropForCodex.slnx --locked-mode

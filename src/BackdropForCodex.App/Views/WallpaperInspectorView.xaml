@@ -167,11 +167,15 @@
                        TextAlignment="Center" />
           </Border>
         </Grid>
-        <Slider MinHeight="32"
+        <Slider x:Name="PanelOpacitySlider"
+                MinHeight="32"
                 Margin="0,8,0,0"
                 Minimum="0.60"
                 Maximum="0.95"
                 TickFrequency="0.01"
+                SmallChange="0.01"
+                LargeChange="0.05"
+                IsSnapToTickEnabled="True"
                 Value="{Binding PanelOpacity, Mode=TwoWay}"
                 IsEnabled="{Binding IsEditingEnabled}"
                 AutomationProperties.Name="{localization:Loc Label_PanelOpacity, Fallback='Panel opacity'}" />
@@ -241,11 +245,15 @@
                            TextAlignment="Center" />
               </Border>
             </Grid>
-            <Slider MinHeight="32"
+            <Slider x:Name="DarkOverlaySlider"
+                    MinHeight="32"
                     Margin="0,8,0,0"
                     Minimum="0"
                     Maximum="0.60"
                     TickFrequency="0.01"
+                    SmallChange="0.01"
+                    LargeChange="0.10"
+                    IsSnapToTickEnabled="True"
                     Value="{Binding DarkOverlay, Mode=TwoWay}"
                     IsEnabled="{Binding IsEditingEnabled}"
                     AutomationProperties.Name="{localization:Loc Label_DarkOverlay, Fallback='Dark theme overlay'}" />
@@ -271,11 +279,15 @@
                            TextAlignment="Center" />
               </Border>
             </Grid>
-            <Slider MinHeight="32"
+            <Slider x:Name="LightOverlaySlider"
+                    MinHeight="32"
                     Margin="0,8,0,0"
                     Minimum="0"
                     Maximum="0.60"
                     TickFrequency="0.01"
+                    SmallChange="0.01"
+                    LargeChange="0.10"
+                    IsSnapToTickEnabled="True"
                     Value="{Binding LightOverlay, Mode=TwoWay}"
                     IsEnabled="{Binding IsEditingEnabled}"
                     AutomationProperties.Name="{localization:Loc Label_LightOverlay, Fallback='Light theme overlay'}" />

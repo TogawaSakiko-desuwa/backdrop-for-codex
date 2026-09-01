@@ -1,15 +1,15 @@
-# Backdrop for Codex 1.5.0 便携版
+# Backdrop for Codex 1.5.1 便携版
 
 适用于 Windows 11 x64，为官方 Microsoft Store / MSIX x64 Codex 桌面应用添加自定义背景。
 
-## 1.5.0 新增
+## 1.5.1 更新
 
-> Scene / Web 为实验性功能，当前仍在完善；Image / Video 是稳定使用路径。
+> Scene / Web 仍为实验性功能；Image / Video 是稳定使用路径。
 
-- 来源库可浏览本机已安装的 Wallpaper Engine Workshop 和 Local Project，并按类型或来源筛选。
-- 新工作台集中管理背景方案、来源、最近使用和预览；旧版方案会在首次启动时自动迁移。
-- Image / Video 项目可直接播放；实验性 Scene / Web 需先启动 Wallpaper Engine，并会在遇到可恢复故障时逐级降低画质。Backdrop 不会自动启动 Wallpaper Engine。
-- 实验性 Scene / Web 项目可能通过 Wallpaper Engine 播放声音，Web 项目可能联网；Application 和未知类型不会执行。
+- 适配 Codex `26.825` 的当前应用壳，恢复右侧 Browser/启动器、设置画布、对话底部渐变和相关顶栏的玻璃效果。
+- 界面偏好发布失败、未来版本或损坏时保持只读并要求显式重置，不会用默认值静默覆盖。
+- 已选媒体的缩略图和缺失状态会在受验证文件边界内刷新；修复 Wallpaper Engine 动态窗口失败路径的清理所有权。
+- 收紧 CDP 页面 origin、authority 与路由校验，并更新到 .NET runtime `10.0.11`。
 
 ## 快速开始
 

@@ -451,7 +451,11 @@ public sealed class InjectionScriptBuilderTests
             normalizedScript,
             StringComparison.Ordinal);
         Assert.Contains(
-            "> div[class~=\"bg-token-main-surface-primary\"] {",
+            "> div[class~=\"bg-token-main-surface-primary\"]",
+            normalizedScript,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "[class~=\"bg-[var(--app-shell-panel-background,var(--color-surface))]\"]",
             normalizedScript,
             StringComparison.Ordinal);
         Assert.Contains(

@@ -84,4 +84,4 @@ Apache-2.0 的完整文本见 [LICENSE](LICENSE)。具体第三方版权名称�
 
 ## 维护要求
 
-新增、升级或移除依赖时，贡献者必须核对许可证兼容性、更新本表，并确保发布流程的 SBOM 反映实际输出。发现遗漏或不准确声明时，请提交普通 Issue；若遗漏导致安全或敏感供应链影响，请按 [v1.5.0 安全策略](https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/blob/v1.5.0/SECURITY.md) 私下报告。
+新增、升级或移除依赖时，贡献者必须核对许可证兼容性、更新本表，并确保发布流程的 SBOM 反映实际输出。发现遗漏或不准确声明时，请提交普通 Issue；若遗漏导致安全或敏感供应链影响，请按 [v1.5.1 安全策略](https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/blob/v1.5.1/SECURITY.md) 私下报告。

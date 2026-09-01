@@ -4,6 +4,28 @@ using BackdropForCodex.Core.Runtime;
 
 namespace BackdropForCodex.Core.Media;
 
+internal sealed class RetainedWallpaperEngineWindowStartException : Exception
+{
+    internal RetainedWallpaperEngineWindowStartException(
+        Exception primaryFailure,
+        Exception cleanupFailure,
+        IWallpaperEngineWindowLease cleanupOwner)
+        : base(
+            "Wallpaper Engine pop-out startup failed and window cleanup must be retried.",
+            primaryFailure)
+    {
+        PrimaryFailure = primaryFailure ?? throw new ArgumentNullException(nameof(primaryFailure));
+        CleanupFailure = cleanupFailure ?? throw new ArgumentNullException(nameof(cleanupFailure));
+        CleanupOwner = cleanupOwner ?? throw new ArgumentNullException(nameof(cleanupOwner));
+    }
+
+    internal Exception PrimaryFailure { get; }
+
+    internal Exception CleanupFailure { get; }
+
+    internal IWallpaperEngineWindowLease CleanupOwner { get; }
+}
+
 internal readonly record struct WallpaperEngineWindowPlacement(int X, int Y);
 
 internal sealed record WallpaperEngineWindowBaseline
@@ -335,7 +357,10 @@ internal sealed class WallpaperEngineWindowRenderer : IWallpaperEngineWindowRend
             try
             {
                 ObjectDisposedException.ThrowIf(_disposed, this);
-                await StartCoreAsync(cancellationToken).ConfigureAwait(false);
+                await StartCoreAsync(
+                        transferCleanupOwnershipOnFailure: true,
+                        cancellationToken: cancellationToken)
+                    .ConfigureAwait(false);
             }
             finally
             {
@@ -357,7 +382,10 @@ internal sealed class WallpaperEngineWindowRenderer : IWallpaperEngineWindowRend
                 }
                 else if (WindowHandle == 0)
                 {
-                    await StartCoreAsync(cancellationToken).ConfigureAwait(false);
+                    await StartCoreAsync(
+                            transferCleanupOwnershipOnFailure: false,
+                            cancellationToken: cancellationToken)
+                        .ConfigureAwait(false);
                 }
             }
             finally
@@ -387,7 +415,9 @@ internal sealed class WallpaperEngineWindowRenderer : IWallpaperEngineWindowRend
             }
         }
 
-        private async ValueTask StartCoreAsync(CancellationToken cancellationToken)
+        private async ValueTask StartCoreAsync(
+            bool transferCleanupOwnershipOnFailure,
+            CancellationToken cancellationToken)
         {
             if (WindowHandle != 0)
             {
@@ -504,8 +534,17 @@ internal sealed class WallpaperEngineWindowRenderer : IWallpaperEngineWindowRend
                 }
                 catch (Exception cleanupFailure)
                 {
+                    if (transferCleanupOwnershipOnFailure)
+                    {
+                        throw new RetainedWallpaperEngineWindowStartException(
+                            startFailure,
+                            cleanupFailure,
+                            this);
+                    }
+
                     throw new AggregateException(
-                        "Wallpaper Engine pop-out startup and cleanup both failed.",
+                        "Wallpaper Engine pop-out resume and cleanup both failed; " +
+                        "the existing lease retains cleanup ownership.",
                         startFailure,
                         cleanupFailure);
                 }

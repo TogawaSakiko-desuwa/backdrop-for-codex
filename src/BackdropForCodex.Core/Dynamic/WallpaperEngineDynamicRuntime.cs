@@ -191,7 +191,7 @@ internal sealed class WallpaperEngineDynamicRuntime :
                 }
             }
 
-            if (!_ownedResourceDisposed)
+            if (_innerDisposed && !_ownedResourceDisposed)
             {
                 try
                 {

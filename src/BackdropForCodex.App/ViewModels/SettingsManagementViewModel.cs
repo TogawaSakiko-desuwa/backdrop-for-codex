@@ -85,6 +85,10 @@ public sealed class SettingsManagementViewModel
     private WallpaperConfigurationState _configurationState =
         WallpaperConfigurationState.FromPersisted(SettingsV3.CreateDefault());
     private AppPreferencesV1 _preferences = AppPreferencesV1.CreateDefault();
+    private int? _futurePreferencesVersion;
+    private string? _futurePreferencesVersionDisplay;
+    private bool _hasProtectedPreferences;
+    private bool _preferencesReloadRequired;
     private bool _hasProtectedSettings;
     private bool _hasVersion1Backup;
     private bool _isDisposed;
@@ -153,6 +157,7 @@ public sealed class SettingsManagementViewModel
             {
                 OnPropertyChanged(nameof(ThemeMode));
                 OnPropertyChanged(nameof(HasShownTrayTip));
+                OnPropertyChanged(nameof(ShouldShowFirstCloseTip));
                 OnPropertyChanged(nameof(HasAcknowledgedWebWallpaperPrivacyNotice));
                 OnPropertyChanged(nameof(HasPreferredWallpaperEngineInstallation));
             }
@@ -163,8 +168,35 @@ public sealed class SettingsManagementViewModel
 
     public bool HasShownTrayTip => Preferences.HasShownTrayTip;
 
+    public bool ShouldShowFirstCloseTip =>
+        !HasShownTrayTip && !HasProtectedPreferences;
+
     public bool HasAcknowledgedWebWallpaperPrivacyNotice =>
         Preferences.HasAcknowledgedWebWallpaperPrivacyNotice;
+
+    public int? FuturePreferencesVersion
+    {
+        get => _futurePreferencesVersion;
+        private set => SetProperty(ref _futurePreferencesVersion, value);
+    }
+
+    public string? FuturePreferencesVersionDisplay
+    {
+        get => _futurePreferencesVersionDisplay;
+        private set => SetProperty(ref _futurePreferencesVersionDisplay, value);
+    }
+
+    public bool HasProtectedPreferences
+    {
+        get => _hasProtectedPreferences;
+        private set
+        {
+            if (SetProperty(ref _hasProtectedPreferences, value))
+            {
+                OnPropertyChanged(nameof(ShouldShowFirstCloseTip));
+            }
+        }
+    }
 
     public bool HasPreferredWallpaperEngineInstallation =>
         _wallpaperEngineInstallationPreferences?
@@ -230,12 +262,29 @@ public sealed class SettingsManagementViewModel
             .ConfigureAwait(true);
         try
         {
-            var loaded = await _preferencesStore
-                .LoadAsync(cancellationToken)
-                .ConfigureAwait(true);
-            _wallpaperEngineInstallationPreferences?.ApplyLoadedPreferences(loaded);
-            Preferences = loaded;
-            OnPropertyChanged(nameof(HasPreferredWallpaperEngineInstallation));
+            try
+            {
+                var loaded = await _preferencesStore
+                    .LoadAsync(cancellationToken)
+                    .ConfigureAwait(true);
+                _preferencesReloadRequired = false;
+                FuturePreferencesVersion = null;
+                FuturePreferencesVersionDisplay = null;
+                HasProtectedPreferences = false;
+                _wallpaperEngineInstallationPreferences?.ApplyLoadedPreferences(loaded);
+                Preferences = loaded;
+                OnPropertyChanged(nameof(HasPreferredWallpaperEngineInstallation));
+            }
+            catch (ProtectedPreferencesDocumentException exception)
+            {
+                SetPreferencesProtection(exception);
+                throw;
+            }
+            catch (AppPreferencesStoreException)
+            {
+                _preferencesReloadRequired = true;
+                throw;
+            }
         }
         finally
         {
@@ -259,7 +308,7 @@ public sealed class SettingsManagementViewModel
             cancellationToken);
 
     public Task MarkTrayTipShownAsync(CancellationToken cancellationToken) =>
-        Preferences.HasShownTrayTip
+        HasShownTrayTip || HasProtectedPreferences
             ? Task.CompletedTask
             : UpdatePreferencesAsync(
                 current => current with { HasShownTrayTip = true },
@@ -337,6 +386,10 @@ public sealed class SettingsManagementViewModel
             await _preferencesStore
                 .ResetAsync(cancellationToken)
                 .ConfigureAwait(true);
+            _preferencesReloadRequired = false;
+            FuturePreferencesVersion = null;
+            FuturePreferencesVersionDisplay = null;
+            HasProtectedPreferences = false;
             var preferences = AppPreferencesV1.CreateDefault();
             _wallpaperEngineInstallationPreferences?.ApplyLoadedPreferences(preferences);
             Preferences = preferences;
@@ -532,16 +585,75 @@ public sealed class SettingsManagementViewModel
             .ConfigureAwait(true);
         try
         {
+            if (HasProtectedPreferences)
+            {
+                throw new ProtectedPreferencesMutationException();
+            }
+
+            if (_preferencesReloadRequired)
+            {
+                try
+                {
+                    var loaded = await _preferencesStore
+                        .LoadAsync(cancellationToken)
+                        .ConfigureAwait(true);
+                    _preferencesReloadRequired = false;
+                    FuturePreferencesVersion = null;
+                    FuturePreferencesVersionDisplay = null;
+                    HasProtectedPreferences = false;
+                    _wallpaperEngineInstallationPreferences?
+                        .ApplyLoadedPreferences(loaded);
+                    Preferences = loaded;
+                    OnPropertyChanged(nameof(HasPreferredWallpaperEngineInstallation));
+                }
+                catch (ProtectedPreferencesDocumentException exception)
+                {
+                    SetPreferencesProtection(exception);
+                    throw;
+                }
+            }
+
             var next = update(Preferences);
-            await _preferencesStore
-                .SaveAsync(next, cancellationToken)
-                .ConfigureAwait(true);
+            try
+            {
+                await _preferencesStore
+                    .SaveAsync(next, cancellationToken)
+                    .ConfigureAwait(true);
+            }
+            catch (ProtectedPreferencesDocumentException exception)
+            {
+                SetPreferencesProtection(exception);
+                throw;
+            }
+            catch (AppPreferencesStoreException)
+            {
+                _preferencesReloadRequired = true;
+                throw;
+            }
+
             Preferences = next;
         }
         finally
         {
             _ = _preferencesMutationGate.Release();
         }
+    }
+
+    private void SetPreferencesProtection(
+        ProtectedPreferencesDocumentException exception)
+    {
+        _preferencesReloadRequired = false;
+        FuturePreferencesVersion = exception switch
+        {
+            FuturePreferencesVersionException future => future.SchemaVersion,
+            _ => null,
+        };
+        FuturePreferencesVersionDisplay = exception switch
+        {
+            FuturePreferencesVersionException future => future.SchemaVersionDisplay,
+            _ => null,
+        };
+        HasProtectedPreferences = true;
     }
 
     private void SetProtectionFrom(Exception exception)

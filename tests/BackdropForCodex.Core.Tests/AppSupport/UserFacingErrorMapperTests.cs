@@ -2,6 +2,7 @@ using System.Globalization;
 using BackdropForCodex.App.Models;
 using BackdropForCodex.App.Services.Errors;
 using BackdropForCodex.App.Services.Localization;
+using BackdropForCodex.App.Services.Preferences;
 using BackdropForCodex.Core.Codex;
 using BackdropForCodex.Core.Injection;
 using BackdropForCodex.Core.Media;
@@ -47,6 +48,38 @@ public sealed class UserFacingErrorMapperTests
             UserFacingOperation.ApplyWallpaper);
 
         Assert.Equal(UserFacingErrorCode.MediaInvalid, result.Code);
+    }
+
+    [Fact]
+    public void ProtectedPreferencesMutationExplainsExplicitResetAndIsNotRetryable()
+    {
+        var english = new UserFacingErrorMapper(
+            new AppTextProvider(CultureInfo.GetCultureInfo("en")));
+        var chinese = new UserFacingErrorMapper(
+            new AppTextProvider(CultureInfo.GetCultureInfo("zh-Hans")));
+
+        var englishResult = english.Map(new ProtectedPreferencesMutationException());
+        var chineseResult = chinese.Map(new ProtectedPreferencesMutationException());
+        var protectedDocumentResult = english.Map(
+            new ProtectedPreferencesDocumentException(
+                AppPreferencesStoreOperation.Read,
+                "sensitive protected-document detail"));
+
+        Assert.Equal(UserFacingErrorCode.PreferencesProtected, englishResult.Code);
+        Assert.Equal(UserFacingErrorCode.PreferencesProtected, chineseResult.Code);
+        Assert.Equal(UserFacingErrorCode.PreferencesProtected, protectedDocumentResult.Code);
+        Assert.Equal(
+            "Existing appearance preferences are protected and read-only.",
+            englishResult.Message);
+        Assert.Equal(
+            "Open Settings and explicitly reset the app before changing preferences.",
+            englishResult.Recovery);
+        Assert.Equal("现有外观偏好已受保护并设为只读。", chineseResult.Message);
+        Assert.Equal(
+            "请在设置中显式重置应用后再更改偏好。",
+            chineseResult.Recovery);
+        Assert.False(englishResult.CanRetry);
+        Assert.False(chineseResult.CanRetry);
     }
 
     [Fact]

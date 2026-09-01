@@ -23,7 +23,10 @@ public sealed class ReviewedCodexRightPanelSelectorTests
             "scheduled-page-search",
             "appgen-site-search",
             "pull-request-inbox-search",
+            "bg-[var(--app-shell-panel-background,var(--color-surface))]",
+            "electron:bg-surface",
             "data-settings-panel-slug=\"keyboard-shortcuts\"",
+            "[class~=\"sticky\"][class~=\"bottom-0\"][class~=\"z-10\"][class~=\"w-full\"]",
             "[data-above-composer-portal]",
         ];
 
@@ -39,8 +42,17 @@ public sealed class ReviewedCodexRightPanelSelectorTests
 
         AssertOwnedBlock(styleSheet, "plugins-page-search", "glass");
         AssertOwnedBlock(styleSheet, "pull-request-inbox-search", "glass");
+        AssertOwnedBlock(
+            styleSheet,
+            "bg-[var(--app-shell-panel-background,var(--color-surface))]",
+            "glass");
+        AssertOwnedBlock(styleSheet, "electron:bg-surface", "glass");
         AssertOwnedBlock(styleSheet, "data-settings-panel-slug", "glass");
         AssertOwnedBlock(styleSheet, "_tableContainer_", "advanced");
+        AssertOwnedBlock(
+            styleSheet,
+            "[class~=\"sticky\"][class~=\"bottom-0\"][class~=\"z-10\"][class~=\"w-full\"]",
+            "advanced");
         AssertOwnedBlock(styleSheet, "[data-above-composer-portal]", "advanced");
     }
 

@@ -256,6 +256,8 @@
   <data name="Risk_NotAcknowledged" xml:space="preserve"><value>尚未确认。使用增强启动前会再次询问。</value></data>
   <data name="Risk_Revoked" xml:space="preserve"><value>确认已撤销。下次增强启动前会再次询问。</value></data>
   <data name="Settings_ThemeDescription" xml:space="preserve"><value>默认跟随 Windows，也会跟随高对比度模式。</value></data>
+  <data name="Settings_ProtectedPreferencesFuture" xml:space="preserve"><value>应用偏好来自更新的架构版本 {0}，当前为只读。若要替换，请使用“重置应用”。</value></data>
+  <data name="Settings_ProtectedPreferencesUnreadable" xml:space="preserve"><value>应用偏好无法安全读取，已保护为只读。若要替换，请使用“重置应用”。</value></data>
   <data name="Settings_RiskDescription" xml:space="preserve"><value>查看或撤销本机调试风险确认。</value></data>
   <data name="Settings_PrivacyDescription" xml:space="preserve"><value>Backdrop 不使用媒体 HTTP 服务，本地文件始终留在本机。Scene 与 Web 项目只在 Wallpaper Engine 内运行，并可能播放声音。Backdrop 不会枚举、静音或更改 Wallpaper Engine 的音频会话，也不会把音频送入 Codex。第三方网页壁纸可能访问网络。Backdrop 只把捕获的画面送入 Codex，也不会向壁纸暴露 Codex 内容。</value></data>
   <data name="Settings_RecoveryTitle" xml:space="preserve"><value>设置恢复</value></data>
@@ -294,6 +296,8 @@
   <data name="Error_PreferencesReadFailed_Recovery" xml:space="preserve"><value>重新选择偏好即可替换无法读取的文件。</value></data>
   <data name="Error_PreferencesWriteFailed_Message" xml:space="preserve"><value>无法保存外观偏好。</value></data>
   <data name="Error_PreferencesWriteFailed_Recovery" xml:space="preserve"><value>请检查本地应用数据文件夹的访问权限后重试。</value></data>
+  <data name="Error_PreferencesProtected_Message" xml:space="preserve"><value>现有外观偏好已受保护并设为只读。</value></data>
+  <data name="Error_PreferencesProtected_Recovery" xml:space="preserve"><value>请在设置中显式重置应用后再更改偏好。</value></data>
   <data name="Error_PreferencesResetFailed_Message" xml:space="preserve"><value>无法重置外观偏好。</value></data>
   <data name="Error_PreferencesResetFailed_Recovery" xml:space="preserve"><value>请关闭其他实例后重试。</value></data>
   <data name="Error_WallpaperSettingsReadFailed_Message" xml:space="preserve"><value>无法加载壁纸设置；现有文档保持原样，未被覆盖。</value></data>
