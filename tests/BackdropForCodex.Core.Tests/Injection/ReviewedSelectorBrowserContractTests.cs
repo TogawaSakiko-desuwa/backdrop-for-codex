@@ -437,6 +437,124 @@ public sealed class ReviewedSelectorBrowserContractTests
         });
     }
 
+    [BrowserContractFact]
+    [Trait("Category", "BrowserContract")]
+    public async Task Codex26901_UnifiedUnderlayClearsWithGlobalWallpaperOnly()
+    {
+        await EdgeBrowserContractHarness.WithPageAsync(async page =>
+        {
+            await LoadFixtureAsync(page, Codex26901UnifiedFixture);
+            var original = await ReadSnapshotsAsync(page);
+            Assert.Equal(NativeBackground, original["unified-main"].BeforeBackgroundColor);
+
+            await AddOwnedStyleAsync(page, BuildStyleSheet(), initializeOwnership: true);
+            var snapshots = await ReadSnapshotsAsync(page);
+            Assert.Equal(TransparentBackground, snapshots["unified-main"].BeforeBackgroundColor);
+            string[] preservedUnderlays =
+                ["unified-browser", "unified-without-viewport", "regular-main", "outside-app-main"];
+            foreach (var id in preservedUnderlays)
+            {
+                Assert.Equal(NativeBackground, snapshots[id].BeforeBackgroundColor);
+            }
+
+            Assert.True(await page.EvaluateExpressionAsync<bool>(
+                InjectionScriptBuilder.BuildCapabilityDowngrade(
+                    Generation,
+                    CreateCapabilities(glassAvailable: false, advancedAvailable: false))));
+            var downgraded = await ReadSnapshotsAsync(page);
+            Assert.Equal(TransparentBackground, downgraded["unified-main"].BeforeBackgroundColor);
+        });
+    }
+
+    [BrowserContractFact]
+    [Trait("Category", "BrowserContract")]
+    public async Task Codex26901_TabPanelsClearOnlyTheirToolbarAndContentWrapper()
+    {
+        await EdgeBrowserContractHarness.WithPageAsync(async page =>
+        {
+            await LoadFixtureAsync(page, Codex26901TabPanelFixture);
+            await AddOwnedStyleAsync(page, BuildStyleSheet(), initializeOwnership: true);
+
+            var snapshots = await ReadSnapshotsAsync(page);
+            AssertGlass(snapshots, "new-panel-shell");
+            AssertClear(snapshots, "new-panel-toolbar");
+            AssertClear(snapshots, "new-panel-content-wrapper");
+            AssertNative(
+                snapshots,
+                "new-panel-selected-tab",
+                "new-panel-browser-content",
+                "new-panel-editor",
+                "new-panel-nested-wrapper",
+                "new-panel-unrelated-child");
+
+            // The semantic right panel can be placed on the left in the unified workspace.
+            await page.EvaluateExpressionAsync(
+                """
+                (() => {
+                  const shell = document.querySelector('[data-fixture-id="new-panel-shell"]');
+                  shell.classList.replace("left-0", "right-0");
+                  shell.classList.remove("bg-[var(--app-shell-panel-background,var(--color-surface))]");
+                })()
+                """);
+            AssertGlass(await ReadSnapshotsAsync(page), "new-panel-shell");
+
+            // A mismatched controller must not gain permission from nearby right-panel tabs.
+            await page.EvaluateExpressionAsync(
+                """
+                (() => {
+                  const panel = document.querySelector('[data-app-shell-tab-panel-controller="right"]');
+                  panel.setAttribute("data-app-shell-tab-panel-controller", "left");
+                })()
+                """);
+            AssertNative(
+                await ReadSnapshotsAsync(page),
+                "new-panel-shell",
+                "new-panel-toolbar",
+                "new-panel-content-wrapper");
+
+            await LoadFixtureAsync(page, Codex26901TabPanelFixture);
+            await AddOwnedStyleAsync(page, BuildStyleSheet(), initializeOwnership: true);
+            Assert.True(await page.EvaluateExpressionAsync<bool>(
+                InjectionScriptBuilder.BuildCapabilityDowngrade(
+                    Generation,
+                    CreateCapabilities(glassAvailable: false, advancedAvailable: true))));
+            AssertNative(
+                await ReadSnapshotsAsync(page),
+                "new-panel-shell",
+                "new-panel-toolbar",
+                "new-panel-content-wrapper");
+        });
+    }
+
+    [BrowserContractFact]
+    [Trait("Category", "BrowserContract")]
+    public async Task Codex26901_SettingsCanvasNoLongerRequiresElevation()
+    {
+        // 26.901 keeps the settings route and wrapper chain but removes the elevation token.
+        var fixture = RouteFixture.Replace(
+            "electron:bg-surface electron:elevation-prominent",
+            "electron:bg-surface",
+            StringComparison.Ordinal);
+        await EdgeBrowserContractHarness.WithPageAsync(async page =>
+        {
+            await LoadFixtureAsync(page, fixture);
+            await AddOwnedStyleAsync(page, BuildStyleSheet(), initializeOwnership: true);
+            var snapshots = await ReadSnapshotsAsync(page);
+            AssertGlass(snapshots, "settings-current-content-canvas");
+            AssertNative(
+                snapshots,
+                "settings-current-card",
+                "settings-current-browser-canvas",
+                "settings-current-canvas-without-data-anchor");
+
+            Assert.True(await page.EvaluateExpressionAsync<bool>(
+                InjectionScriptBuilder.BuildCapabilityDowngrade(
+                    Generation,
+                    CreateCapabilities(glassAvailable: false, advancedAvailable: true))));
+            AssertNative(await ReadSnapshotsAsync(page), "settings-current-content-canvas");
+        });
+    }
+
     private static Task LoadFixtureAsync(IPage page, string body) =>
         page.SetContentAsync(
             $$"""
@@ -672,6 +790,97 @@ public sealed class ReviewedSelectorBrowserContractTests
     private sealed record CapabilityMarkers(
         bool GlassPresent,
         bool AdvancedPresent);
+
+    // Non-sensitive structures from the 26.901 packaged shell. CSS module hashes are illustrative.
+    private const string Codex26901UnifiedFixture =
+        $$"""
+        <html class="electron-dark" data-codex-window-type="electron">
+          <head>
+            {{NativeStyles}}
+            <style>
+              ._MainContentSurface_fixture { isolation: isolate; position: relative; }
+              ._MainContentSurface_fixture::before {
+                content: "";
+                position: absolute;
+                inset: 48px 0 0;
+                z-index: -10;
+                background-color: rgb(41 42 43);
+                pointer-events: none;
+              }
+            </style>
+          </head>
+          <body>
+            <div id="root">
+              <div data-app-shell-unified-tab-strip="true">
+                <div><main class="_MainContentSurface_fixture" data-app-shell-main-surface="default"
+                           data-fixture-id="unified-main">
+                  <header data-app-shell-application-menu-bar data-app-shell-header-edge-scroll></header>
+                  <div data-app-shell-main-content-layout data-app-shell-right-panel-full-width></div>
+                </main></div>
+                <main class="_MainContentSurface_fixture" data-app-shell-main-surface="browser"
+                      data-fixture-id="unified-browser">
+                  <div data-app-shell-main-content-layout data-app-shell-right-panel-full-width></div>
+                </main>
+                <main class="_MainContentSurface_fixture" data-app-shell-main-surface="default"
+                      data-fixture-id="unified-without-viewport"></main>
+              </div>
+              <div data-app-shell-unified-tab-strip="false">
+                <main class="_MainContentSurface_fixture" data-app-shell-main-surface="default"
+                      data-fixture-id="regular-main">
+                  <div data-app-shell-main-content-layout data-app-shell-right-panel-full-width></div>
+                </main>
+              </div>
+            </div>
+            <div data-app-shell-unified-tab-strip="true">
+              <main class="_MainContentSurface_fixture" data-app-shell-main-surface="default"
+                    data-fixture-id="outside-app-main">
+                <div data-app-shell-main-content-layout data-app-shell-right-panel-full-width></div>
+              </main>
+            </div>
+          </body>
+        </html>
+        """;
+
+    private const string Codex26901TabPanelFixture =
+        $$"""
+        <html class="electron-dark" data-codex-window-type="electron">
+          <head>{{NativeStyles}}</head>
+          <body>
+            <aside data-app-shell-focus-area="right-panel">
+              <div class="absolute inset-x-0 bottom-0 min-h-0 min-w-0 overflow-visible top-0">
+                <div class="absolute inset-0 min-h-0 min-w-0 overflow-hidden">
+                  <div class="absolute top-0 bottom-0 left-0 min-w-0 bg-[var(--app-shell-panel-background,var(--color-surface))]"
+                       data-fixture-id="new-panel-shell">
+                    <div class="h-full min-h-0 min-w-0 overflow-hidden">
+                      <div data-app-shell-tabs="true" class="isolate flex h-full min-h-0 flex-col">
+                        <div class="h-toolbar-pane isolate flex bg-[var(--app-shell-panel-background,var(--color-surface))]"
+                             data-fixture-id="new-panel-toolbar">
+                          <div data-app-shell-tab-strip-controller="right">
+                            <button class="bg-[var(--app-shell-panel-background,var(--color-surface))]"
+                                    data-fixture-id="new-panel-selected-tab"></button>
+                          </div>
+                        </div>
+                        <div class="relative flex min-h-0 flex-1 flex-col bg-[var(--app-shell-panel-background,var(--color-surface))]"
+                             data-fixture-id="new-panel-content-wrapper">
+                          <div role="tabpanel" data-app-shell-tab-panel-controller="right"
+                               class="relative min-h-0 flex-1 outline-none">
+                            <div class="bg-surface" data-fixture-id="new-panel-browser-content"></div>
+                            <div class="monaco-editor bg-surface" data-fixture-id="new-panel-editor"></div>
+                            <div class="relative flex min-h-0 flex-1 flex-col bg-[var(--app-shell-panel-background,var(--color-surface))]"
+                                 data-fixture-id="new-panel-nested-wrapper"></div>
+                          </div>
+                        </div>
+                        <div class="bg-[var(--app-shell-panel-background,var(--color-surface))]"
+                             data-fixture-id="new-panel-unrelated-child"></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </aside>
+          </body>
+        </html>
+        """;
 
     private const string NativeStyles =
         """

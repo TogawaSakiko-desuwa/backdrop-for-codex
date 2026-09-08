@@ -81,6 +81,8 @@ dotnet test .\tests\BackdropForCodex.Core.Tests\BackdropForCodex.Core.Tests.cspr
 
 These contracts use the browser's CSSOM, `querySelectorAll`, and computed styles for reviewed positive, near-miss, protected-surface, Glass-downgrade, and Advanced-downgrade behavior. Set `BACKDROP_FOR_CODEX_EDGE_PATH` only when `msedge.exe` is outside the standard installation paths. CI runs this category explicitly on the .NET 10.0.303 Windows leg; a missing Edge executable fails that leg.
 
+The Codex 26.901 fixtures cover the unified workspace's main pseudo-element underlay, tab toolbar/content wrappers, mirrored and unfilled tool-pane shells, and settings canvases without the former elevation class. They verify protected content and capability downgrades using non-sensitive markup from the packaged app. These isolated fixtures do not replace the live Codex presentation check below.
+
 ### Current-machine Codex identity
 
 On a supported Windows 11 x64 machine with the reviewed official Microsoft Store/MSIX Codex package installed and, where required, running:
