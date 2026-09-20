@@ -49,7 +49,7 @@ public sealed record CdpTargetDescriptor(
     [property: JsonPropertyName("webSocketDebuggerUrl")] string? WebSocketDebuggerUrl);
 
 /// <summary>
-/// The injection eligibility category assigned to a CDP target after reviewing its type, title,
+/// The injection eligibility category assigned to a CDP target after reviewing its type
 /// and document URI against a verified Codex identity.
 /// </summary>
 public enum CdpTargetClassification

@@ -33,7 +33,10 @@ public sealed class CdpTargetClassifierTests
     [Theory]
     [InlineData("Codex")]
     [InlineData("ChatGPT")]
-    public void Classify_AcceptsReviewedUnifiedDesktopTitles(string title)
+    [InlineData("Review the release plan")]
+    [InlineData("整理项目笔记")]
+    [InlineData("")]
+    public void Classify_AcceptsReviewedUnifiedDesktopRegardlessOfTitle(string title)
     {
         var target = Target("page", title, "app://-/index.html");
 
@@ -53,6 +56,22 @@ public sealed class CdpTargetClassifierTests
         Assert.Equal(
             CdpTargetClassification.OtherPage,
             CdpTargetClassifier.Classify(target, _identity));
+    }
+
+    [Theory]
+    [InlineData("page", "app://-/index.html?initialRoute=%2Favatar-overlay")]
+    [InlineData("page", "app://-/detached-window.html?initialRoute=%2Fdetached-window")]
+    [InlineData("page", "app://user@-/index.html")]
+    [InlineData("page", "app://-:123/index.html")]
+    [InlineData("page", "app://-/auth/index.html")]
+    [InlineData("page", "https://chatgpt.com/")]
+    [InlineData("page", "https://evil.example/codex")]
+    [InlineData("webview", "app://-/index.html")]
+    public void Classify_ConversationTitleDoesNotAuthorizeUnreviewedTarget(string type, string url)
+    {
+        Assert.NotEqual(
+            CdpTargetClassification.CodexPage,
+            CdpTargetClassifier.Classify(Target(type, "整理项目笔记", url), _identity));
     }
 
     [Fact]

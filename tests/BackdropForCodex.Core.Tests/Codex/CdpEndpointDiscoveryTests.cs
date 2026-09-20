@@ -27,14 +27,18 @@ public sealed class CdpEndpointDiscoveryTests
         Assert.Equal(new Uri("ws://127.0.0.1:9222/devtools/browser/browser-id"), endpoint.BrowserWebSocketUri);
     }
 
-    [Fact]
-    public async Task DiscoverAsync_VerifiesUnifiedChatGptDesktopPage()
+    [Theory]
+    [InlineData("ChatGPT")]
+    [InlineData("Review the release plan")]
+    [InlineData("整理项目笔记")]
+    [InlineData("")]
+    public async Task DiscoverAsync_VerifiesUnifiedDesktopWithConversationTitle(string title)
     {
         var candidate = Candidate("http://127.0.0.1:9222/");
         var transport = new StubTransport(new Dictionary<string, string>
         {
             ["/json/version"] = VersionJson(9222),
-            ["/json/list"] = TargetJson(9222, "app://-/index.html", "ChatGPT"),
+            ["/json/list"] = TargetJson(9222, "app://-/index.html", title),
         });
         var discovery = new CdpEndpointDiscovery(
             new StubCandidateSource([candidate]),
@@ -45,7 +49,7 @@ public sealed class CdpEndpointDiscoveryTests
         var endpoint = Assert.Single(result.Endpoints);
         Assert.Empty(result.Rejections);
         var target = Assert.Single(endpoint.InjectableTargets);
-        Assert.Equal("ChatGPT", target.Title);
+        Assert.Equal(title, target.Title);
         Assert.Equal("app://-/index.html", target.Url);
     }
 

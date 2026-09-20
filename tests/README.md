@@ -59,6 +59,7 @@ The non-integration suite covers these release contracts:
 - typed outcomes (`MediaActive`, `Official`, `SavedButNotActivated`, `Superseded`, `Canceled`, `Failed`) and typed surfaces (`Official`, `MediaActive`, `Faulted`, `Disconnected`);
 - strict package/process/session/listener/IPv4 loopback/browser/socket/target/unique-page identity order, zero DOM probes after safety failure, zero/multiple-page rejection, baseline failure, and version-independent structure contracts;
 - stable `data-app-shell-*` presentation evidence for the Codex 26.727 CSS Modules shell, with a bounded unique-target readiness window for Direct and Scene/Web before conservative initial Global fallback; Scene/Web proves readiness before starting any window/capture/encoder/page stream and revalidates the same target plus the current Global baseline before mutation. Runtime structural misses use per-capability three-observation confirmation; positive evidence resets only the affected pending streak, while explicit non-structural failures still downgrade immediately;
+- conversation titles, including non-English and empty titles, do not prevent discovery or invalidate an already verified target; target id, document path, auxiliary-page, origin and authority checks remain enforced;
 - static injection resource, owner, generation, capability-block, and key reviewed-selector anchors; native selector matching and computed-style behavior belong to the browser-contract gate below;
 - editing and resubmitting during activation, stale-revision UI filtering, profile cards changing only `Draft`, empty profiles skipping CDP risk confirmation, Saved ≠ Active rendering, temporary Official, dirty-draft confirmation, the 959/960 px breakpoint, and critical accessibility behavior.
 - the 16:9 preview canvas across normal, maximized, and minimum layouts; uniform scaling and pointer-coordinate inversion; one shared image/video backdrop sample; and blur containment within the five rounded simulated glass surfaces.
@@ -80,6 +81,8 @@ dotnet test .\tests\BackdropForCodex.Core.Tests\BackdropForCodex.Core.Tests.cspr
 ```
 
 These contracts use the browser's CSSOM, `querySelectorAll`, and computed styles for reviewed positive, near-miss, protected-surface, Glass-downgrade, and Advanced-downgrade behavior. Set `BACKDROP_FOR_CODEX_EDGE_PATH` only when `msedge.exe` is outside the standard installation paths. CI runs this category explicitly on the .NET 10.0.303 Windows leg; a missing Edge executable fails that leg.
+
+The Codex 26.901 fixtures cover the unified workspace's main pseudo-element underlay, tab toolbar/content wrappers, mirrored and unfilled tool-pane shells, and settings canvases without the former elevation class. They verify protected content and capability downgrades using non-sensitive markup from the packaged app. These isolated fixtures do not replace the live Codex presentation check below.
 
 ### Current-machine Codex identity
 
@@ -104,6 +107,8 @@ dotnet test .\BackdropForCodex.slnx `
 ```
 
 CI and Release run this five-case class explicitly with .NET SDK `10.0.303`; a missing Edge executable fails the step. Record cold start, unique/zero/multiple targets, CSP-native media loading, generation-scoped cleanup, adaptive Markdown wide-table glass in LTR/RTL at 900, 960, and 1280 px (single glass owner, matching scroller bounds, reachable horizontal scrolling, and no document-level overflow), and version-independent DOM-contract observations that were actually exercised. Outside those automated gates, if Edge, the reviewed package, or the required desktop/session state is absent, list the affected cases as not verified.
+
+The startup regression also changes the document title after injection and waits for a renewed production heartbeat after each change, retaining the same wallpaper root across conversation titles and an empty title. This isolated Edge check does not navigate the user's live Codex conversations.
 
 ### Wallpaper Engine and real dynamic media
 

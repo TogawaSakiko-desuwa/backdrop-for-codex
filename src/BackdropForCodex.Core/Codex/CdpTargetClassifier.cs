@@ -1,7 +1,7 @@
 namespace BackdropForCodex.Core.Codex;
 
 /// <summary>
-/// Classifies untrusted CDP target descriptors against the routes and titles allowed by a verified
+/// Classifies untrusted CDP target descriptors against the document routes allowed by a verified
 /// Codex package identity.
 /// </summary>
 public static class CdpTargetClassifier
@@ -46,7 +46,9 @@ public static class CdpTargetClassifier
             return CdpTargetClassification.AuthenticationPage;
         }
 
-        if (identity.IsKnownTitle(target.Title) && IsReviewedCodexPage(uri, identity))
+        // Codex uses the active conversation name as its document title. That mutable display
+        // text is not identity evidence; the verified endpoint and reviewed document route are.
+        if (IsReviewedCodexPage(uri, identity))
         {
             return CdpTargetClassification.CodexPage;
         }

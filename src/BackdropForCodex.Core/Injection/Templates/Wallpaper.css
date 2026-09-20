@@ -117,6 +117,17 @@
         -webkit-backdrop-filter: none !important;
         backdrop-filter: none !important;
       }
+      /*
+       * The 26.901 unified workspace paints the main canvas in ::before as well
+       * as on main. This is part of the base wallpaper, including when optional
+       * glass is disabled. Keep the reviewed underlay's geometry and hit testing.
+       */
+      body > #root [data-app-shell-unified-tab-strip="true"]
+        main[data-app-shell-main-surface="default"]:has(
+          [data-app-shell-main-content-layout][data-app-shell-right-panel-full-width]
+        )::before {
+        background-color: transparent !important;
+      }
       /* codex-wallpaper-glass:start */
       __BFC_GLASS_BODY_SELECTOR__ [role="main"]:has([data-home-ambient-suggestions])
         section[class~="group/home-suggestions"]
@@ -240,7 +251,7 @@
         > [class~="relative"][class~="flex"][class~="min-h-0"][class~="flex-1"]
         > [class~="h-full"][class~="min-h-0"][class~="min-w-0"][class~="flex-1"]
         > [class~="h-full"][class~="min-w-0"][class~="overflow-visible"]
-        > div[class~="flex"][class~="h-full"][class~="min-h-0"][class~="flex-col"][class~="electron:overflow-hidden"][class~="electron:elevation-prominent"][class~="windows:rounded-tl-lg"]:is(
+        > div[class~="flex"][class~="h-full"][class~="min-h-0"][class~="flex-col"][class~="electron:overflow-hidden"][class~="windows:rounded-tl-lg"]:is(
           [class~="electron:bg-token-main-surface-primary"],
           [class~="electron:bg-surface"]
         ) {
@@ -269,6 +280,8 @@
       /*
        * The reviewed right-panel shell owns the opaque theme surface. Glass that
        * shell once so the tab strip and every right-side detail share one layer.
+       * The unified workspace can mirror this pane or omit its native fill in
+       * split mode; the bounded wrapper chain and tab controller identify it.
        */
       /* codex-wallpaper-glass:start */
       __BFC_GLASS_BODY_SELECTOR__ aside[data-app-shell-focus-area="right-panel"]
@@ -277,7 +290,7 @@
       __BFC_GLASS_BODY_SELECTOR__ aside[data-app-shell-focus-area="right-panel"]
         > div[class~="absolute"][class~="inset-x-0"][class~="bottom-0"][class~="min-h-0"][class~="min-w-0"][class~="overflow-visible"]
         > div[class~="absolute"][class~="inset-0"][class~="min-h-0"][class~="min-w-0"][class~="overflow-hidden"]
-        > div[class~="absolute"][class~="top-0"][class~="bottom-0"][class~="left-0"][class~="min-w-0"][class~="bg-[var(--app-shell-panel-background,var(--color-surface))]"]:has(
+        > div[class~="absolute"][class~="top-0"][class~="bottom-0"][class~="min-w-0"]:is([class~="left-0"], [class~="right-0"]):has(
           [data-app-shell-tabs="true"] [role="tabpanel"][data-app-shell-tab-panel-controller="right"]
         ) {
         background-color: var(--codex-wallpaper-glass) !important;
@@ -297,7 +310,7 @@
       __BFC_GLASS_BODY_SELECTOR__ aside[data-app-shell-focus-area="right-panel"]:not(:has([data-app-shell-tab-panel-controller]))
         > div[class~="absolute"][class~="inset-x-0"][class~="bottom-0"][class~="min-h-0"][class~="min-w-0"][class~="overflow-visible"]
         > div[class~="absolute"][class~="inset-0"][class~="min-h-0"][class~="min-w-0"][class~="overflow-hidden"]
-        > div[class~="absolute"][class~="top-0"][class~="bottom-0"][class~="left-0"][class~="min-w-0"][class~="bg-[var(--app-shell-panel-background,var(--color-surface))]"]:has([data-app-shell-tabs="true"]) {
+        > div[class~="absolute"][class~="top-0"][class~="bottom-0"][class~="min-w-0"]:is([class~="left-0"], [class~="right-0"]):has([data-app-shell-tabs="true"]) {
         background-color: var(--codex-wallpaper-glass) !important;
         -webkit-backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
         backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
@@ -313,8 +326,13 @@
       __BFC_GLASS_BODY_SELECTOR__ aside[data-app-shell-focus-area="right-panel"]
         [data-app-shell-tabs="true"][class~="bg-[var(--app-shell-panel-background,var(--color-surface))]"]:has([role="tabpanel"][data-app-shell-tab-panel-controller="right"]),
       __BFC_GLASS_BODY_SELECTOR__ aside[data-app-shell-focus-area="right-panel"]
-        [data-app-shell-tabs="true"][class~="bg-[var(--app-shell-panel-background,var(--color-surface))]"]:has([role="tabpanel"][data-app-shell-tab-panel-controller="right"])
-        > [class~="bg-[var(--app-shell-panel-background,var(--color-surface))]"]:has([data-app-shell-tab-strip-controller="right"]) {
+        [data-app-shell-tabs="true"]:has([role="tabpanel"][data-app-shell-tab-panel-controller="right"])
+        > [class~="bg-[var(--app-shell-panel-background,var(--color-surface))]"]:has([data-app-shell-tab-strip-controller="right"]),
+      __BFC_GLASS_BODY_SELECTOR__ aside[data-app-shell-focus-area="right-panel"]
+        [data-app-shell-tabs="true"]
+        > div[class~="relative"][class~="flex"][class~="min-h-0"][class~="flex-1"][class~="flex-col"][class~="bg-[var(--app-shell-panel-background,var(--color-surface))]"]:has(
+          > [role="tabpanel"][data-app-shell-tab-panel-controller="right"]
+        ) {
         background-color: transparent !important;
       }
       __BFC_GLASS_BODY_SELECTOR__ aside[data-app-shell-focus-area="right-panel"]

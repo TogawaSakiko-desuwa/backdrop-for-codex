@@ -134,6 +134,9 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
             Assert.True(session.Capabilities.Glass.IsAvailable);
             Assert.True(session.Capabilities.Advanced.IsAvailable);
 
+            await AssertConversationTitleChangesPreserveWallpaperAsync(endpoint);
+            Assert.True(session.IsActive);
+
             var evidenceScenarios = await ReadPresentationEvidenceScenariosAsync(endpoint);
 
             Assert.Equal(
@@ -1991,6 +1994,65 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
                   return result;
                 })()
                 """);
+        }
+        finally
+        {
+            browser.Disconnect();
+        }
+    }
+
+    private static async Task AssertConversationTitleChangesPreserveWallpaperAsync(
+        VerifiedCdpEndpoint endpoint)
+    {
+        var browser = await Puppeteer.ConnectAsync(new ConnectOptions
+        {
+            BrowserWSEndpoint = endpoint.BrowserWebSocketUri.AbsoluteUri,
+            DefaultViewport = null,
+            ProtocolTimeout = 5_000,
+            AcceptInsecureCerts = false,
+            NetworkEnabled = false,
+        });
+        try
+        {
+            var reviewedTarget = Assert.Single(endpoint.InjectableTargets);
+            var pages = await browser.PagesAsync(includeAll: true);
+            var page = Assert.Single(
+                pages,
+                candidate =>
+                    !candidate.IsClosed &&
+                    Uri.TryCreate(candidate.Url, UriKind.Absolute, out var candidateUri) &&
+                    VerifiedCodexPageSelector.IsSameReviewedDocument(
+                        candidateUri,
+                        reviewedTarget.Url));
+            await using var root = await page.QuerySelectorAsync(
+                $"#{InjectionScriptBuilder.RootElementId}");
+            Assert.NotNull(root);
+
+            foreach (var title in new[] { "整理项目笔记", "Review the release plan", "", "Codex" })
+            {
+                var previousHeartbeat = await page.EvaluateFunctionAsync<double>(
+                    """
+                    (title, stateProperty) => {
+                      document.title = title;
+                      return globalThis[stateProperty].lastHeartbeat;
+                    }
+                    """,
+                    title,
+                    InjectionScriptBuilder.StateProperty);
+                await using var heartbeat = await page.WaitForFunctionAsync(
+                    """
+                    (stateProperty, previousHeartbeat) => {
+                      const state = globalThis[stateProperty];
+                      return state?.mediaReady && state.root.isConnected &&
+                        state.lastHeartbeat > previousHeartbeat;
+                    }
+                    """,
+                    new WaitForFunctionOptions { Timeout = 8_000 },
+                    InjectionScriptBuilder.StateProperty,
+                    previousHeartbeat);
+                Assert.True(await root.EvaluateFunctionAsync<bool>(
+                    "root => root.isConnected"));
+            }
         }
         finally
         {
