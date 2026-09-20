@@ -120,22 +120,18 @@ internal sealed class VerifiedCodexPageSelector
         VerifiedCdpEndpoint endpoint,
         CancellationToken cancellationToken)
     {
-        var targetId = await GetTargetIdAsync(page, cancellationToken).ConfigureAwait(false);
-        if (targetId is null)
+        cancellationToken.ThrowIfCancellationRequested();
+        if (page.IsClosed)
         {
             return false;
         }
 
-        try
-        {
-            var title = await page.GetTitleAsync().WaitAsync(cancellationToken).ConfigureAwait(false);
-            return endpoint.Identity.IsKnownTitle(title) &&
-                   IsEligibleTargetDocument(targetId, page.Url, endpoint);
-        }
-        catch (PuppeteerException)
-        {
-            return false;
-        }
+        var targetId = await GetTargetIdAsync(page, cancellationToken).ConfigureAwait(false);
+        // Conversation switches may change only the title. Keep requiring the original verified
+        // target id and document, including rejection of auxiliary initialRoute navigation.
+        return targetId is not null &&
+               !page.IsClosed &&
+               IsEligibleTargetDocument(targetId, page.Url, endpoint);
     }
 
     private async Task<string?> GetTargetIdAsync(

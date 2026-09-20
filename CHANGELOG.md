@@ -4,8 +4,11 @@
 
 ## 未发布
 
+## [1.5.2] - 2026-09-20
+
 ### Fixed
 
+- 修复 Codex `26.915` 将页面标题改为对话名称后，进入对话触发壁纸撤回或无法重新应用的问题；首次识别与运行时复检使用已核验的目标和页面地址，不再依赖品牌标题。
 - 适配 Codex `26.901` 新工作区布局的主画布背景层，避免其遮挡壁纸；可选玻璃效果降级后仍保留基础背景。
 - 修复右侧面板背景移至标签栏和内容外框后玻璃效果被实色覆盖的问题，兼容面板移至左侧与分栏布局；浏览器内容、编辑器和操作控件保留原生表面。
 - 设置画布不再依赖新版已移除的 elevation 样式标记，恢复玻璃效果并保留设置卡片原生样式。
@@ -299,6 +302,7 @@
 - 复验完整 MSIX 包名、激活 PID、进程启动时间、Windows 会话和监听器所有权；媒体服务保持已校验文件的只读句柄。
 - 明确禁止 CSP bypass；关闭、更换或 lease 到期时移除媒体 `src`、撤销 `blob:` URL，并仅删除带有本项目 owner/generation 的节点和样式。
 
+[1.5.2]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.5.1...v1.5.2
 [1.5.1]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.5.0...v1.5.1
 [1.5.0]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.4.5...v1.5.0
 [1.4.5]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.4.4...v1.4.5

@@ -50,7 +50,7 @@ Scene / Web 只在 Wallpaper Engine 已经运行且项目窗口通过验证时�
 
 Codex 页面当前的 CSP 不允许从回环 HTTP 地址加载这些图片或视频。本项目不修改、不放宽也不绕过该 CSP。宿主经本机 CDP 把已校验、由 lease 锁定的文件绑定到页面内本项目拥有的隐藏文件输入，页面再生成 CSP 原生允许的 `blob:` URL。页面脚本在这段时间可以访问所选文件的内容，以及浏览器提供的文件名、大小、MIME type 和修改时间；它不能取得宿主传给 CDP 的完整绝对路径。宿主本身仍知道该路径，并按上一节所述保存设置。
 
-媒体 lease 组件不运行 Kestrel、不监听临时 HTTP 端口，也不生成媒体 endpoint 或媒体访问令牌。媒体文件内容不经过 HTTP、项目自有服务或维护者控制的基础设施。详见 [v1.5.1 威胁模型](https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/blob/v1.5.1/THREAT_MODEL.md)。
+媒体 lease 组件不运行 Kestrel、不监听临时 HTTP 端口，也不生成媒体 endpoint 或媒体访问令牌。媒体文件内容不经过 HTTP、项目自有服务或维护者控制的基础设施。详见 [v1.5.2 威胁模型](https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/blob/v1.5.2/THREAT_MODEL.md)。
 
 ### CDP 与 Codex 页面
 
@@ -94,4 +94,4 @@ Codex 页面当前的 CSP 不允许从回环 HTTP 地址加载这些图片或视
 
 本说明会随数据处理方式的变化更新。版本历史可通过 Git 查看。
 
-隐私或安全问题请按 [v1.5.1 安全策略](https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/blob/v1.5.1/SECURITY.md) 私下报告。
+隐私或安全问题请按 [v1.5.2 安全策略](https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/blob/v1.5.2/SECURITY.md) 私下报告。

@@ -12,11 +12,11 @@ Backdrop for Codex 是一个面向 **Windows 11 x64** 的非官方开源伴侣�
 [![CI](https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/actions/workflows/ci.yml/badge.svg)](https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-[快速开始](#下载与快速开始) · [v1.5.1 更新](#v151-更新亮点) · [核心功能](#核心功能) · [兼容性](#兼容性与限制) · [源码构建](#从源码构建)
+[快速开始](#下载与快速开始) · [v1.5.2 更新](#v152-更新亮点) · [核心功能](#核心功能) · [兼容性](#兼容性与限制) · [源码构建](#从源码构建)
 
 [**下载 Windows 11 x64 便携版 →**](https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/releases/latest)
 
-`v1.5.1` · 无需安装 · 使用普通用户权限运行 · 支持本地媒体、Wallpaper Engine Image / Video，以及实验性 Scene / Web
+`v1.5.2` · 无需安装 · 使用普通用户权限运行 · 支持本地媒体、Wallpaper Engine Image / Video，以及实验性 Scene / Web
 
 > [!CAUTION]
 > Backdrop for Codex 是独立社区项目，与 OpenAI 或 Microsoft 无隶属、赞助、认可或支持关系。它通过本机回环地址上的 Chrome DevTools Protocol（CDP）工作；请勿以管理员身份运行或转发调试端口，使用完毕后应完全退出 Codex。详情见[安全说明](SECURITY.md)和[威胁模型](THREAT_MODEL.md)。
@@ -44,41 +44,40 @@ Backdrop for Codex 是一个面向 **Windows 11 x64** 的非官方开源伴侣�
 
 <p align="center"><sub>示例媒体仅用于展示本地背景效果，不随本项目或 Release 发布。</sub></p>
 
-## v1.5.1 更新亮点
+## v1.5.2 更新亮点
 
 ### 最新 Codex 兼容
 
-- 适配 Codex `26.825` 的当前应用壳，恢复右侧 Browser/启动器、设置画布、对话底部渐变和相关顶栏的玻璃效果。
-- 启动器操作项、实际浏览器内容和其他交互表面保持原生样式，不会被宽泛透明化。
+- 修复 Codex `26.915` 进入或切换对话后壁纸消失、恢复官方背景的问题。
+- 页面标题变为对话名称后，仍可正常应用背景并保持播放。
 
-### 本地可靠性与恢复
+### 工作区与玻璃效果
 
-- 界面偏好使用可验证原子发布；损坏、未来版本、并发修改或中断事务会进入只读保护，并可从设置危险区完整重置。
-- 已选媒体的缩略图与缺失状态会在受验证文件 lease 边界内刷新，文件恢复或替换后不再长期显示旧缓存。
-- 修复 Wallpaper Engine 动态窗口启动/回滚失败时的清理所有权，收紧 CDP 页面 origin、authority 与路由校验。
+- 适配 Codex `26.901` 起的工作区背景层、侧边工具面板和设置画布，修复实色背景遮挡壁纸的问题。
+- 浏览器内容、编辑器、选中标签和操作控件继续保留原生表面。
 
 > [!IMPORTANT]
-> Scene / Web 在 v1.5.1 中仍为实验性功能；Image / Video 是稳定使用路径。
+> Scene / Web 在 v1.5.2 中仍为实验性功能；Image / Video 是稳定使用路径。
 
-[查看完整更新日志](CHANGELOG.md#151---2026-09-01)
+[查看完整更新日志](CHANGELOG.md#152---2026-09-20)
 
 ## 下载与快速开始
 
 | Release 文件 | 用途 |
 | --- | --- |
-| `BackdropForCodex-v1.5.1-win-x64.zip` | 普通用户下载；解压后直接运行 |
-| `BackdropForCodex-v1.5.1-SHA256SUMS.txt` | 核对下载文件的 SHA-256 |
-| `BackdropForCodex-v1.5.1-win-x64.spdx.json` | 机器可读的 SPDX SBOM |
+| `BackdropForCodex-v1.5.2-win-x64.zip` | 普通用户下载；解压后直接运行 |
+| `BackdropForCodex-v1.5.2-SHA256SUMS.txt` | 核对下载文件的 SHA-256 |
+| `BackdropForCodex-v1.5.2-win-x64.spdx.json` | 机器可读的 SPDX SBOM |
 
 1. 在 Windows 11 x64 上安装官方 Microsoft Store / MSIX x64 Codex。
-2. 从 [GitHub Releases](https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/releases/latest) 下载 `BackdropForCodex-v1.5.1-win-x64.zip`，解压到普通用户可写的空目录。
-3. 完全退出所有 Codex 进程，然后启动 `BackdropForCodex.exe`。
+2. 从 [GitHub Releases](https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/releases/latest) 下载 `BackdropForCodex-v1.5.2-win-x64.zip`，解压到普通用户可写的空目录。
+3. 完全退出所有 Codex 进程；升级时也请从通知区域退出旧版 Backdrop，再启动新版 `BackdropForCodex.exe`。
 4. 新建或选择背景方案，添加本地图片、视频或已安装的 Wallpaper Engine 项目，调整预览后点击“应用并启动 Codex”。
 5. 在随后出现的 CDP 风险提示中阅读安全边界；确认后，应用才会继续启动 Codex 并应用背景。
 6. 首次媒体激活成功后，应用会尝试在桌面创建 `Codex（动态背景）.lnk`；以后可用它执行增强启动。
 
 > [!NOTE]
-> `v1.5.1` 便携版未进行 Authenticode 代码签名。遇到 Windows SmartScreen 提示时，请先确认文件来自本仓库的 Release，并核对 SHA-256 或 GitHub artifact attestation。
+> `v1.5.2` 便携版未进行 Authenticode 代码签名。遇到 Windows SmartScreen 提示时，请先确认文件来自本仓库的 Release，并核对 SHA-256 或 GitHub artifact attestation。
 
 <details>
 <summary><strong>验证 SHA-256 与 GitHub 构建来源</strong></summary>
@@ -86,14 +85,14 @@ Backdrop for Codex 是一个面向 **Windows 11 x64** 的非官方开源伴侣�
 在下载目录打开 PowerShell：
 
 ```powershell
-Get-FileHash .\BackdropForCodex-v1.5.1-win-x64.zip -Algorithm SHA256
-Get-Content .\BackdropForCodex-v1.5.1-SHA256SUMS.txt
+Get-FileHash .\BackdropForCodex-v1.5.2-win-x64.zip -Algorithm SHA256
+Get-Content .\BackdropForCodex-v1.5.2-SHA256SUMS.txt
 ```
 
 确认 ZIP 的散列与清单完全一致。安装 [GitHub CLI](https://cli.github.com/) 后还可以验证构建来源：
 
 ```powershell
-gh attestation verify .\BackdropForCodex-v1.5.1-win-x64.zip `
+gh attestation verify .\BackdropForCodex-v1.5.2-win-x64.zip `
   --repo TogawaSakiko-desuwa/backdrop-for-codex
 ```
 

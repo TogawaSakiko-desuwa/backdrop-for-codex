@@ -12,11 +12,11 @@ Backdrop for Codex is an unofficial, open-source companion for **Windows 11 x64*
 [![CI](https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/actions/workflows/ci.yml/badge.svg)](https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-[Quick start](#download-and-quick-start) · [What's new](#whats-new-in-v151) · [Features](#features) · [Compatibility](#compatibility-and-limitations) · [Build](#build-from-source)
+[Quick start](#download-and-quick-start) · [What's new](#whats-new-in-v152) · [Features](#features) · [Compatibility](#compatibility-and-limitations) · [Build](#build-from-source)
 
 [**Download the Windows 11 x64 portable build →**](https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/releases/latest)
 
-`v1.5.1` · No installer · Runs as a standard user · Supports local media, Wallpaper Engine Image/Video, and experimental Scene/Web
+`v1.5.2` · No installer · Runs as a standard user · Supports local media, Wallpaper Engine Image/Video, and experimental Scene/Web
 
 > [!CAUTION]
 > Backdrop for Codex is an independent community project. It is not affiliated with, sponsored, endorsed, or supported by OpenAI or Microsoft. It works through the Chrome DevTools Protocol (CDP) on a local loopback address. Never run the companion as administrator or expose the debugging port beyond loopback, and fully exit Codex when finished. See the [security policy](SECURITY.md) and [threat model](THREAT_MODEL.md).
@@ -44,41 +44,40 @@ Backdrop for Codex is an unofficial, open-source companion for **Windows 11 x64*
 
 <p align="center"><sub>Example media is shown only to demonstrate local backdrop rendering and is not distributed with the project or its releases.</sub></p>
 
-## What's new in v1.5.1
+## What's new in v1.5.2
 
 ### Current Codex compatibility
 
-- Updated for the Codex `26.825` app shell, restoring glass across the right-side Browser/launcher, settings canvas, conversation bottom fade, and related headers.
-- Launcher actions, real browser content, and other interactive surfaces retain their native styling instead of being cleared by a broad rule.
+- Fixed the backdrop disappearing and reverting to the official background when opening or switching conversations in Codex `26.915`.
+- Backdrops can still be applied and kept running after the page title changes to a conversation name.
 
-### Local reliability and recovery
+### Workspace and glass surfaces
 
-- UI preferences now use verifiable atomic publication. Damage, future schemas, concurrent edits, or interrupted transactions enter read-only protection and can be cleared with an explicit full reset.
-- Selected-media thumbnails and missing-state probes refresh within the validated file-lease boundary, including after a file is restored or replaced.
-- Fixed cleanup ownership after Wallpaper Engine dynamic-window startup/rollback failures, and tightened CDP page origin, authority, and route validation.
+- Updated for the workspace background layer, side tool panes, and settings canvas introduced in Codex `26.901`, preventing opaque surfaces from covering the backdrop.
+- Browser content, editors, selected tabs, and interactive controls retain their native surfaces.
 
 > [!IMPORTANT]
-> Scene/Web remains experimental in v1.5.1. Image/Video is the stable path.
+> Scene/Web remains experimental in v1.5.2. Image/Video is the stable path.
 
-[Read the full changelog](CHANGELOG.md#151---2026-09-01)
+[Read the full changelog](CHANGELOG.md#152---2026-09-20)
 
 ## Download and quick start
 
 | Release file | Purpose |
 | --- | --- |
-| `BackdropForCodex-v1.5.1-win-x64.zip` | The portable app most users should download |
-| `BackdropForCodex-v1.5.1-SHA256SUMS.txt` | SHA-256 checksums for downloaded artifacts |
-| `BackdropForCodex-v1.5.1-win-x64.spdx.json` | Machine-readable SPDX SBOM |
+| `BackdropForCodex-v1.5.2-win-x64.zip` | The portable app most users should download |
+| `BackdropForCodex-v1.5.2-SHA256SUMS.txt` | SHA-256 checksums for downloaded artifacts |
+| `BackdropForCodex-v1.5.2-win-x64.spdx.json` | Machine-readable SPDX SBOM |
 
 1. Install the official Microsoft Store/MSIX x64 Codex desktop app on Windows 11 x64.
-2. Download `BackdropForCodex-v1.5.1-win-x64.zip` from [GitHub Releases](https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/releases/latest), then extract it into an empty directory writable by your standard user account.
-3. Fully exit every Codex process, then start `BackdropForCodex.exe`.
+2. Download `BackdropForCodex-v1.5.2-win-x64.zip` from [GitHub Releases](https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/releases/latest), then extract it into an empty directory writable by your standard user account.
+3. Fully exit every Codex process. When upgrading, also exit the previous Backdrop version from the notification area before starting the new `BackdropForCodex.exe`.
 4. Create or select a backdrop profile, add local media or an installed Wallpaper Engine project, adjust the preview, and select **Apply & launch Codex**.
 5. Read the CDP risk notice that appears next. After you accept it, the companion launches Codex and applies the backdrop.
 6. After the first successful media activation, the companion attempts to create `Codex（动态背景）.lnk` on your desktop for future enhanced launches.
 
 > [!NOTE]
-> The `v1.5.1` portable build is not Authenticode-signed. If Windows SmartScreen appears, first confirm that the file came from this repository's Release page and verify its SHA-256 or GitHub artifact attestation.
+> The `v1.5.2` portable build is not Authenticode-signed. If Windows SmartScreen appears, first confirm that the file came from this repository's Release page and verify its SHA-256 or GitHub artifact attestation.
 
 <details>
 <summary><strong>Verify SHA-256 and GitHub build provenance</strong></summary>
@@ -86,14 +85,14 @@ Backdrop for Codex is an unofficial, open-source companion for **Windows 11 x64*
 Open PowerShell in the download directory:
 
 ```powershell
-Get-FileHash .\BackdropForCodex-v1.5.1-win-x64.zip -Algorithm SHA256
-Get-Content .\BackdropForCodex-v1.5.1-SHA256SUMS.txt
+Get-FileHash .\BackdropForCodex-v1.5.2-win-x64.zip -Algorithm SHA256
+Get-Content .\BackdropForCodex-v1.5.2-SHA256SUMS.txt
 ```
 
 Confirm that the ZIP hash exactly matches the checksum manifest. If [GitHub CLI](https://cli.github.com/) is installed, you can also verify build provenance:
 
 ```powershell
-gh attestation verify .\BackdropForCodex-v1.5.1-win-x64.zip `
+gh attestation verify .\BackdropForCodex-v1.5.2-win-x64.zip `
   --repo TogawaSakiko-desuwa/backdrop-for-codex
 ```
 

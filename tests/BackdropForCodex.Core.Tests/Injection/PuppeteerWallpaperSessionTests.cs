@@ -422,6 +422,58 @@ public sealed class PuppeteerWallpaperSessionTests
     }
 
     [Fact]
+    public async Task PageSelector_KeepsVerifiedPageEligibleAcrossConversationTitleChanges()
+    {
+        var endpoint = VerifiedEndpoint();
+        var created = CreatePage("codex-page");
+        var selector = new VerifiedCodexPageSelector();
+
+        foreach (var title in new[] { "Codex", "整理项目笔记", "Review the release plan", "", "ChatGPT" })
+        {
+            created.Proxy.Title = title;
+            Assert.True(await selector.IsEligibleVerifiedPageAsync(
+                created.Page,
+                endpoint,
+                CancellationToken.None));
+        }
+    }
+
+    [Theory]
+    [InlineData("app://codex/index.html?initialRoute=%2Favatar-overlay")]
+    [InlineData("app://codex/auth/index.html")]
+    [InlineData("https://evil.example/index.html")]
+    public async Task PageSelector_StillRejectsDocumentChangeAfterConversationTitleChange(string url)
+    {
+        var endpoint = VerifiedEndpoint();
+        var created = CreatePage("codex-page");
+        var selector = new VerifiedCodexPageSelector();
+        Assert.True(await selector.IsEligibleVerifiedPageAsync(
+            created.Page,
+            endpoint,
+            CancellationToken.None));
+
+        created.Proxy.Title = "整理项目笔记";
+        created.Proxy.Url = url;
+
+        Assert.False(await selector.IsEligibleVerifiedPageAsync(
+            created.Page,
+            endpoint,
+            CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task PageSelector_ConversationTitleDoesNotAuthorizeUnknownTarget()
+    {
+        var created = CreatePage("unverified-page");
+        created.Proxy.Title = "整理项目笔记";
+
+        Assert.False(await new VerifiedCodexPageSelector().IsEligibleVerifiedPageAsync(
+            created.Page,
+            VerifiedEndpoint(),
+            CancellationToken.None));
+    }
+
+    [Fact]
     public async Task PageSelector_DeadlineCancelsAHangingCdpDetach()
     {
         var endpoint = VerifiedEndpoint();
@@ -685,6 +737,10 @@ public sealed class PuppeteerWallpaperSessionTests
     {
         public ICDPSession Session { get; set; } = null!;
 
+        public string Title { get; set; } = "Codex";
+
+        public string Url { get; set; } = "app://codex/index.html";
+
         public int PresentationEvidenceProbeCount { get; private set; }
 
         public int CapabilityDowngradeEvaluationCount { get; private set; }
@@ -696,8 +752,8 @@ public sealed class PuppeteerWallpaperSessionTests
             return targetMethod?.Name switch
             {
                 "get_IsClosed" => false,
-                "get_Url" => "app://codex/index.html",
-                "GetTitleAsync" => Task.FromResult("Codex"),
+                "get_Url" => Url,
+                "GetTitleAsync" => Task.FromResult(Title),
                 "CreateCDPSessionAsync" => Task.FromResult(Session),
                 "EvaluateExpressionAsync" => EvaluateExpression(targetMethod),
                 _ => throw new InvalidOperationException(
