@@ -118,6 +118,21 @@
         backdrop-filter: none !important;
       }
       /*
+       * 26.924 paints the page frame and display:contents workspace independently
+       * of main. Clear only shell owners containing the reviewed default canvas;
+       * this belongs to the base wallpaper, even without optional glass.
+       */
+      body > #root :is(
+        [data-app-shell-frame="true"][data-app-shell-workspace-tab-chrome],
+        [data-app-shell-frame="true"][data-app-shell-page-surface="true"],
+        [data-app-shell-unified-tab-strip][data-app-shell-page-surface="true"]
+      ):has(
+        main[data-app-shell-main-surface="default"]
+          [data-app-shell-main-content-layout][data-app-shell-right-panel-full-width]
+      ) {
+        background: transparent !important;
+      }
+      /*
        * The 26.901 unified workspace paints the main canvas in ::before as well
        * as on main. This is part of the base wallpaper, including when optional
        * glass is disabled. Keep the reviewed underlay's geometry and hit testing.
@@ -125,6 +140,14 @@
       body > #root [data-app-shell-unified-tab-strip="true"]
         main[data-app-shell-main-surface="default"]:has(
           [data-app-shell-main-content-layout][data-app-shell-right-panel-full-width]
+        )::before {
+        background-color: transparent !important;
+      }
+      /* 26.924 moved the underlay to main's direct workspace-content child. */
+      body > #root [data-app-shell-unified-tab-strip="true"]
+        main[data-app-shell-main-surface="default"]
+        > div[class~="relative"][class~="isolate"][class~="flex"][class~="min-h-0"][class~="flex-1"][class~="overflow-hidden"]:has(
+          > [data-app-shell-main-content-layout][data-app-shell-right-panel-full-width]
         )::before {
         background-color: transparent !important;
       }
@@ -330,7 +353,10 @@
         > [class~="bg-[var(--app-shell-panel-background,var(--color-surface))]"]:has([data-app-shell-tab-strip-controller="right"]),
       __BFC_GLASS_BODY_SELECTOR__ aside[data-app-shell-focus-area="right-panel"]
         [data-app-shell-tabs="true"]
-        > div[class~="relative"][class~="flex"][class~="min-h-0"][class~="flex-1"][class~="flex-col"][class~="bg-[var(--app-shell-panel-background,var(--color-surface))]"]:has(
+        > div[class~="relative"][class~="flex"][class~="min-h-0"][class~="flex-1"][class~="bg-[var(--app-shell-panel-background,var(--color-surface))]"]:is(
+          [class~="flex-col"],
+          [class~="min-w-0"][data-app-shell-compact-page-gutter]
+        ):has(
           > [role="tabpanel"][data-app-shell-tab-panel-controller="right"]
         ) {
         background-color: transparent !important;
@@ -398,6 +424,20 @@
         backdrop-filter: none !important;
         border-color: transparent !important;
       }
+      /*
+       * The page layout adds fills inside the already surfaced sidebar and
+       * header. Clear those chrome owners once; nested navigation, action
+       * controls and ordinary content retain their own backgrounds.
+       */
+      __BFC_GLASS_BODY_SELECTOR__ > #root
+        [data-app-shell-frame="true"][data-app-shell-page-surface="true"]
+        aside[class~="app-shell-left-panel"][data-app-shell-left-panel-appearance]
+        [class~="sidebar-navigation"][class~="relative"][class~="flex"][class~="min-h-0"][class~="min-w-0"][class~="flex-1"][class~="flex-col"][class~="overflow-hidden"]:not(.sidebar-navigation .sidebar-navigation),
+      __BFC_GLASS_BODY_SELECTOR__ header[data-app-shell-application-menu-bar][data-app-shell-header-edge-scroll]
+        [data-app-shell-main-titlebar][data-testid="app-shell-header-context-menu-surface"]
+        > [data-app-shell-page-header][data-app-shell-titlebar-content]:has([data-app-shell-overlay-page-header]) {
+        background-color: transparent !important;
+      }
       __BFC_GLASS_BODY_SELECTOR__ :is(
         aside:not([data-app-shell-focus-area="right-panel"]),
         [role="dialog"],
@@ -418,7 +458,10 @@
       /* codex-wallpaper-glass:end */
       /* codex-wallpaper-advanced:start */
       __BFC_ADVANCED_BODY_SELECTOR__ main
-        [data-app-shell-main-content-top-fade] {
+        [data-app-shell-main-content-top-fade],
+      __BFC_ADVANCED_BODY_SELECTOR__ main
+        [data-app-shell-main-content-top-fade]
+        > [aria-hidden="true"]:is([class^="_MainContentTopFade_"], [class*=" _MainContentTopFade_"]) {
         background-image: none !important;
       }
       __BFC_ADVANCED_BODY_SELECTOR__ main .thread-scroll-container
@@ -426,7 +469,10 @@
       __BFC_ADVANCED_BODY_SELECTOR__ main
         .thread-scroll-container:has(> [data-thread-scroll-footer="true"])
         [class~="sticky"][class~="bottom-0"][class~="z-10"][class~="w-full"][class~="mt-auto"][class~="shrink-0"]
-        > [aria-hidden="true"][class~="pointer-events-none"][class~="absolute"][class~="inset-x-0"][class~="bottom-0"][class~="z-0"][class~="h-full"][class~="bg-gradient-to-t"][class~="from-surface"][class~="via-surface"] {
+        > [aria-hidden="true"][class~="pointer-events-none"][class~="absolute"][class~="inset-x-0"][class~="bottom-0"][class~="z-0"][class~="bg-gradient-to-t"][class~="from-surface"][class~="via-surface"]:is(
+          [class~="h-full"],
+          [class~="-top-8"][class~="via-[calc(100%-var(--spacing)*8)]"]
+        ) {
         background: transparent !important;
       }
       /*

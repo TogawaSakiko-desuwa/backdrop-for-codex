@@ -179,6 +179,49 @@ public sealed class ReviewedSelectorBrowserContractTests
 
     [BrowserContractFact]
     [Trait("Category", "BrowserContract")]
+    public async Task PresentationProbe_IgnoresRetainedDisplayNoneShells()
+    {
+        await EdgeBrowserContractHarness.WithPageAsync(async page =>
+        {
+            (string WrapperStyle, string MainStyle, bool ExpectedShell)[] cases =
+            [
+                ("display:none", "", true),
+                ("display:contents", "display:none", true),
+                ("display:contents", "", false),
+                ("opacity:0", "", false),
+            ];
+            foreach (var testCase in cases)
+            {
+                await LoadFixtureAsync(page, $$"""
+                    <html><body><div id="root">
+                      <div style="display:contents">
+                        <main data-app-shell-main-surface="default" inert aria-hidden="true">
+                          <div data-app-shell-main-content-layout data-app-shell-right-panel-full-width></div>
+                        </main>
+                      </div>
+                      <div style="{{testCase.WrapperStyle}}">
+                        <main data-app-shell-main-surface="default" style="{{testCase.MainStyle}}">
+                          <div data-app-shell-main-content-layout data-app-shell-right-panel-full-width></div>
+                        </main>
+                      </div>
+                    </div></body></html>
+                    """);
+                var evidence = PresentationEvidenceScriptBuilder.Parse(
+                    await page.EvaluateExpressionAsync<string>(PresentationEvidenceScriptBuilder.Build()));
+                Assert.True(evidence.GlobalStructure);
+                Assert.Equal(testCase.ExpectedShell, evidence.ShellStructure);
+            }
+
+            await page.EvaluateExpressionAsync("document.querySelector('#root').style.display = 'none'");
+            var hidden = PresentationEvidenceScriptBuilder.Parse(
+                await page.EvaluateExpressionAsync<string>(PresentationEvidenceScriptBuilder.Build()));
+            Assert.True(hidden.GlobalStructure);
+            Assert.False(hidden.ShellStructure);
+        });
+    }
+
+    [BrowserContractFact]
+    [Trait("Category", "BrowserContract")]
     public async Task ShellSelectors_MatchReviewedSurfacesAndPreserveNearMisses()
     {
         await EdgeBrowserContractHarness.WithPageAsync(async page =>
@@ -555,6 +598,190 @@ public sealed class ReviewedSelectorBrowserContractTests
         });
     }
 
+    [BrowserContractFact]
+    [Trait("Category", "BrowserContract")]
+    public async Task Codex26924_WorkspaceBackgroundsClearWithoutChangingLayout()
+    {
+        await EdgeBrowserContractHarness.WithPageAsync(async page =>
+        {
+            string[] themes = ["electron-dark", "electron-light"];
+            int[] widths = [720, 1280];
+            const string geometryProbe = """
+                JSON.stringify(Array.from(document.querySelectorAll('[data-layout-probe]'), node => {
+                  const style = getComputedStyle(node);
+                  const before = getComputedStyle(node, '::before');
+                  return [node.getBoundingClientRect().toJSON(), style.position, style.overflow,
+                    style.isolation, before.top, before.bottom, before.zIndex, before.pointerEvents];
+                }))
+                """;
+            foreach (var theme in themes)
+            {
+                foreach (var width in widths)
+                {
+                    await page.SetViewportAsync(new ViewPortOptions { Width = width, Height = 900 });
+                    await LoadFixtureAsync(page, Codex26924LayoutFixture.Replace(
+                        "electron-dark", theme, StringComparison.Ordinal));
+                    var geometry = await page.EvaluateExpressionAsync<string>(geometryProbe);
+                    var original = await ReadSnapshotsAsync(page);
+                    Assert.Equal(NativeBackground, original["workspace-underlay"].BeforeBackgroundColor);
+                    AssertNative(original, "page-frame", "page-workspace", "tab-frame");
+
+                    await AddOwnedStyleAsync(page, BuildStyleSheet(), initializeOwnership: true);
+                    var snapshots = await ReadSnapshotsAsync(page);
+                    AssertClear(snapshots, "page-frame");
+                    AssertClear(snapshots, "page-workspace");
+                    AssertClear(snapshots, "tab-frame");
+                    Assert.Equal(TransparentBackground, snapshots["workspace-underlay"].BeforeBackgroundColor);
+                    string[] nativeUnderlays =
+                        ["nested-underlay", "browser-underlay", "missing-viewport-underlay", "non-unified-underlay", "outside-underlay"];
+                    foreach (var id in nativeUnderlays)
+                    {
+                        Assert.Equal(NativeBackground, snapshots[id].BeforeBackgroundColor);
+                    }
+
+                    AssertNative(snapshots, "untyped-frame", "browser-frame", "outside-frame", "content-card");
+                    Assert.Equal(geometry, await page.EvaluateExpressionAsync<string>(geometryProbe));
+                    Assert.Empty((await ReadCssomProbeAsync(page)).InvalidSelectors);
+
+                    Assert.True(await page.EvaluateExpressionAsync<bool>(
+                        InjectionScriptBuilder.BuildCapabilityDowngrade(
+                            Generation, CreateCapabilities(glassAvailable: false, advancedAvailable: false))));
+                    var downgraded = await ReadSnapshotsAsync(page);
+                    AssertClear(downgraded, "page-frame");
+                    AssertClear(downgraded, "page-workspace");
+                    AssertClear(downgraded, "tab-frame");
+                    Assert.Equal(TransparentBackground, downgraded["workspace-underlay"].BeforeBackgroundColor);
+                }
+            }
+        });
+    }
+
+    [BrowserContractFact]
+    [Trait("Category", "BrowserContract")]
+    public async Task Codex26924_PageChromeClearsOnlyReviewedSidebarAndHeaderSurfaces()
+    {
+        await EdgeBrowserContractHarness.WithPageAsync(async page =>
+        {
+            await LoadFixtureAsync(page, Codex26924LayoutFixture);
+            await AddOwnedStyleAsync(page, BuildStyleSheet(), initializeOwnership: true);
+            var snapshots = await ReadSnapshotsAsync(page);
+            AssertGlass(snapshots, "page-sidebar");
+            AssertClear(snapshots, "page-sidebar-navigation");
+            AssertClear(snapshots, "page-overlay-header");
+            AssertNative(snapshots, "sidebar-card", "nested-navigation", "header-control", "unreviewed-page-header");
+
+            Assert.True(await page.EvaluateExpressionAsync<bool>(
+                InjectionScriptBuilder.BuildCapabilityDowngrade(
+                    Generation, CreateCapabilities(glassAvailable: false, advancedAvailable: true))));
+            var downgraded = await ReadSnapshotsAsync(page);
+            AssertNative(downgraded, "page-sidebar", "page-sidebar-navigation", "page-overlay-header");
+            AssertClear(downgraded, "page-frame");
+        });
+    }
+
+    [BrowserContractFact]
+    [Trait("Category", "BrowserContract")]
+    public async Task Codex26924_TabContentWrapperRetainsOneGlassOwner()
+    {
+        var fixture = Codex26901TabPanelFixture.Replace(
+            "relative flex min-h-0 flex-1 flex-col bg-[var(--app-shell-panel-background,var(--color-surface))]\"",
+            "relative flex min-h-0 min-w-0 flex-1 bg-[var(--app-shell-panel-background,var(--color-surface))]\" data-app-shell-compact-page-gutter=\"false\"",
+            StringComparison.Ordinal);
+        await EdgeBrowserContractHarness.WithPageAsync(async page =>
+        {
+            await LoadFixtureAsync(page, fixture);
+            await AddOwnedStyleAsync(page, BuildStyleSheet(), initializeOwnership: true);
+            var snapshots = await ReadSnapshotsAsync(page);
+            AssertGlass(snapshots, "new-panel-shell");
+            AssertClear(snapshots, "new-panel-toolbar");
+            AssertClear(snapshots, "new-panel-content-wrapper");
+            Assert.Equal("none", snapshots["new-panel-content-wrapper"].BackdropFilter);
+            AssertNative(snapshots, "new-panel-editor", "new-panel-browser-content",
+                "new-panel-selected-tab", "new-panel-nested-wrapper", "new-panel-unrelated-child");
+
+            await page.EvaluateExpressionAsync("""
+                document.querySelector('[data-fixture-id="new-panel-content-wrapper"]')
+                  .removeAttribute('data-app-shell-compact-page-gutter')
+                """);
+            AssertNative(await ReadSnapshotsAsync(page), "new-panel-content-wrapper");
+
+            await LoadFixtureAsync(page, fixture);
+            await AddOwnedStyleAsync(page, BuildStyleSheet(), initializeOwnership: true);
+            await page.EvaluateExpressionAsync("""
+                document.querySelector('[data-app-shell-tab-panel-controller="right"]')
+                  .setAttribute('data-app-shell-tab-panel-controller', 'left')
+                """);
+            AssertNative(await ReadSnapshotsAsync(page), "new-panel-shell", "new-panel-content-wrapper");
+
+            await LoadFixtureAsync(page, fixture);
+            await AddOwnedStyleAsync(page, BuildStyleSheet(), initializeOwnership: true);
+            Assert.True(await page.EvaluateExpressionAsync<bool>(
+                InjectionScriptBuilder.BuildCapabilityDowngrade(
+                    Generation, CreateCapabilities(glassAvailable: false, advancedAvailable: true))));
+            AssertNative(await ReadSnapshotsAsync(page), "new-panel-shell", "new-panel-content-wrapper");
+        });
+    }
+
+    [BrowserContractFact]
+    [Trait("Category", "BrowserContract")]
+    public async Task Codex26924_NestedTopFadeFollowsAdvancedCapability()
+    {
+        await EdgeBrowserContractHarness.WithPageAsync(async page =>
+        {
+            await LoadFixtureAsync(page, Codex26924LayoutFixture);
+            await AddOwnedStyleAsync(page, BuildStyleSheet(), initializeOwnership: true);
+            var snapshots = await ReadSnapshotsAsync(page);
+            Assert.Equal("none", snapshots["nested-top-fade"].BackgroundImage);
+            Assert.NotEqual("none", snapshots["unreviewed-top-fade"].BackgroundImage);
+            Assert.NotEqual("none", snapshots["content-fade"].BackgroundImage);
+
+            Assert.True(await page.EvaluateExpressionAsync<bool>(
+                InjectionScriptBuilder.BuildCapabilityDowngrade(
+                    Generation, CreateCapabilities(glassAvailable: true, advancedAvailable: false))));
+            var downgraded = await ReadSnapshotsAsync(page);
+            Assert.NotEqual("none", downgraded["nested-top-fade"].BackgroundImage);
+            AssertGlass(downgraded, "page-sidebar");
+            AssertClear(downgraded, "page-sidebar-navigation");
+        });
+    }
+
+    [BrowserContractFact]
+    [Trait("Category", "BrowserContract")]
+    public async Task Codex26924_ComposerBackdropClearsOnlyDecorativeFade()
+    {
+        // The 26.924 fade extends 32px above its spacer instead of using h-full.
+        var fixture = AdvancedFixture.Replace(
+            "z-0 h-full bg-gradient-to-t",
+            "z-0 -top-8 bg-gradient-to-t via-[calc(100%-var(--spacing)*8)]",
+            StringComparison.Ordinal);
+        await EdgeBrowserContractHarness.WithPageAsync(async page =>
+        {
+            await LoadFixtureAsync(page, fixture);
+            Assert.NotEqual("none", (await ReadSnapshotsAsync(page))["current-thread-bottom-fade"].BackgroundImage);
+            await AddOwnedStyleAsync(page, BuildStyleSheet(), initializeOwnership: true);
+            var snapshots = await ReadSnapshotsAsync(page);
+            Assert.Equal("none", snapshots["current-thread-bottom-fade"].BackgroundImage);
+            AssertNative(snapshots, "current-thread-bottom-chrome", "composer-surface-chrome");
+            string[] protectedFades =
+                ["current-thread-bottom-fade-outside-thread", "current-thread-bottom-fade-without-footer", "current-thread-bottom-fade-other-token"];
+            foreach (var id in protectedFades)
+            {
+                Assert.NotEqual("none", snapshots[id].BackgroundImage);
+            }
+
+            Assert.Empty((await ReadCssomProbeAsync(page)).InvalidSelectors);
+            Assert.True(await page.EvaluateExpressionAsync<bool>(
+                InjectionScriptBuilder.BuildCapabilityDowngrade(
+                    Generation, CreateCapabilities(glassAvailable: false, advancedAvailable: true))));
+            Assert.Equal("none", (await ReadSnapshotsAsync(page))["current-thread-bottom-fade"].BackgroundImage);
+
+            Assert.True(await page.EvaluateExpressionAsync<bool>(
+                InjectionScriptBuilder.BuildCapabilityDowngrade(
+                    Generation, CreateCapabilities(glassAvailable: false, advancedAvailable: false))));
+            Assert.NotEqual("none", (await ReadSnapshotsAsync(page))["current-thread-bottom-fade"].BackgroundImage);
+        });
+    }
+
     private static Task LoadFixtureAsync(IPage page, string body) =>
         page.SetContentAsync(
             $$"""
@@ -878,6 +1105,99 @@ public sealed class ReviewedSelectorBrowserContractTests
                 </div>
               </div>
             </aside>
+          </body>
+        </html>
+        """;
+
+    // 26.924 packaged shell structure; no account content or CSS module hashes.
+    private const string Codex26924LayoutFixture =
+        $$"""
+        <html class="electron-dark" data-codex-window-type="electron">
+          <head>
+            {{NativeStyles}}
+            <style>
+              body { margin: 0; }
+              [data-app-shell-frame] { position: relative; width: 100%; }
+              [data-app-shell-workspace-row] { display: flex; height: 400px; }
+              .app-shell-left-panel { width: 180px; }
+              [data-app-shell-unified-tab-strip] { display: contents; }
+              main { position: relative; flex: 1; min-width: 0; }
+              .workspace-content { position: relative; isolation: isolate; display: flex; overflow: hidden; height: 300px; }
+              .workspace-content::before {
+                content: ""; position: absolute; inset: 48px 0 0; z-index: -10;
+                pointer-events: none; background-color: rgb(41 42 43);
+              }
+            </style>
+          </head>
+          <body>
+            <div id="root">
+              <div data-app-shell-frame="true" data-app-shell-page-surface="true" data-fixture-id="page-frame" data-layout-probe>
+                <div data-app-shell-workspace-row="true">
+                  <aside class="app-shell-left-panel" data-app-shell-left-panel-appearance="default" data-fixture-id="page-sidebar">
+                    <div><div class="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden sidebar-navigation" data-fixture-id="page-sidebar-navigation">
+                      <button data-fixture-id="sidebar-card">Navigation action</button>
+                      <div class="sidebar-navigation" data-fixture-id="nested-navigation"></div>
+                    </div></div>
+                  </aside>
+                  <div data-app-shell-unified-tab-strip="true" data-app-shell-page-surface="true" data-fixture-id="page-workspace">
+                    <div><main data-app-shell-main-surface="default" data-layout-probe>
+                      <header data-app-shell-application-menu-bar data-app-shell-header-edge-scroll>
+                        <div data-app-shell-main-titlebar="true" data-testid="app-shell-header-context-menu-surface">
+                          <div data-app-shell-page-header="true" data-app-shell-titlebar-content="true" data-fixture-id="page-overlay-header">
+                            <div data-app-shell-overlay-page-header><button data-fixture-id="header-control">Header action</button></div>
+                          </div>
+                        </div>
+                      </header>
+                      <div class="workspace-content relative isolate flex min-h-0 flex-1 overflow-hidden" data-fixture-id="workspace-underlay" data-layout-probe>
+                        <div data-app-shell-main-content-layout="default" data-app-shell-right-panel-full-width="false">
+                          <div data-app-shell-thread-edge-divider="false">
+                            <div data-app-shell-main-content-top-fade="visible">
+                              <div class="pointer-events-none _MainContentTopFade_fixture" aria-hidden="true" data-native-fade data-fixture-id="nested-top-fade"></div>
+                              <div data-fixture-id="content-card">
+                                <div class="_MainContentTopFade_fixture" data-native-fade data-fixture-id="content-fade"></div>
+                                <div class="workspace-content relative isolate flex min-h-0 flex-1 overflow-hidden" data-fixture-id="nested-underlay">
+                                  <div data-app-shell-main-content-layout data-app-shell-right-panel-full-width></div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div data-app-shell-page-header="true" data-app-shell-titlebar-content="true" data-fixture-id="unreviewed-page-header">
+                        <div data-app-shell-overlay-page-header></div>
+                      </div>
+                      <div class="_MainContentTopFade_fixture" data-native-fade data-fixture-id="unreviewed-top-fade"></div>
+                      <div class="workspace-content relative isolate flex min-h-0 flex-1 overflow-hidden" data-fixture-id="missing-viewport-underlay"></div>
+                    </main></div>
+                  </div>
+                </div>
+              </div>
+              <div data-app-shell-frame="true" data-app-shell-page-surface="false" data-app-shell-workspace-tab-chrome data-fixture-id="tab-frame">
+                <main data-app-shell-main-surface="default"><div data-app-shell-main-content-layout data-app-shell-right-panel-full-width></div></main>
+              </div>
+              <div data-app-shell-page-surface="true" data-fixture-id="untyped-frame">
+                <main data-app-shell-main-surface="default"><div data-app-shell-main-content-layout data-app-shell-right-panel-full-width></div></main>
+              </div>
+              <div data-app-shell-frame="true" data-app-shell-page-surface="true" data-fixture-id="browser-frame">
+                <div data-app-shell-unified-tab-strip="true"><main data-app-shell-main-surface="browser">
+                  <div class="workspace-content relative isolate flex min-h-0 flex-1 overflow-hidden" data-fixture-id="browser-underlay">
+                    <div data-app-shell-main-content-layout data-app-shell-right-panel-full-width></div>
+                  </div>
+                </main></div>
+              </div>
+              <div data-app-shell-unified-tab-strip="false"><main data-app-shell-main-surface="default">
+                <div class="workspace-content relative isolate flex min-h-0 flex-1 overflow-hidden" data-fixture-id="non-unified-underlay">
+                  <div data-app-shell-main-content-layout data-app-shell-right-panel-full-width></div>
+                </div>
+              </main></div>
+            </div>
+            <div data-app-shell-frame="true" data-app-shell-page-surface="true" data-fixture-id="outside-frame">
+              <div data-app-shell-unified-tab-strip="true"><main data-app-shell-main-surface="default">
+                <div class="workspace-content relative isolate flex min-h-0 flex-1 overflow-hidden" data-fixture-id="outside-underlay">
+                  <div data-app-shell-main-content-layout data-app-shell-right-panel-full-width></div>
+                </div>
+              </main></div>
+            </div>
           </body>
         </html>
         """;

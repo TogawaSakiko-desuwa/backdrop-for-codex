@@ -2028,6 +2028,24 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
                 $"#{InjectionScriptBuilder.RootElementId}");
             Assert.NotNull(root);
 
+            // Keep a retained route mounted for more than three production heartbeats.
+            // A hidden second shell must not permanently downgrade the active one.
+            await page.EvaluateExpressionAsync("""
+                (() => {
+                  const retained = document.createElement("div");
+                  retained.id = "retained-shell-fixture";
+                  retained.style.display = "none";
+                  const main = document.createElement("main");
+                  main.dataset.appShellMainSurface = "default";
+                  const viewport = document.createElement("div");
+                  viewport.dataset.appShellMainContentLayout = "default";
+                  viewport.dataset.appShellRightPanelFullWidth = "false";
+                  main.append(viewport);
+                  retained.append(main);
+                  document.querySelector("#root").append(retained);
+                })()
+                """);
+
             foreach (var title in new[] { "整理项目笔记", "Review the release plan", "", "Codex" })
             {
                 var previousHeartbeat = await page.EvaluateFunctionAsync<double>(
@@ -2053,6 +2071,17 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
                 Assert.True(await root.EvaluateFunctionAsync<bool>(
                     "root => root.isConnected"));
             }
+
+            Assert.True(await page.EvaluateFunctionAsync<bool>(
+                """
+                stateProperty => {
+                  const state = globalThis[stateProperty];
+                  return state.glassEnabled && state.advancedSurfacesEnabled &&
+                    state.root.dataset.codexWallpaperContrastFallback !== "true";
+                }
+                """,
+                InjectionScriptBuilder.StateProperty));
+            await page.EvaluateExpressionAsync("document.querySelector('#retained-shell-fixture').remove()");
         }
         finally
         {
