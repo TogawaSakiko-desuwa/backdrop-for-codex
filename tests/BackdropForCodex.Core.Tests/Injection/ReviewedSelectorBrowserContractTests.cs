@@ -782,6 +782,121 @@ public sealed class ReviewedSelectorBrowserContractTests
         });
     }
 
+    [BrowserContractFact]
+    [Trait("Category", "BrowserContract")]
+    public async Task Codex261007_SlateSidebarClearsOnlyItsOuterContentSurface()
+    {
+        await EdgeBrowserContractHarness.WithPageAsync(async page =>
+        {
+            string[] themes = ["electron-dark", "electron-light"];
+            foreach (var theme in themes)
+            {
+                await LoadFixtureAsync(page, Codex261007SidebarFixture.Replace(
+                    "electron-dark", theme, StringComparison.Ordinal));
+                var original = await ReadSnapshotsAsync(page);
+                Assert.NotEqual(TransparentBackground, original["slate-content"].BackgroundColor);
+
+                await AddOwnedStyleAsync(page, BuildStyleSheet(), initializeOwnership: true);
+                var snapshots = await ReadSnapshotsAsync(page);
+                AssertGlass(snapshots, "slate-sidebar");
+                AssertClear(snapshots, "slate-content");
+                Assert.Equal("none", snapshots["slate-content"].BackdropFilter);
+                AssertNative(snapshots, "slate-nested-navigation", "slate-action",
+                    "unmarked-slate-content", "false-slate-content", "outside-slate-content");
+                Assert.Empty((await ReadCssomProbeAsync(page)).InvalidSelectors);
+
+                Assert.True(await page.EvaluateExpressionAsync<bool>(
+                    InjectionScriptBuilder.BuildCapabilityDowngrade(
+                        Generation, CreateCapabilities(glassAvailable: true, advancedAvailable: false))));
+                AssertClear(await ReadSnapshotsAsync(page), "slate-content");
+
+                Assert.True(await page.EvaluateExpressionAsync<bool>(
+                    InjectionScriptBuilder.BuildCapabilityDowngrade(
+                        Generation, CreateCapabilities(glassAvailable: false, advancedAvailable: false))));
+                var downgraded = await ReadSnapshotsAsync(page);
+                Assert.Equal(original["slate-content"].BackgroundColor, downgraded["slate-content"].BackgroundColor);
+                AssertNative(downgraded, "slate-sidebar");
+            }
+        });
+    }
+
+    [BrowserContractFact]
+    [Trait("Category", "BrowserContract")]
+    public async Task Codex261007_SplitComposerBackdropClearsWithoutChangingControlsOrLayout()
+    {
+        await EdgeBrowserContractHarness.WithPageAsync(async page =>
+        {
+            const string geometryProbe = """
+                JSON.stringify(Array.from(document.querySelectorAll('[data-layout-probe]'), node => {
+                  const style = getComputedStyle(node);
+                  return [node.getBoundingClientRect().toJSON(), style.position,
+                    style.pointerEvents, style.zIndex, style.overflow];
+                }))
+                """;
+            string[] surfaces = ["split-surface", "split-disclaimer-surface"];
+            string[] themes = ["electron-dark", "electron-light"];
+            int[] widths = [720, 1280];
+            foreach (var theme in themes)
+            {
+                foreach (var width in widths)
+                {
+                    await page.SetViewportAsync(new ViewPortOptions { Width = width, Height = 900 });
+                    await LoadFixtureAsync(page, Codex261007ComposerFixture.Replace(
+                        "electron-dark", theme, StringComparison.Ordinal));
+                    // A neighboring scroller without a reviewed footer must not borrow its identity.
+                    await page.EvaluateExpressionAsync("""
+                        (() => {
+                          const original = document.querySelector('[data-request-input-activity-root]');
+                          const copy = original.cloneNode(true);
+                          copy.querySelector('[data-thread-scroll-footer]').removeAttribute('data-thread-scroll-footer');
+                          for (const node of copy.querySelectorAll('[data-fixture-id]')) {
+                            node.dataset.fixtureId = 'unreviewed-' + node.dataset.fixtureId;
+                          }
+                          original.after(copy);
+                        })()
+                        """);
+                    var original = await ReadSnapshotsAsync(page);
+                    Assert.NotEqual("none", original["split-fade"].BackgroundImage);
+                    AssertNative(original, surfaces);
+                    var geometry = await page.EvaluateExpressionAsync<string>(geometryProbe);
+
+                    await AddOwnedStyleAsync(page, BuildStyleSheet(), initializeOwnership: true);
+                    var snapshots = await ReadSnapshotsAsync(page);
+                    Assert.Equal("none", snapshots["split-fade"].BackgroundImage);
+                    foreach (var id in surfaces)
+                    {
+                        AssertClear(snapshots, id);
+                    }
+
+                    AssertNative(snapshots, "split-composer", "split-send-button", "split-content-card",
+                        "split-nested-surface", "split-disclaimer-text", "unreviewed-split-surface",
+                        "unreviewed-split-disclaimer-surface");
+                    Assert.Equal(original["unreviewed-split-fade"].BackgroundImage,
+                        snapshots["unreviewed-split-fade"].BackgroundImage);
+                    Assert.Equal(geometry, await page.EvaluateExpressionAsync<string>(geometryProbe));
+                    Assert.Empty((await ReadCssomProbeAsync(page)).InvalidSelectors);
+
+                    Assert.True(await page.EvaluateExpressionAsync<bool>(
+                        InjectionScriptBuilder.BuildCapabilityDowngrade(
+                            Generation, CreateCapabilities(glassAvailable: false, advancedAvailable: true))));
+                    var withoutGlass = await ReadSnapshotsAsync(page);
+                    Assert.Equal("none", withoutGlass["split-fade"].BackgroundImage);
+                    foreach (var id in surfaces)
+                    {
+                        AssertClear(withoutGlass, id);
+                    }
+
+                    Assert.True(await page.EvaluateExpressionAsync<bool>(
+                        InjectionScriptBuilder.BuildCapabilityDowngrade(
+                            Generation, CreateCapabilities(glassAvailable: false, advancedAvailable: false))));
+                    var downgraded = await ReadSnapshotsAsync(page);
+                    AssertNative(downgraded, surfaces);
+                    Assert.Equal(original["split-fade"].BackgroundImage, downgraded["split-fade"].BackgroundImage);
+                }
+            }
+        });
+    }
+
     private static Task LoadFixtureAsync(IPage page, string body) =>
         page.SetContentAsync(
             $$"""
@@ -1198,6 +1313,102 @@ public sealed class ReviewedSelectorBrowserContractTests
                 </div>
               </main></div>
             </div>
+          </body>
+        </html>
+        """;
+
+    // 26.1007.21434 packaged structure. The new sidebar owner has no relative class.
+    private const string Codex261007SidebarFixture =
+        $$"""
+        <html class="electron-dark">
+          <head>
+            {{NativeStyles}}
+            <style>
+              :root { --color-surface: rgb(41 42 43); }
+              .electron-light { --color-surface: rgb(246 246 247); }
+              [data-app-shell-frame="true"][data-app-shell-page-surface="true"]
+                [data-slate-sidebar-content="true"]:not(.sidebar-navigation .sidebar-navigation) {
+                background-color: color-mix(in oklab, var(--color-surface) 65%, transparent);
+              }
+            </style>
+          </head>
+          <body>
+            <div id="root">
+              <div data-app-shell-frame="true" data-app-shell-page-surface="true">
+                <aside class="app-shell-left-panel" data-app-shell-left-panel-appearance="default" data-fixture-id="slate-sidebar">
+                  <div data-slate-sidebar-content="true" class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden sidebar-navigation" data-fixture-id="slate-content">
+                    <div class="flex min-h-0 min-w-0 flex-1 flex-col">
+                      <div data-slate-sidebar-content="true" class="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden sidebar-navigation" data-fixture-id="slate-nested-navigation">
+                        <button data-fixture-id="slate-action">Navigation action</button>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden sidebar-navigation" data-fixture-id="unmarked-slate-content"></div>
+                  <div data-slate-sidebar-content="false" class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden sidebar-navigation" data-fixture-id="false-slate-content"></div>
+                </aside>
+              </div>
+              <aside class="app-shell-left-panel" data-app-shell-left-panel-appearance="default">
+                <div data-slate-sidebar-content="true" class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden sidebar-navigation" data-fixture-id="outside-slate-content"></div>
+              </aside>
+            </div>
+          </body>
+        </html>
+        """;
+
+    // The fade stays in the transcript spacer; the surface moves to its sibling absolute footer.
+    private const string Codex261007ComposerFixture =
+        $$"""
+        <html class="electron-dark">
+          <head>
+            {{NativeStyles}}
+            <style>
+              body { margin: 0; }
+              [data-request-input-activity-root] { position: relative; height: 320px; }
+              .thread-scroll-container { display: flex; flex-direction: column; height: 100%; overflow-y: auto; }
+              [class~="[container-name:thread-content]"] { display: flex; flex-direction: column; min-height: 100%; }
+              [class~="sticky"] { position: sticky; bottom: 0; height: 80px; margin-top: auto; }
+              [class~="pointer-events-none"] { pointer-events: none; }
+              [class~="absolute"] { position: absolute; left: 0; right: 0; }
+              [class~="-top-8"] { top: -32px; }
+              [class~="bottom-0"] { bottom: 0; }
+              [class~="h-8"] { height: 32px; }
+              [class~="mt-8"] { margin-top: 32px; }
+              [class~="z-0"] { z-index: 0; }
+              [class~="z-10"] { z-index: 10; }
+              [class~="z-20"] { z-index: 20; }
+              [data-pip-obstacle="thread-footer"], .composer-disclaimer-above { position: relative; pointer-events: auto; }
+              [data-fixture-id$="split-composer"] { position: relative; height: 64px; }
+              [data-native-fade] { background-color: transparent; }
+            </style>
+          </head>
+          <body>
+            <div id="root"><main data-app-shell-main-surface="default">
+              <div data-request-input-activity-root="true" class="group/thread-scroll-layout relative h-full flex-1" data-layout-probe>
+                <div class="thread-scroll-container overflow-x-hidden overflow-y-auto h-full flex flex-col" data-layout-probe>
+                  <div class="[container-type:inline-size] flex min-h-full shrink-0 flex-col justify-start overflow-x-clip [container-name:thread-content]">
+                    <div data-mcp-app-portal-target="true" data-thread-user-message-navigation-content="true" class="relative flex flex-1 shrink-0 flex-col">
+                      <article data-fixture-id="split-content-card">Conversation content</article>
+                    </div>
+                    <div aria-hidden="true" class="pointer-events-none sticky bottom-0 z-10 mt-auto w-full shrink-0" data-layout-probe>
+                      <div aria-hidden="true" class="pointer-events-none absolute inset-x-0 -top-8 z-0 h-8 bg-gradient-to-t from-surface extension:from-surface-secondary" data-native-fade data-fixture-id="split-fade" data-layout-probe></div>
+                    </div>
+                  </div>
+                  <div data-thread-scroll-footer="true" class="pointer-events-none absolute inset-x-0 z-20 bottom-0 pb-(--thread-composer-bottom-inset)" data-layout-probe>
+                    <div aria-hidden="true" class="pointer-events-none absolute inset-x-0 -top-8 z-0 bottom-0 mt-8 bg-surface extension:bg-surface-secondary" data-fixture-id="split-surface" data-layout-probe></div>
+                    <div class="relative z-10 flex flex-col" data-pip-obstacle="thread-footer">
+                      <div class="composer-disclaimer-above relative">
+                        <div aria-hidden="true" class="pointer-events-none absolute inset-x-0 -top-8 z-0 bottom-0 mt-8 bg-surface extension:bg-surface-secondary" data-fixture-id="split-disclaimer-surface"></div>
+                        <div class="relative" data-fixture-id="split-disclaimer-text">Composer notice</div>
+                      </div>
+                      <div data-codex-composer-root class="bg-surface" data-fixture-id="split-composer" data-layout-probe>
+                        <button data-fixture-id="split-send-button" data-layout-probe>Send</button>
+                        <div aria-hidden="true" class="pointer-events-none absolute inset-x-0 -top-8 z-0 bottom-0 mt-8 bg-surface" data-fixture-id="split-nested-surface"></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </main></div>
           </body>
         </html>
         """;

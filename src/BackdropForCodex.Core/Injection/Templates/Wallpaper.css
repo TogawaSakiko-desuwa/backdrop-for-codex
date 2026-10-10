@@ -428,11 +428,13 @@
        * The page layout adds fills inside the already surfaced sidebar and
        * header. Clear those chrome owners once; nested navigation, action
        * controls and ordinary content retain their own backgrounds.
+       * 26.1007 marks the outer sidebar with data-slate-sidebar-content instead
+       * of relative; keep the full layout signature and nested-navigation guard.
        */
       __BFC_GLASS_BODY_SELECTOR__ > #root
         [data-app-shell-frame="true"][data-app-shell-page-surface="true"]
         aside[class~="app-shell-left-panel"][data-app-shell-left-panel-appearance]
-        [class~="sidebar-navigation"][class~="relative"][class~="flex"][class~="min-h-0"][class~="min-w-0"][class~="flex-1"][class~="flex-col"][class~="overflow-hidden"]:not(.sidebar-navigation .sidebar-navigation),
+        [class~="sidebar-navigation"]:is([class~="relative"], [data-slate-sidebar-content="true"])[class~="flex"][class~="min-h-0"][class~="min-w-0"][class~="flex-1"][class~="flex-col"][class~="overflow-hidden"]:not(.sidebar-navigation .sidebar-navigation),
       __BFC_GLASS_BODY_SELECTOR__ header[data-app-shell-application-menu-bar][data-app-shell-header-edge-scroll]
         [data-app-shell-main-titlebar][data-testid="app-shell-header-context-menu-surface"]
         > [data-app-shell-page-header][data-app-shell-titlebar-content]:has([data-app-shell-overlay-page-header]) {
@@ -473,6 +475,27 @@
           [class~="h-full"],
           [class~="-top-8"][class~="via-[calc(100%-var(--spacing)*8)]"]
         ) {
+        background: transparent !important;
+      }
+      /*
+       * 26.1007 splits the composer backdrop: a short fade in the transcript
+       * spacer and a surface in its sibling absolute footer. Only clear those
+       * decorative owners and the same surface behind the composer notice.
+       */
+      __BFC_ADVANCED_BODY_SELECTOR__ main[data-app-shell-main-surface="default"]
+        .thread-scroll-container:has(> [data-thread-scroll-footer="true"])
+        > [class~="[container-name:thread-content]"]
+        > [aria-hidden="true"][class~="pointer-events-none"][class~="sticky"][class~="bottom-0"][class~="z-10"][class~="mt-auto"][class~="w-full"][class~="shrink-0"]
+        > [aria-hidden="true"][class~="pointer-events-none"][class~="absolute"][class~="inset-x-0"][class~="-top-8"][class~="z-0"][class~="h-8"][class~="bg-gradient-to-t"][class~="from-surface"],
+      __BFC_ADVANCED_BODY_SELECTOR__ main[data-app-shell-main-surface="default"]
+        .thread-scroll-container
+        > [data-thread-scroll-footer="true"][class~="pointer-events-none"][class~="absolute"][class~="inset-x-0"][class~="bottom-0"][class~="z-20"]
+        > [aria-hidden="true"][class~="pointer-events-none"][class~="absolute"][class~="inset-x-0"][class~="-top-8"][class~="z-0"][class~="bottom-0"][class~="mt-8"][class~="bg-surface"],
+      __BFC_ADVANCED_BODY_SELECTOR__ main[data-app-shell-main-surface="default"]
+        .thread-scroll-container
+        > [data-thread-scroll-footer="true"][class~="pointer-events-none"][class~="absolute"][class~="inset-x-0"][class~="bottom-0"][class~="z-20"]
+        [class~="composer-disclaimer-above"][class~="relative"]
+        > [aria-hidden="true"][class~="pointer-events-none"][class~="absolute"][class~="inset-x-0"][class~="-top-8"][class~="z-0"][class~="bottom-0"][class~="mt-8"][class~="bg-surface"] {
         background: transparent !important;
       }
       /*

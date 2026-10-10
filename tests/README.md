@@ -88,6 +88,8 @@ The Codex 26.924 fixtures cover the page frame/workspace fills, the underlay mov
 
 They also cover the composer backdrop extending above its spacer without `h-full`, and retained shell routes hidden by `display:none` on the main or an ancestor. Multiple displayed shells remain ambiguous; `inert`, `aria-hidden`, opacity, zero size and `display:contents` do not bypass that check. The startup heartbeat regression retains a hidden second shell for four observed heartbeats and verifies that Glass and Advanced remain enabled.
 
+The Codex 26.1007 fixtures cover the `data-slate-sidebar-content` wrapper without `relative`, and the composer backdrop split between a transcript fade and an absolute footer (including its notice backdrop). They check both themes, composer geometry at 720 and 1280 px, protected controls and nested content, unrelated scrollers, and independent Glass/Advanced downgrades. These are isolated Edge checks based on installed package `26.1007.21434`, not live Codex visual verification.
+
 ### Current-machine Codex identity
 
 On a supported Windows 11 x64 machine with the reviewed official Microsoft Store/MSIX Codex package installed and, where required, running:
