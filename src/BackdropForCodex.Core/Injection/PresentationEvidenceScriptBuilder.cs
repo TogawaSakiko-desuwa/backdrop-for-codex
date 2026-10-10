@@ -50,10 +50,21 @@ internal static class PresentationEvidenceScriptBuilder
               const ownsSignal = (candidate, selector) =>
                 Array.from(candidate.querySelectorAll(selector)).some(
                   signal => signal.closest(probe.mainSelector) === candidate);
+              // Codex retains inactive routes under display:none workspace wrappers.
+              // They are not simultaneous shell candidates. Inert/aria-hidden, zero
+              // size and display:contents alone do not exclude a displayed shell.
+              const isDisplayed = candidate => {
+                for (let node = candidate; node; node = node.parentElement) {
+                  if (getComputedStyle(node).display === "none") return false;
+                  if (node === appRoot) return true;
+                }
+                return false;
+              };
               const shellEvidence = globalStructure
                 ? mains
                   .filter(candidate =>
-                    !candidate.parentElement?.closest(probe.mainSelector))
+                    !candidate.parentElement?.closest(probe.mainSelector) &&
+                    isDisplayed(candidate))
                   .map(candidate => {
                     const typedMain = candidate.matches(probe.shellMainSelector);
                     const shellHeader = ownsSignal(
