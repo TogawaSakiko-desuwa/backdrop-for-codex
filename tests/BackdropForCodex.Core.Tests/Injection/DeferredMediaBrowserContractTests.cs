@@ -15,6 +15,14 @@ public sealed class DeferredMediaBrowserContractTests
         await EdgeBrowserContractHarness.WithPageAsync(async page =>
         {
             await page.SetContentAsync("<html><body><div id='root'><main></main></div></body></html>");
+            // This contract verifies autoplay; do not inherit the runner's reduced-motion policy.
+            var motion = await page.CreateCDPSessionAsync();
+            await motion.SendAsync("Emulation.setEmulatedMedia", new
+            {
+                features = new[] { new { name = "prefers-reduced-motion", value = "no-preference" } },
+            });
+            Assert.False(await page.EvaluateExpressionAsync<bool>(
+                "matchMedia('(prefers-reduced-motion: reduce)').matches"));
             var bytes = await RecordVideoAsync(page);
             var path = Path.Combine(Path.GetTempPath(), $"backdrop-deferred-{Guid.NewGuid():N}.webm");
             await File.WriteAllBytesAsync(path, bytes);
@@ -42,9 +50,9 @@ public sealed class DeferredMediaBrowserContractTests
                 Assert.False(await page.EvaluateExpressionAsync<bool>("document.hidden"));
                 await WaitUntilAsync(page,
                     "globalThis.__codexWallpaperOwnedState_v1?.mediaReady === true");
-                await Task.Delay(300);
-                Assert.True(await page.EvaluateExpressionAsync<bool>(
-                    "globalThis.__codexWallpaperOwnedState_v1.media.currentTime > 0"));
+                await WaitUntilAsync(page,
+                    "globalThis.__codexWallpaperOwnedState_v1.media.currentTime > 0 && " +
+                    "!globalThis.__codexWallpaperOwnedState_v1.media.paused");
                 Assert.True(await page.EvaluateExpressionAsync<bool>(
                     InjectionScriptBuilder.BuildHeartbeat(generation)));
                 Assert.True(await page.EvaluateExpressionAsync<bool>(
@@ -56,6 +64,7 @@ public sealed class DeferredMediaBrowserContractTests
                 Assert.False(await page.EvaluateExpressionAsync<bool>(
                     "Boolean(globalThis.__codexWallpaperOwnedState_v1)"));
                 await visibility.DetachAsync();
+                await motion.DetachAsync();
             }
             finally
             {
@@ -119,7 +128,8 @@ public sealed class DeferredMediaBrowserContractTests
         Assert.Fail(await page.EvaluateExpressionAsync<string>("""
             (() => { const s=globalThis.__codexWallpaperOwnedState_v1; return JSON.stringify({
               hidden:document.hidden,pending:s?.activationPending,ready:s?.mediaReady,
-              network:s?.media.networkState,mediaState:s?.media.readyState,error:s?.media.error?.message
+              network:s?.media.networkState,mediaState:s?.media.readyState,error:s?.media.error?.message,
+              paused:s?.media.paused,time:s?.media.currentTime,reducedMotion:s?.motionQuery?.matches
             }); })()
             """));
     }
