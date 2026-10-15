@@ -1851,20 +1851,22 @@ public sealed class DynamicWallpaperActivationFactoryTests
             ownerDeadline);
         var project = new FakeProjectLease(Resolution(), events);
         var active = (await factory.ActivateAsync(Request(project.Resolution), project)).Lease;
+        var releaseReadCancellation = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
 
         try
         {
             await capture.PendingReadBlocked.Task.WaitAsync(TimeSpan.FromSeconds(2));
+            // Hold the inner read cleanup until this test has made the outer stop deadline win.
+            // Otherwise either owner can register first, depending on ThreadPool scheduling.
+            frameDeadline.CancellationGate = releaseReadCancellation.Task;
             var stopping = active.DisposeAsync().AsTask();
             await WaitUntilAsync(() => ownerDeadline.PendingCount >= 1, TimeSpan.FromSeconds(2));
             Assert.True(ownerDeadline.ExpireNext());
             await Assert.ThrowsAnyAsync<InvalidOperationException>(() =>
                 stopping.WaitAsync(TimeSpan.FromSeconds(2)));
 
-            if (frameDeadline.HasPendingWait)
-            {
-                Assert.True(frameDeadline.ExpireCurrent());
-            }
+            releaseReadCancellation.TrySetResult();
 
             await WaitUntilAsync(() => ownerDeadline.PendingCount >= 1, TimeSpan.FromSeconds(2));
             Assert.True(ownerDeadline.ExpireNext());
@@ -1900,6 +1902,7 @@ public sealed class DynamicWallpaperActivationFactoryTests
         }
         finally
         {
+            releaseReadCancellation.TrySetResult();
             capture.ReleasePendingRead.TrySetResult();
             try
             {
@@ -2745,6 +2748,8 @@ public sealed class DynamicWallpaperActivationFactoryTests
 
         public TimeSpan CancellationDelay { get; init; }
 
+        public Task? CancellationGate { get; set; }
+
         public int ArmCount => Volatile.Read(ref _armCount);
 
         public TimeSpan LastRequestedDelay
@@ -2795,14 +2800,21 @@ public sealed class DynamicWallpaperActivationFactoryTests
             Interlocked.Increment(ref _armCount);
 
             using var registration = cancellationToken.Register(
-                () => ScheduleCancellation(current, CancellationDelay));
+                () => ScheduleCancellation(current, CancellationDelay, CancellationGate));
             await current.Task.ConfigureAwait(false);
         }
 
         private static void ScheduleCancellation(
             TaskCompletionSource completion,
-            TimeSpan delay)
+            TimeSpan delay,
+            Task? gate)
         {
+            if (gate is not null)
+            {
+                _ = CompleteCancellationAfterGateAsync(completion, gate);
+                return;
+            }
+
             if (delay == TimeSpan.Zero)
             {
                 completion.TrySetCanceled();
@@ -2810,6 +2822,14 @@ public sealed class DynamicWallpaperActivationFactoryTests
             }
 
             _ = CompleteCancellationAfterDelayAsync(completion, delay);
+        }
+
+        private static async Task CompleteCancellationAfterGateAsync(
+            TaskCompletionSource completion,
+            Task gate)
+        {
+            await gate.ConfigureAwait(false);
+            completion.TrySetCanceled();
         }
 
         private static async Task CompleteCancellationAfterDelayAsync(
