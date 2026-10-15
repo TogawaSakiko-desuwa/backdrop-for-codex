@@ -134,7 +134,8 @@ public sealed class MainWindowViewModelTests
             previewMedia: preview);
         await viewModel.InitializeAsync();
         var initialProbeCount = preview.ProbedReferences.Count;
-        preview.IsAvailableResult = false;
+        // Missing-media retries also probe availability; keep this coalescing fixture available.
+        var initialCard = Assert.Single(viewModel.ProfileCards);
 
         for (var index = 0; index < 8; index++)
         {
@@ -143,7 +144,8 @@ public sealed class MainWindowViewModelTests
 
         await Task.Delay(TimeSpan.FromMilliseconds(500));
 
-        Assert.True(Assert.Single(viewModel.ProfileCards).IsMissing);
+        Assert.NotSame(initialCard, Assert.Single(viewModel.ProfileCards));
+        Assert.False(viewModel.ProfileCards[0].IsMissing);
         Assert.Equal(initialProbeCount + 1, preview.ProbedReferences.Count);
     }
 
@@ -163,7 +165,7 @@ public sealed class MainWindowViewModelTests
             previewMedia: preview);
         await viewModel.InitializeAsync();
         var initialProbeCount = preview.ProbedReferences.Count;
-        preview.IsAvailableResult = false;
+        var initialCard = Assert.Single(viewModel.ProfileCards);
 
         MediaThumbnailInvalidationHub.InvalidateSource(mediaPath);
         for (var index = 0; index < 256; index++)
@@ -176,7 +178,8 @@ public sealed class MainWindowViewModelTests
 
         await Task.Delay(TimeSpan.FromMilliseconds(500));
 
-        Assert.True(Assert.Single(viewModel.ProfileCards).IsMissing);
+        Assert.NotSame(initialCard, Assert.Single(viewModel.ProfileCards));
+        Assert.False(viewModel.ProfileCards[0].IsMissing);
         Assert.Equal(initialProbeCount + 1, preview.ProbedReferences.Count);
     }
 
