@@ -12,11 +12,11 @@ Backdrop for Codex is an unofficial, open-source companion for **Windows 11 x64*
 [![CI](https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/actions/workflows/ci.yml/badge.svg)](https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-[Quick start](#download-and-quick-start) · [What's new](#whats-new-in-v152) · [Features](#features) · [Compatibility](#compatibility-and-limitations) · [Build](#build-from-source)
+[Quick start](#download-and-quick-start) · [What's new](#whats-new-in-v153) · [Features](#features) · [Compatibility](#compatibility-and-limitations) · [Build](#build-from-source)
 
 [**Download the Windows 11 x64 portable build →**](https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/releases/latest)
 
-`v1.5.2` · No installer · Runs as a standard user · Supports local media, Wallpaper Engine Image/Video, and experimental Scene/Web
+`v1.5.3` · No installer · Runs as a standard user · Supports local media, Wallpaper Engine Image/Video, and experimental Scene/Web
 
 > [!CAUTION]
 > Backdrop for Codex is an independent community project. It is not affiliated with, sponsored, endorsed, or supported by OpenAI or Microsoft. It works through the Chrome DevTools Protocol (CDP) on a local loopback address. Never run the companion as administrator or expose the debugging port beyond loopback, and fully exit Codex when finished. See the [security policy](SECURITY.md) and [threat model](THREAT_MODEL.md).
@@ -44,20 +44,20 @@ Backdrop for Codex is an unofficial, open-source companion for **Windows 11 x64*
 
 <p align="center"><sub>Example media is shown only to demonstrate local backdrop rendering and is not distributed with the project or its releases.</sub></p>
 
-## What's new in v1.5.2
+## What's new in v1.5.3
 
-### Current Codex compatibility
+### Wallpaper Engine playback fixes
 
-- Fixed the backdrop disappearing and reverting to the official background when opening or switching conversations in Codex `26.915`.
-- Backdrops can still be applied and kept running after the page title changes to a conversation name.
+- Supports both 32-bit and 64-bit Wallpaper Engine and starts the engine when applying a Scene/Web project. Fixes unavailable live playback and failures when reselecting a project already in the library.
+- Low frame rates, window movement, and brief performance dips no longer immediately stop playback or lower quality. Sustained pressure still adjusts quality and retries recovery.
 
-### Workspace and glass surfaces
+### First application and Codex layout compatibility
 
-- Updated for the workspace background layer, side tool panes, and settings canvas introduced in Codex `26.901`, preventing opaque surfaces from covering the backdrop.
-- Browser content, editors, selected tabs, and interactive controls retain their native surfaces.
+- Fixes wallpapers needing to be applied again after the companion launches Codex, and resumes playback when the page becomes visible again.
+- Supports the workspace, sidebar, and composer surfaces in Codex `26.924` / `26.1007`, while preserving native browser content, editors, and controls.
 
 > [!IMPORTANT]
-> Scene/Web remains experimental in v1.5.2. Image/Video is the stable path.
+> Scene/Web remains experimental in v1.5.3. Image/Video is the stable path.
 
 [Read the full changelog](CHANGELOG.md#152---2026-09-20)
 
@@ -65,19 +65,19 @@ Backdrop for Codex is an unofficial, open-source companion for **Windows 11 x64*
 
 | Release file | Purpose |
 | --- | --- |
-| `BackdropForCodex-v1.5.2-win-x64.zip` | The portable app most users should download |
-| `BackdropForCodex-v1.5.2-SHA256SUMS.txt` | SHA-256 checksums for downloaded artifacts |
-| `BackdropForCodex-v1.5.2-win-x64.spdx.json` | Machine-readable SPDX SBOM |
+| `BackdropForCodex-v1.5.3-win-x64.zip` | The portable app most users should download |
+| `BackdropForCodex-v1.5.3-SHA256SUMS.txt` | SHA-256 checksums for downloaded artifacts |
+| `BackdropForCodex-v1.5.3-win-x64.spdx.json` | Machine-readable SPDX SBOM |
 
 1. Install the official Microsoft Store/MSIX x64 Codex desktop app on Windows 11 x64.
-2. Download `BackdropForCodex-v1.5.2-win-x64.zip` from [GitHub Releases](https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/releases/latest), then extract it into an empty directory writable by your standard user account.
+2. Download `BackdropForCodex-v1.5.3-win-x64.zip` from [GitHub Releases](https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/releases/latest), then extract it into an empty directory writable by your standard user account.
 3. Fully exit every Codex process. When upgrading, also exit the previous Backdrop version from the notification area before starting the new `BackdropForCodex.exe`.
 4. Create or select a backdrop profile, add local media or an installed Wallpaper Engine project, adjust the preview, and select **Apply & launch Codex**.
 5. Read the CDP risk notice that appears next. After you accept it, the companion launches Codex and applies the backdrop.
 6. After the first successful media activation, the companion attempts to create `Codex（动态背景）.lnk` on your desktop for future enhanced launches.
 
 > [!NOTE]
-> The `v1.5.2` portable build is not Authenticode-signed. If Windows SmartScreen appears, first confirm that the file came from this repository's Release page and verify its SHA-256 or GitHub artifact attestation.
+> The `v1.5.3` portable build is not Authenticode-signed. If Windows SmartScreen appears, first confirm that the file came from this repository's Release page and verify its SHA-256 or GitHub artifact attestation.
 
 <details>
 <summary><strong>Verify SHA-256 and GitHub build provenance</strong></summary>
@@ -85,14 +85,14 @@ Backdrop for Codex is an unofficial, open-source companion for **Windows 11 x64*
 Open PowerShell in the download directory:
 
 ```powershell
-Get-FileHash .\BackdropForCodex-v1.5.2-win-x64.zip -Algorithm SHA256
-Get-Content .\BackdropForCodex-v1.5.2-SHA256SUMS.txt
+Get-FileHash .\BackdropForCodex-v1.5.3-win-x64.zip -Algorithm SHA256
+Get-Content .\BackdropForCodex-v1.5.3-SHA256SUMS.txt
 ```
 
 Confirm that the ZIP hash exactly matches the checksum manifest. If [GitHub CLI](https://cli.github.com/) is installed, you can also verify build provenance:
 
 ```powershell
-gh attestation verify .\BackdropForCodex-v1.5.2-win-x64.zip `
+gh attestation verify .\BackdropForCodex-v1.5.3-win-x64.zip `
   --repo TogawaSakiko-desuwa/backdrop-for-codex
 ```
 
@@ -105,7 +105,7 @@ gh attestation verify .\BackdropForCodex-v1.5.2-win-x64.zip `
 - Local PNG, JPEG, and WebP images, plus muted looping MP4 and WebM videos.
 - Discovery of installed Workshop items and Local Projects under `projects/myprojects` and `projects/backup` from a verified official Steam/Wallpaper Engine installation. The companion does not browse the online Workshop, subscribe, download, or modify Steam configuration.
 - One valid installation is selected automatically. If several exist or discovery fails, the source library can select an installation location and return to automatic discovery at any time. A manual choice lasts only for the current run.
-- Wallpaper Engine Image/Video projects play directly. Experimental Scene/Web requires Wallpaper Engine to be running. A project may play audio through Wallpaper Engine; Backdrop neither mutes nor forwards it.
+- Wallpaper Engine Image/Video projects play directly. Applying experimental Scene/Web starts a verified 32-bit or 64-bit engine on demand or reuses an existing instance. A project may play audio through Wallpaper Engine; Backdrop neither mutes nor forwards it.
 
 ### Workbench and profiles
 
@@ -136,14 +136,14 @@ gh attestation verify .\BackdropForCodex-v1.5.2-win-x64.zip `
 | PNG, JPEG, WebP | Supported |
 | MP4, WebM | Supported as muted looping video |
 | Installed Wallpaper Engine Image/Video | Supported for Workshop and Local Projects through verified direct media; Wallpaper Engine does not need to be running |
-| Installed Wallpaper Engine Scene/Web | Experimental support for Workshop and Local Projects when a verified Wallpaper Engine instance is already running and the system supports dynamic capture and playback. Project audio may play through Wallpaper Engine |
+| Installed Wallpaper Engine Scene/Web | Experimental support for Workshop and Local Projects. Applying a wallpaper starts the verified 32-bit or 64-bit engine on demand; the system must support dynamic capture and playback. Project audio may play through Wallpaper Engine |
 | Wallpaper Engine Application/Unknown | Always rejected and never executed |
 | Online Workshop, automatic subscription/download, user properties, presets, playlists, or forwarding audio/input into Codex | Not supported |
 | Local media limits | Ordinary files on local disks only; image up to 512 MiB, 32,768 px per side, and approximately 33.5 MP; video up to 8 GiB |
 | Win32 portable Codex, Codex web/CLI, Windows 10, Windows on Arm, macOS, Linux | Not supported |
 | Independent per-window or per-region backdrops and video audio | Not supported |
 
-Experimental Scene/Web never uses Wallpaper Engine's global pause/play/mute commands and never captures the desktop. Start Wallpaper Engine before using a Scene/Web project; Backdrop does not start it automatically. Scene/Web may play audio, and Backdrop does not enumerate, mute, or change Wallpaper Engine audio sessions or relay audio into Codex. The first Web activation warns that the project may use the network and play audio. The repository and releases do not include Wallpaper Engine binaries, Workshop content, or user projects.
+Experimental Scene/Web never uses Wallpaper Engine's global pause/play/mute commands and never captures the desktop. Applying a project starts the verified engine if necessary; browsing the library does not start it. The engine remains running after Backdrop closes its own project window. Scene/Web may play audio, and Backdrop does not enumerate, mute, or change Wallpaper Engine audio sessions or relay audio into Codex. The first Web activation warns that the project may use the network and play audio. The repository and releases do not include Wallpaper Engine binaries, Workshop content, or user projects.
 
 Compatibility is determined from the current Codex page and process state. A failed safety check stops activation. If only optional visual effects are unavailable, the companion keeps the usable backdrop and applies a high-readability fallback. Codex updates may temporarily affect compatibility, so use the latest Backdrop for Codex release.
 
@@ -194,7 +194,7 @@ See the following documents for the complete data flow and security boundaries:
 ## How it works
 
 1. Local files and Wallpaper Engine Image/Video entries are validated on the device and loaded through a page-supported local media path.
-2. Scene/Web captures pixels from a separate project window owned by the running Wallpaper Engine instance. It does not forward project scripts, input, or Codex content.
+2. Applying Scene/Web starts Wallpaper Engine on demand or reuses an existing 32-bit or 64-bit instance, then captures pixels from a separate project window. It does not forward project scripts, input, or Codex content.
 3. Before activation, the companion verifies Codex, the loopback debugging endpoint, and the target page. Replacement, Restore Official, and Exit remove only resources created by this companion.
 
 ## Build from source

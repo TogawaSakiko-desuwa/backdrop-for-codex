@@ -121,7 +121,7 @@ public sealed class WallpaperEngineWindowRendererTests
     }
 
     [Fact]
-    public async Task PlacementDriftFaultsActiveHealthButStaysMutedUntilExactClose()
+    public async Task PlacementDriftKeepsTheActiveWindowAndAudioLeaseUntilExactClose()
     {
         var fixture = new RendererFixture();
         var renderer = fixture.CreateRenderer();
@@ -132,13 +132,10 @@ public sealed class WallpaperEngineWindowRendererTests
         var health = Assert.IsAssignableFrom<IActiveWallpaperHealthSource>(window);
         fixture.PlacementNative.MoveToVisibleArea();
 
-        fixture.HealthScheduler.Advance();
+        await fixture.HealthScheduler.AdvanceAsync();
 
-        var exception = await Assert.ThrowsAsync<WallpaperEnginePlatformUnavailableException>(
-            async () => await health.Completion.WaitAsync(TimeSpan.FromSeconds(1)));
-        Assert.Equal(
-            WallpaperEnginePlatformUnavailableReason.WindowPlacementNotProven,
-            exception.Reason);
+        Assert.False(health.Completion.IsCompleted);
+        Assert.Equal(1, fixture.PlacementNative.BottomPlacementCount);
         Assert.True(fixture.PlacementNative.WindowExists);
         Assert.Equal(0, fixture.AudioLease.DisposeCount);
 
@@ -1251,14 +1248,25 @@ public sealed class WallpaperEngineWindowRendererTests
     {
         private readonly System.Threading.Channels.Channel<bool> _ticks =
             System.Threading.Channels.Channel.CreateUnbounded<bool>();
+        private TaskCompletionSource? _nextWait;
 
-        internal void Advance() => Assert.True(_ticks.Writer.TryWrite(true));
+        internal Task AdvanceAsync()
+        {
+            var nextWait = new TaskCompletionSource(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+            _nextWait = nextWait;
+            Assert.True(_ticks.Writer.TryWrite(true));
+            return nextWait.Task.WaitAsync(TimeSpan.FromSeconds(1));
+        }
 
         public async ValueTask DelayAsync(
             TimeSpan delay,
-            CancellationToken cancellationToken) =>
+            CancellationToken cancellationToken)
+        {
+            Interlocked.Exchange(ref _nextWait, null)?.TrySetResult();
             _ = await _ticks.Reader
                 .ReadAsync(cancellationToken)
                 .ConfigureAwait(false);
+        }
     }
 }

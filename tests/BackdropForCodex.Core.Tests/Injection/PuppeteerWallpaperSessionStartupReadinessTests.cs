@@ -58,6 +58,15 @@ public sealed class PuppeteerWallpaperSessionStartupReadinessTests
                 </style>
                 <script>
                   addEventListener("DOMContentLoaded", () => {
+                    // Shell readiness and a slow first media decode must not consume one deadline.
+                    const addImageListener = HTMLImageElement.prototype.addEventListener;
+                    HTMLImageElement.prototype.addEventListener = function(type, listener, options) {
+                      if (type === "load" && this.dataset.codexWallpaperOwner) {
+                        return addImageListener.call(this, type,
+                          event => setTimeout(() => listener.call(this, event), 6500), options);
+                      }
+                      return addImageListener.call(this, type, listener, options);
+                    };
                     const rejectWallpaperInputsUntil = performance.now() + 5500;
                     new MutationObserver(() => {
                       if (performance.now() >= rejectWallpaperInputsUntil) return;

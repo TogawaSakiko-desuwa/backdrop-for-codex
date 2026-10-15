@@ -116,7 +116,7 @@ public sealed class InjectionScriptBuilderTests
     }
 
     [Fact]
-    public void BuildActivateMedia_RequiresDecodedDimensionsBeforeReportingApplied()
+    public void BuildActivateMedia_RequiresDecodedDimensionsBeforeMarkingMediaReady()
     {
         var script = InjectionScriptBuilder.BuildActivateMedia(17);
 
@@ -637,7 +637,7 @@ public sealed class InjectionScriptBuilderTests
     }
 
     [Fact]
-    public void BuildHeartbeat_IsGenerationScopedAndRequiresReadyMedia()
+    public void BuildHeartbeat_IsGenerationScopedAndAllowsPendingOwnedMedia()
     {
         var script = InjectionScriptBuilder.BuildHeartbeat(42);
 
@@ -679,7 +679,7 @@ public sealed class InjectionScriptBuilderTests
         Assert.Contains("state.media.parentElement !== state.root", script, StringComparison.Ordinal);
         Assert.Contains("state.overlay.parentElement !== state.root", script, StringComparison.Ordinal);
         Assert.Contains("!state.blobUrl", script, StringComparison.Ordinal);
-        Assert.Contains("state.media.currentSrc !== state.blobUrl", script, StringComparison.Ordinal);
+        Assert.Contains("(state.activationPending ? state.media.src : state.media.currentSrc) !== state.blobUrl", script, StringComparison.Ordinal);
         Assert.Contains("state.media.error", script, StringComparison.Ordinal);
         Assert.Contains("state.media.readyState >= state.media.HAVE_CURRENT_DATA", script, StringComparison.Ordinal);
         Assert.Contains("state.media.videoWidth > 0 && state.media.videoHeight > 0", script, StringComparison.Ordinal);

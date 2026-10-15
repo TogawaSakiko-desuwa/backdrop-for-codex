@@ -149,6 +149,16 @@ dotnet test .\tests\BackdropForCodex.Core.Tests\BackdropForCodex.Core.Tests.cspr
 
 On 2026-08-11 the reviewed Windows 11 x64 machine completed the synthetic-window fallback gates without starting Wallpaper Engine. The 8-minute run encoded 7,195 frames (14.989 diagnostic fps), with 137,170,944 bytes peak private growth and 46,144 bytes managed growth. The 30-minute run encoded 26,934 frames (14.963 diagnostic fps), with 140,775,424 bytes peak private growth, 47,960 bytes managed growth, and no native/COM crash. Both remained below the 256 MiB private and 64 MiB managed limits. These direct WGC/MF soak tests prove bounded encoder memory and no native crash; fps is diagnostic, not an exact gate. Production uses latest-frame pacing and a 30→15→5 fps render ladder. Performance, transient capture/page transport, heartbeat, and stream-backpressure failures request a profile downgrade or generation-local restart with bounded backoff; they do not complete the public health channel or trigger global cleanup. The lowest tier re-anchors isolated cadence lag and can replay its retained frame while capture is briefly quiet. Ownership ambiguity and resource-cleanup failures remain fail-closed. Three short machine checks after this change recorded 14.126, 14.566, and 13.969 nominal fps without a typed failure, and the paired real Edge MSE checks decoded 1280×720 successfully. The long soak does not traverse the production pacer/latest-frame/page chain; that state machine is covered by deterministic unit and composition tests but still lacks a complete real Scene/Web activation run. None of these tests proves Wallpaper Engine startup, pop-out ownership, or the complete Scene/Web chain.
 
+On 2026-10-16, the production Scene/Web pipeline was also exercised with Wallpaper Engine 2.8.42 at its existing 15 fps setting. Both `wallpaper32.exe` and `wallpaper64.exe` ran Workshop Scene `2454418355` and Web `2905017768` through the actual window renderer, WGC, Media Foundation encoder, page-session transport and real Edge MSE decoder. All four combinations retained 1920×1080, advanced the video clock and decoded frames, tolerated 1 px and 120 px moves, paused and resumed, and removed their owned windows/page resources. This used an isolated Edge shell fixture, not the user's live Codex page. The checks are short functional runs, not a replacement for long-duration soak coverage.
+
+All render tiers now pace and replay the latest captured frame when the source is slow or unchanged. Source FPS is diagnostic, not a primary-tier admission gate. An isolated transient failure retries the current profile; repeated failures or sustained encoding/backpressure problems advance the render ladder. Harmless position/focus changes preserve the stream, and changed capture dimensions are repaired. Closing a window confirms a short stable absence instead of always spending the entire 8-second discovery timeout and conflicting with the 5-second resource-release deadline. Identity replacement and unsafe cleanup still fail explicitly.
+
+### First-apply startup and background media
+
+`DeferredMediaBrowserContractTests` covers a hidden video retained past the normal load deadline, automatic decoding when shown, and cleanup of a deferred decode failure. The headless fixture uses CDP visibility emulation to exercise Chromium's media suspension; production does not override window focus or visibility. `ApplyAsync_WaitsForDelayedMainAndRetriesTransientPreparation_WhenOptedIn` also delays media readiness after shell startup so their combined wait exceeds the old shared deadline.
+
+Endpoint discovery permits empty display metadata on background workers and loading auxiliary targets. Running Codex can be reused after a companion restart only after package, process, listener and page verification succeeds. Direct media keeps a maintained pending generation while hidden; visible decode errors still terminate that generation. Encoded streams resume playback on visibility changes while preserving explicit host pause.
+
 ### Notification-area lifecycle
 
 Run the notification-area smoke test from an unlocked Windows 11 desktop after building the selected configuration:
@@ -169,6 +179,13 @@ GitHub-hosted runners do not provide the interactive Explorer desktop this check
 On an unlocked interactive desktop, manually or through the repository's UI Automation coverage verify keyboard profile selection, context-menu actions, Automation Name/selection state, focus restoration, high contrast, reduced motion, 125%–200% scaling, the 959/960 px layout boundary, and the 640×520 minimum window. Record each unavailable display/accessibility configuration as not verified.
 
 ## Reporting results
+
+Scene/Web startup coverage verifies that library capability probing does not launch Wallpaper
+Engine or reject it merely because it is stopped. Activation starts it on demand, reuses an
+existing 32-bit or 64-bit instance, and performs process-dependent recovery before opening the
+project. Failed startup can be retried; query and cleanup commands do not restart a stopped
+engine. The Windows end-to-end check must additionally apply a scene through the built app
+with no main engine process running and confirm decoded playback in the current Codex.
 
 A release or pull-request verification note should list:
 

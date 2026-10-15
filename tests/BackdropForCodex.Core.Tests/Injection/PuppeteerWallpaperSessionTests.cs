@@ -914,7 +914,8 @@ public sealed class PuppeteerWallpaperSessionTests
     private static extern Task<PageApplyResult> ApplyToCurrentPagesAsync(
         PuppeteerWallpaperSession session,
         CancellationToken cancellationToken,
-        bool finalizeBaselineFallback);
+        bool finalizeBaselineFallback,
+        bool readinessOnly = false);
 
     [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "StopCoreAsync")]
     private static extern Task<Task?> StopCoreAsync(

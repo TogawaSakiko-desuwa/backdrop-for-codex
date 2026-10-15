@@ -135,6 +135,7 @@ internal sealed class WindowsWallpaperEngineOwnedWindowVerifier
 {
     private static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(8);
     private static readonly TimeSpan DefaultPollInterval = TimeSpan.FromMilliseconds(50);
+    private static readonly TimeSpan AbsenceConfirmationInterval = TimeSpan.FromMilliseconds(250);
     private readonly IWallpaperEngineWindowSnapshotSource _snapshotSource;
     private readonly TimeSpan _timeout;
     private readonly TimeSpan _pollInterval;
@@ -320,6 +321,7 @@ internal sealed class WindowsWallpaperEngineOwnedWindowVerifier
         cancellationToken.ThrowIfCancellationRequested();
         var startedAt = _timeProvider.GetTimestamp();
         var absenceObserved = false;
+        long? absentSince = null;
         nint? closingWindowHandle = null;
         WallpaperEngineWindowProcessIdentity? closingProcessIdentity = null;
         while (true)
@@ -391,6 +393,14 @@ internal sealed class WindowsWallpaperEngineOwnedWindowVerifier
             if (!ownedWindowPresent)
             {
                 absenceObserved = true;
+                absentSince ??= _timeProvider.GetTimestamp();
+                // Closing an already absent owned window needs a short stable observation,
+                // not the entire discovery timeout. Otherwise a healthy close always exceeds
+                // the pipeline's native-resource release deadline.
+                if (_timeProvider.GetElapsedTime(absentSince.Value) >= AbsenceConfirmationInterval)
+                {
+                    return;
+                }
             }
 
             if (HasTimedOut(startedAt))

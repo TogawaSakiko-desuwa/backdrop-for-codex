@@ -52,11 +52,14 @@ public sealed class WallpaperWorkspaceCoordinatorTests
     }
 
     [Theory]
-    [InlineData(WallpaperContentKind.Scene, "Workshop scene")]
-    [InlineData(WallpaperContentKind.Web, "Workshop web wallpaper")]
+    [InlineData(WallpaperContentKind.Scene, "Workshop scene", false)]
+    [InlineData(WallpaperContentKind.Web, "Workshop web wallpaper", false)]
+    [InlineData(WallpaperContentKind.Scene, "Workshop scene", true)]
+    [InlineData(WallpaperContentKind.Web, "Workshop web wallpaper", true)]
     public async Task ApplyCanonicalizesDynamicProjectAndForwardsItToRuntime(
         WallpaperContentKind contentKind,
-        string displayName)
+        string displayName,
+        bool reselectedFromLibrary)
     {
         var mediaId = Guid.CreateVersion7();
         var source = new ControllableProjectSourceProvider(contentKind, displayName);
@@ -90,7 +93,20 @@ public sealed class WallpaperWorkspaceCoordinatorTests
         await coordinator.InitializeAsync().WaitAsync(TestTimeout);
 
         coordinator.ReplaceDraft(draft);
-        var result = await coordinator.ApplyAsync().WaitAsync(TestTimeout);
+        // Library selection gives the editor a fresh row ID. Projection reuses the saved
+        // catalog row for the same source before this authorization reaches the coordinator.
+        var authorizedResolution = reselectedFromLibrary
+            ? new WallpaperSourceResolution(
+                media with { MediaId = Guid.CreateVersion7(), LastKnownContentKind = contentKind },
+                new WallpaperSourceDescriptor(
+                    media.SourceKind, media.SourceIdentifier, displayName, contentKind,
+                    WallpaperDeliveryKind.WallpaperEngineWindow,
+                    WallpaperDeliveryCapabilities.DynamicFrames),
+                directMediaMetadata: null)
+            : null;
+        var result = await coordinator.ApplyAsync(
+                RuntimeLaunchMode.ManualApply, authorizedResolution, CancellationToken.None)
+            .WaitAsync(TestTimeout);
 
         Assert.Equal(RuntimeActivationOutcome.MediaActive, result.Outcome);
         var request = Assert.Single(runtime.Requests);

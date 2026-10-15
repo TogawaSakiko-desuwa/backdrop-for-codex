@@ -245,6 +245,7 @@ public sealed class DynamicWallpaperActivationFactory :
                 : null;
         Exception? lastRecoverableFailure = null;
         var profiles = DynamicWallpaperRenderProfiles.InPreferenceOrder;
+        var retryingCurrentProfile = false;
         for (var profileIndex = 0; profileIndex < profiles.Count; profileIndex++)
         {
             var profile = profiles[profileIndex];
@@ -317,7 +318,7 @@ public sealed class DynamicWallpaperActivationFactory :
                     pipeline.Capabilities);
             }
             catch (Exception exception)
-                when (profileIndex < profiles.Count - 1 &&
+                when ((profileIndex < profiles.Count - 1 || !retryingCurrentProfile) &&
                     CanRecoverLocally(exception))
             {
                 if (stagedInitialCapabilityState is not null)
@@ -327,6 +328,17 @@ public sealed class DynamicWallpaperActivationFactory :
                 }
 
                 lastRecoverableFailure = exception;
+                if (!RequiresLowerRenderProfile(exception) && !retryingCurrentProfile)
+                {
+                    retryingCurrentProfile = true;
+                    profileIndex--;
+                    await Task.Delay(TimeSpan.FromMilliseconds(250), cancellationToken)
+                        .ConfigureAwait(false);
+                }
+                else
+                {
+                    retryingCurrentProfile = false;
+                }
             }
             catch
             {
@@ -816,6 +828,17 @@ public sealed class DynamicWallpaperActivationFactory :
         }
     }
 
+    private static bool RequiresLowerRenderProfile(Exception exception) =>
+        exception is DynamicWallpaperUnavailableException
+        {
+            ReasonCode:
+                DynamicWallpaperCapabilityReasonCode.PrimaryRenderTierUnavailable or
+                DynamicWallpaperCapabilityReasonCode.FallbackRenderTierUnavailable or
+                DynamicWallpaperCapabilityReasonCode.SustainedStreamBackpressure or
+                DynamicWallpaperCapabilityReasonCode.HardwareEncoderUnavailable or
+                DynamicWallpaperCapabilityReasonCode.CodecUnavailable,
+        };
+
     private static bool CanRecoverLocally(Exception exception)
     {
         if (ContainsTerminalRecoveryBoundaryFailure(exception))
@@ -915,6 +938,7 @@ public sealed class DynamicWallpaperActivationFactory :
             _startRecoveryProfile;
         private readonly int _lastProfileIndex;
         private int _profileIndex;
+        private long _lastRecoveryTimestamp;
         private int _lowestTierRestartCount;
         private bool _paused;
         private int _disposeStarted;
@@ -1128,12 +1152,14 @@ public sealed class DynamicWallpaperActivationFactory :
                 }
                 catch (Exception exception) when (CanRecoverLocally(exception))
                 {
-                    await RecoverPipelineAsync(pipeline).ConfigureAwait(false);
+                    await RecoverPipelineAsync(pipeline, exception).ConfigureAwait(false);
                 }
             }
         }
 
-        private async Task RecoverPipelineAsync(DynamicPipelineLease failedPipeline)
+        private async Task RecoverPipelineAsync(
+            DynamicPipelineLease failedPipeline,
+            Exception failure)
         {
             WallpaperInjectionCapabilitiesChangedEventArgs? capabilityChange = null;
             await _gate.WaitAsync(_stop.Token).ConfigureAwait(false);
@@ -1144,7 +1170,14 @@ public sealed class DynamicWallpaperActivationFactory :
                     return;
                 }
 
-                var targetProfileIndex = Math.Min(_profileIndex + 1, _lastProfileIndex);
+                var now = System.Diagnostics.Stopwatch.GetTimestamp();
+                var repeatedFailure = _lastRecoveryTimestamp != 0 &&
+                    System.Diagnostics.Stopwatch.GetElapsedTime(_lastRecoveryTimestamp, now) <
+                        TimeSpan.FromSeconds(30);
+                _lastRecoveryTimestamp = now;
+                var targetProfileIndex = RequiresLowerRenderProfile(failure) || repeatedFailure
+                    ? Math.Min(_profileIndex + 1, _lastProfileIndex)
+                    : _profileIndex;
                 var delayBeforeAttempt = targetProfileIndex == _profileIndex;
                 if (delayBeforeAttempt)
                 {
@@ -2577,9 +2610,9 @@ public sealed class DynamicWallpaperActivationFactory :
                 .StartAsync(request, cancellationToken)
                 .ConfigureAwait(false);
             var stop = new CancellationTokenSource();
-            var latestFrameSlot = _profile.CaptureFrameRate > _profile.FrameRate
-                ? new LatestWallpaperCapturedFrameSlot()
-                : null;
+            // WGC follows the source's cadence and can be silent for a static scene. All
+            // profiles retain and pace the latest surface so this does not starve the player.
+            var latestFrameSlot = new LatestWallpaperCapturedFrameSlot();
             _capture = capture;
             _captureCancellation = stop;
             _captureCancellationRequest = null;
@@ -2832,7 +2865,7 @@ public sealed class DynamicWallpaperActivationFactory :
         private async Task PumpAsync(
             IWallpaperWindowCaptureSession capture,
             IFragmentedMp4WallpaperEncoder encoder,
-            LatestWallpaperCapturedFrameSlot? latestFrameSlot,
+            LatestWallpaperCapturedFrameSlot latestFrameSlot,
             CancellationToken cancellationToken)
         {
             var readCancellation =
@@ -2842,25 +2875,13 @@ public sealed class DynamicWallpaperActivationFactory :
                 .GetAsyncEnumerator(readCancellation.Token);
             try
             {
-                if (latestFrameSlot is null)
-                {
-                    await PumpDirectFramesAsync(
-                            frames,
-                            readCancellation,
-                            encoder,
-                            cancellationToken)
-                        .ConfigureAwait(false);
-                }
-                else
-                {
-                    await PumpPacedFallbackFramesAsync(
-                            frames,
-                            readCancellation,
-                            encoder,
-                            latestFrameSlot,
-                            cancellationToken)
-                        .ConfigureAwait(false);
-                }
+                await PumpPacedFramesAsync(
+                        frames,
+                        readCancellation,
+                        encoder,
+                        latestFrameSlot,
+                        cancellationToken)
+                    .ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -2885,134 +2906,7 @@ public sealed class DynamicWallpaperActivationFactory :
             }
         }
 
-        private async Task PumpDirectFramesAsync(
-            IAsyncEnumerator<IWallpaperCapturedFrame> frames,
-            CancellationTokenSource readCancellation,
-            IFragmentedMp4WallpaperEncoder encoder,
-            CancellationToken cancellationToken)
-        {
-            while (await MoveNextBeforeDeadlineAsync(
-                    frames,
-                    readCancellation,
-                    cancellationToken)
-                .ConfigureAwait(false))
-            {
-                var frame = frames.Current;
-                try
-                {
-                    await EncodeDirectFrameBeforeDeadlineAsync(
-                            encoder,
-                            frame,
-                            frames,
-                            readCancellation,
-                            cancellationToken)
-                        .ConfigureAwait(false);
-                }
-                finally
-                {
-                    if (ShouldReleasePumpLocalResources)
-                    {
-                        await ReleasePumpLocalWithRetryAsync(frame).ConfigureAwait(false);
-                    }
-                }
-            }
-
-            if (!cancellationToken.IsCancellationRequested)
-            {
-                throw new EndOfStreamException(
-                    "The owned Wallpaper Engine capture ended unexpectedly.");
-            }
-        }
-
-        private async ValueTask EncodeDirectFrameBeforeDeadlineAsync(
-            IFragmentedMp4WallpaperEncoder encoder,
-            IWallpaperCapturedFrame frame,
-            IAsyncEnumerator<IWallpaperCapturedFrame> frames,
-            CancellationTokenSource readCancellation,
-            CancellationToken cancellationToken)
-        {
-            var encodeCancellation =
-                CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            using var deadlineCancellation =
-                CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            try
-            {
-                var encode = Task.Run(
-                    async () => await encoder
-                        .EncodeAsync(frame, _buffer, encodeCancellation.Token)
-                        .ConfigureAwait(false),
-                    CancellationToken.None);
-                var deadline = _frameDeadlineScheduler
-                    .WaitAsync(FrameLivenessDeadline, deadlineCancellation.Token)
-                    .AsTask();
-                var completed = await Task.WhenAny(encode, deadline).ConfigureAwait(false);
-                if (ReferenceEquals(completed, encode))
-                {
-                    await CancelAndObserveWaitAsync(deadlineCancellation, deadline)
-                        .ConfigureAwait(false);
-                    await encode.ConfigureAwait(false);
-                    return;
-                }
-
-                try
-                {
-                    await deadline.ConfigureAwait(false);
-                }
-                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-                {
-                    var canceledRequest = RequestCancellationAsync(encodeCancellation);
-                    var cancellationFailure = await ObserveCanceledEncodingAsync(
-                            encode,
-                            canceledRequest,
-                            frame,
-                            frames,
-                            readCancellation,
-                            pendingRead: null,
-                            readDeadlineCancellation: null,
-                            encodeCancellation)
-                        .ConfigureAwait(false);
-                    if (cancellationFailure is not null)
-                    {
-                        ExceptionDispatchInfo.Capture(cancellationFailure).Throw();
-                    }
-
-                    throw;
-                }
-
-                var failure = CreateRenderTierFailure();
-                PublishHealthFailure(failure);
-                var deadlineCancellationRequest = RequestCancellationAsync(encodeCancellation);
-                var encodeFailure = await ObserveCanceledEncodingAsync(
-                        encode,
-                        deadlineCancellationRequest,
-                        frame,
-                        frames,
-                        readCancellation,
-                        pendingRead: null,
-                        readDeadlineCancellation: null,
-                        encodeCancellation)
-                    .ConfigureAwait(false);
-                if (encodeFailure is DetachedNativeCleanupPendingException)
-                {
-                    ExceptionDispatchInfo.Capture(encodeFailure).Throw();
-                }
-
-                throw encodeFailure is null
-                    ? failure
-                    : new DynamicWallpaperUnavailableException(
-                        CreateRenderTierFailure().ReasonCode,
-                        encodeFailure);
-            }
-            finally
-            {
-                if (ShouldReleasePumpLocalResources)
-                {
-                    encodeCancellation.Dispose();
-                }
-            }
-        }
-
-        private async Task PumpPacedFallbackFramesAsync(
+        private async Task PumpPacedFramesAsync(
             IAsyncEnumerator<IWallpaperCapturedFrame> frames,
             CancellationTokenSource readCancellation,
             IFragmentedMp4WallpaperEncoder encoder,
@@ -3031,10 +2925,10 @@ public sealed class DynamicWallpaperActivationFactory :
             }
 
             await latestFrameSlot.ReplaceAsync(frames.Current).ConfigureAwait(false);
-            await EncodeFallbackFrameBeforeDeadlineAsync(
+            await EncodeFrameBeforeDeadlineAsync(
                     encoder,
                     latestFrameSlot.Current ?? throw new InvalidOperationException(
-                        "The fallback frame slot did not retain its first frame."),
+                        "The frame slot did not retain its first frame."),
                     frames,
                     readCancellation,
                     pendingRead: null,
@@ -3044,7 +2938,7 @@ public sealed class DynamicWallpaperActivationFactory :
 
             var pacer = new FixedPointWallpaperFramePacer(_profile.FrameRate);
             var cadenceMonitor = new SustainedWallpaperCadenceMonitor(
-                FrameLivenessDeadline);
+                TimeSpan.FromSeconds(10));
             pacer.Start(_framePacerClock.GetMonotonicNow());
             Task<bool>? pendingRead = null;
             CancellationTokenSource? readDeadlineCancellation = null;
@@ -3090,29 +2984,16 @@ public sealed class DynamicWallpaperActivationFactory :
                     if (readDeadline!.IsCompleted)
                     {
                         await readDeadline.ConfigureAwait(false);
-                        if (_profile == DynamicWallpaperRenderProfiles.Compatibility)
-                        {
-                            readDeadlineCancellation!.Dispose();
-                            readDeadlineCancellation =
-                                CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                            readDeadline = _frameDeadlineScheduler
-                                .WaitAsync(
-                                    FrameLivenessDeadline,
-                                    readDeadlineCancellation.Token)
-                                .AsTask();
-                            continue;
-                        }
-
-                        var failure = CreateRenderTierFailure();
-                        PublishHealthFailure(failure);
-                        var cancellationRequest = RequestCancellationAsync(readCancellation);
-                        await ObserveCanceledMoveNextAsync(
-                                frames,
-                                pendingRead!,
-                                readCancellation,
-                                cancellationRequest)
-                            .ConfigureAwait(false);
-                        throw failure;
+                        // A live window with no changed pixels is not an encoder failure.
+                        // Keep playing its retained frame; real capture closure still faults
+                        // pendingRead and window identity is monitored independently.
+                        readDeadlineCancellation!.Dispose();
+                        readDeadlineCancellation =
+                            CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                        readDeadline = _frameDeadlineScheduler
+                            .WaitAsync(FrameLivenessDeadline, readDeadlineCancellation.Token)
+                            .AsTask();
+                        continue;
                     }
 
                     if (tick.IsCompleted)
@@ -3210,8 +3091,8 @@ public sealed class DynamicWallpaperActivationFactory :
             async ValueTask EncodePacedSampleAsync(bool pacerReanchored)
             {
                 var current = latestFrameSlot.Current ?? throw new EndOfStreamException(
-                    "The fallback capture did not retain a replayable frame.");
-                await EncodeFallbackFrameBeforeDeadlineAsync(
+                    "The capture did not retain a replayable frame.");
+                await EncodeFrameBeforeDeadlineAsync(
                         encoder,
                         current,
                         frames,
@@ -3226,13 +3107,12 @@ public sealed class DynamicWallpaperActivationFactory :
                 if (cadenceMonitor.Observe(isBehind, completedAt) &&
                     _profile != DynamicWallpaperRenderProfiles.Compatibility)
                 {
-                    throw new DynamicWallpaperUnavailableException(
-                        DynamicWallpaperCapabilityReasonCode.FallbackRenderTierUnavailable);
+                    throw CreateRenderTierFailure();
                 }
             }
         }
 
-        private async ValueTask EncodeFallbackFrameBeforeDeadlineAsync(
+        private async ValueTask EncodeFrameBeforeDeadlineAsync(
             IFragmentedMp4WallpaperEncoder encoder,
             IWallpaperCapturedFrame frame,
             IAsyncEnumerator<IWallpaperCapturedFrame> frames,
@@ -3289,8 +3169,7 @@ public sealed class DynamicWallpaperActivationFactory :
                     throw;
                 }
 
-                var failure = new DynamicWallpaperUnavailableException(
-                    DynamicWallpaperCapabilityReasonCode.FallbackRenderTierUnavailable);
+                var failure = CreateRenderTierFailure();
                 PublishHealthFailure(failure);
                 var deadlineCancellationRequest = RequestCancellationAsync(encodeCancellation);
                 var encodeFailure = await ObserveCanceledEncodingAsync(
@@ -3311,7 +3190,7 @@ public sealed class DynamicWallpaperActivationFactory :
                 throw encodeFailure is null
                     ? failure
                     : new DynamicWallpaperUnavailableException(
-                        DynamicWallpaperCapabilityReasonCode.FallbackRenderTierUnavailable,
+                        failure.ReasonCode,
                         encodeFailure);
             }
             finally

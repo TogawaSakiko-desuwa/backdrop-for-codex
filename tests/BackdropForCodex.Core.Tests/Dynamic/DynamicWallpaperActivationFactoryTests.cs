@@ -691,12 +691,13 @@ public sealed class DynamicWallpaperActivationFactoryTests
     }
 
     [Fact]
-    public async Task ActiveTransientPageTransportFailureRestartsLocally()
+    public async Task TransientFailureKeepsQualityUntilItRepeats()
     {
         var events = new List<string>();
         var pages = new FakePageSessionFactory(events);
+        var window = new FakeWindowRenderer(events);
         var factory = new DynamicWallpaperActivationFactory(
-            new FakeWindowRenderer(events),
+            window,
             new FakeCaptureFactory(events),
             new FakeEncoderFactory(events),
             pages);
@@ -711,6 +712,14 @@ public sealed class DynamicWallpaperActivationFactoryTests
         await WaitUntilAsync(() => pages.Leases.Count == 2, TimeSpan.FromSeconds(5));
         Assert.False(health.Completion.IsCompleted);
         Assert.False(project.IsDisposed);
+        Assert.Equal(2, window.Options.Count);
+        Assert.All(window.Options, options => Assert.Equal(1920, options.Width));
+
+        pages.Leases[^1].Fail(new IOException("fixture repeated transport failure"));
+
+        await WaitUntilAsync(() => pages.Leases.Count == 3, TimeSpan.FromSeconds(5));
+        Assert.False(health.Completion.IsCompleted);
+        Assert.Equal(1280, window.Options[^1].Width);
     }
 
     [Fact]
@@ -987,13 +996,15 @@ public sealed class DynamicWallpaperActivationFactoryTests
         Assert.False(project.IsDisposed);
     }
 
-    [Fact]
-    public async Task ActiveFallbackDegradesWhenCaptureStopsProducingFrames()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task UnchangedCaptureKeepsTheCurrentProfile(bool fallback)
     {
         var events = new List<string>();
         var capture = new FakeCaptureFactory(events)
         {
-            FailStarts = 1,
+            FailStarts = fallback ? 1 : 0,
             StartFailureReason =
                 DynamicWallpaperCapabilityReasonCode.PrimaryRenderTierUnavailable,
         };
@@ -1016,17 +1027,20 @@ public sealed class DynamicWallpaperActivationFactoryTests
 
         Assert.True(deadline.ExpireCurrent());
 
-        await WaitUntilAsync(() => pages.Leases.Count == 2, TimeSpan.FromSeconds(5));
+        await WaitUntilAsync(() => deadline.HasPendingWait, TimeSpan.FromSeconds(5));
+        Assert.Single(pages.Leases);
         Assert.False(health.Completion.IsCompleted);
     }
 
-    [Fact]
-    public async Task FallbackPacerCoalescesToLatestThenReplaysOncePerAbsoluteTick()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task PacerCoalescesToLatestThenReplaysOncePerAbsoluteTick(bool fallback)
     {
         var events = new List<string>();
         var capture = new FakeCaptureFactory(events)
         {
-            FailStarts = 1,
+            FailStarts = fallback ? 1 : 0,
             StartFailureReason =
                 DynamicWallpaperCapabilityReasonCode.PrimaryRenderTierUnavailable,
             FramesPerSession = 2,
@@ -1365,7 +1379,7 @@ public sealed class DynamicWallpaperActivationFactoryTests
     }
 
     [Fact]
-    public async Task ReadWatchdogOnlyBecomesTerminalWhenLateFrameCleanupIsUnsafe()
+    public async Task RecoveryOnlyBecomesTerminalWhenLateFrameCleanupIsUnsafe()
     {
         var events = new List<string>();
         var capture = new FakeCaptureFactory(events)
@@ -1378,11 +1392,12 @@ public sealed class DynamicWallpaperActivationFactoryTests
             LateFrameDisposeFailures = 1,
         };
         var deadline = new ManualCaptureFrameDeadlineScheduler();
+        var pages = new FakePageSessionFactory(events);
         var factory = new DynamicWallpaperActivationFactory(
             new FakeWindowRenderer(events),
             capture,
             new FakeEncoderFactory(events),
-            new FakePageSessionFactory(events),
+            pages,
             TimeSpan.FromSeconds(15),
             deadline);
         var project = new FakeProjectLease(Resolution(), events);
@@ -1392,8 +1407,7 @@ public sealed class DynamicWallpaperActivationFactoryTests
         try
         {
             await capture.PendingReadBlocked.Task.WaitAsync(TimeSpan.FromSeconds(2));
-            await WaitUntilAsync(() => deadline.HasPendingWait, TimeSpan.FromSeconds(2));
-            Assert.True(deadline.ExpireCurrent());
+            pages.Leases.Single().Fail(new IOException("fixture transport failure during quiet capture"));
 
             await WaitUntilAsync(
                 () => events.Contains("page-dispose"),
@@ -1448,6 +1462,7 @@ public sealed class DynamicWallpaperActivationFactoryTests
         };
         var frameDeadline = new ManualCaptureFrameDeadlineScheduler();
         var ownerDeadline = new ManualCaptureFrameDeadlineScheduler();
+        var pacerClock = new ManualWallpaperFramePacerClock();
         var factory = new DynamicWallpaperActivationFactory(
             new FakeWindowRenderer(events),
             capture,
@@ -1455,7 +1470,7 @@ public sealed class DynamicWallpaperActivationFactoryTests
             new FakePageSessionFactory(events),
             TimeSpan.FromSeconds(15),
             frameDeadline,
-            new ManualWallpaperFramePacerClock(),
+            pacerClock,
             ownerDeadline);
         var project = new FakeProjectLease(Resolution(), events);
         var activation = factory.ActivateAsync(Request(project.Resolution), project).AsTask();
@@ -1468,8 +1483,8 @@ public sealed class DynamicWallpaperActivationFactoryTests
             var blockedFrame = Assert.Single(capture.Frames);
             Assert.Equal(0, blockedFrame.DisposeCount);
 
-            await WaitUntilAsync(() => frameDeadline.HasPendingWait, TimeSpan.FromSeconds(2));
-            Assert.True(frameDeadline.ExpireCurrent());
+            await WaitUntilAsync(() => pacerClock.PendingWaitCount > 0, TimeSpan.FromSeconds(2));
+            pacerClock.Advance(TimeSpan.FromSeconds(5));
             await blockedEncoder.CancellationCallbackBlocked.Task.WaitAsync(
                 TimeSpan.FromSeconds(2));
             await WaitUntilAsync(() => ownerDeadline.HasPendingWait, TimeSpan.FromSeconds(2));
@@ -1654,6 +1669,7 @@ public sealed class DynamicWallpaperActivationFactoryTests
             IgnoreBlockedEncodeCancellation = true,
         };
         var ownerDeadline = new QueuedCaptureFrameDeadlineScheduler();
+        var pacerClock = new ManualWallpaperFramePacerClock();
         var factory = new DynamicWallpaperActivationFactory(
             new FakeWindowRenderer(events),
             capture,
@@ -1661,7 +1677,7 @@ public sealed class DynamicWallpaperActivationFactoryTests
             new FakePageSessionFactory(events),
             TimeSpan.FromSeconds(15),
             new ManualCaptureFrameDeadlineScheduler(),
-            new ManualWallpaperFramePacerClock(),
+            pacerClock,
             ownerDeadline);
         var project = new FakeProjectLease(Resolution(), events);
         var active = (await factory.ActivateAsync(Request(project.Resolution), project)).Lease;
@@ -1669,6 +1685,10 @@ public sealed class DynamicWallpaperActivationFactoryTests
 
         try
         {
+            await WaitUntilAsync(
+                () => pacerClock.HasPendingWaitWithin(TimeSpan.FromSeconds(1)),
+                TimeSpan.FromSeconds(2));
+            pacerClock.Advance(TimeSpan.FromTicks(333_334));
             await blockedEncoder.EncodingBlocked.Task.WaitAsync(TimeSpan.FromSeconds(2));
             var blockedFrame = capture.Frames.Single(frame => frame.Sequence == 1);
             Assert.Equal(0, blockedFrame.DisposeCount);
@@ -1724,7 +1744,7 @@ public sealed class DynamicWallpaperActivationFactoryTests
     }
 
     [Fact]
-    public async Task MoveNextWatchdogDetachesItsOwnerAndBoundsFactoryDisposal()
+    public async Task RecoveryDetachesAnUnresponsiveReadAndBoundsFactoryDisposal()
     {
         var events = new List<string>();
         var capture = new FakeCaptureFactory(events)
@@ -1751,8 +1771,7 @@ public sealed class DynamicWallpaperActivationFactoryTests
         try
         {
             await capture.PendingReadBlocked.Task.WaitAsync(TimeSpan.FromSeconds(2));
-            await WaitUntilAsync(() => frameDeadline.HasPendingWait, TimeSpan.FromSeconds(2));
-            Assert.True(frameDeadline.ExpireCurrent());
+            pages.Leases.Single().Fail(new IOException("fixture transport failure during quiet capture"));
             await WaitUntilAsync(() => ownerDeadline.HasPendingWait, TimeSpan.FromSeconds(2));
 
             Assert.True(ownerDeadline.ExpireCurrent());
@@ -2378,7 +2397,7 @@ public sealed class DynamicWallpaperActivationFactoryTests
     }
 
     [Fact]
-    public async Task ActivateAsync_DoesNotRepeatAnAmbiguousStartupTimeoutAtFallbackTier()
+    public async Task ActivateAsync_RetriesTransientStartupOncePerTierAndThenStops()
     {
         var events = new List<string>();
         var window = new FakeWindowRenderer(events);
@@ -2396,9 +2415,9 @@ public sealed class DynamicWallpaperActivationFactoryTests
         Assert.Equal(
             DynamicWallpaperCapabilityReasonCode.DynamicStartupTimedOut,
             failure.ReasonCode);
-        Assert.Equal(3, window.Options.Count);
+        Assert.Equal(6, window.Options.Count);
         Assert.DoesNotContain("page-dispose", events);
-        Assert.Equal(3, events.Count(item => item == "window-dispose"));
+        Assert.Equal(6, events.Count(item => item == "window-dispose"));
         Assert.False(project.IsDisposed);
         await project.DisposeAsync();
     }

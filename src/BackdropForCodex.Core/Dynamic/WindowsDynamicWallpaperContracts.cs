@@ -89,7 +89,7 @@ public sealed class DynamicWallpaperUnavailableException : Exception
             DynamicWallpaperCapabilityReasonCode.WallpaperEngineUnavailable =>
                 "Wallpaper Engine is not available from a validated local Steam installation.",
             DynamicWallpaperCapabilityReasonCode.WallpaperEngineNotRunning =>
-                "Wallpaper Engine must already be running before a window-level command is sent.",
+                "Wallpaper Engine could not be started or is no longer running.",
             DynamicWallpaperCapabilityReasonCode.WallpaperEngineRecoveryUnavailable =>
                 "A previously owned Wallpaper Engine pop-out could not be safely recovered.",
             DynamicWallpaperCapabilityReasonCode.WallpaperEngineWindowUnavailable =>

@@ -56,7 +56,7 @@ internal sealed class WallpaperEnginePlatformUnavailableException : InvalidOpera
         reason switch
         {
             WallpaperEnginePlatformUnavailableReason.StartupNotProven =>
-                "Wallpaper Engine must already be running before a window-level command is sent.",
+                "Wallpaper Engine could not be started or is no longer running.",
             WallpaperEnginePlatformUnavailableReason.CommandTimedOut =>
                 "The Wallpaper Engine window-level command timed out.",
             WallpaperEnginePlatformUnavailableReason.CommandOutputInvalid =>
@@ -160,6 +160,11 @@ internal interface IWallpaperEngineProcessBoundary
         WallpaperEngineInstallation installation,
         CancellationToken cancellationToken);
 
+    ValueTask StartAsync(
+        WallpaperEngineInstallation installation,
+        TimeSpan timeout,
+        CancellationToken cancellationToken);
+
     ValueTask<WallpaperEngineProcessResult> ExecuteAsync(
         WallpaperEngineInstallation installation,
         WallpaperEngineProcessCommand command,
@@ -190,15 +195,19 @@ internal interface IWallpaperEngineCommandProcess : IDisposable
 }
 
 /// <summary>
-/// Sends only reviewed, uniquely addressed pop-out commands to an already-running Wallpaper
-/// Engine instance. The official CLI does not define a non-disruptive startup command, so a
-/// missing instance is a typed unavailable result rather than an implicit process launch.
+/// Starts a validated local engine on demand and sends uniquely addressed pop-out commands.
+/// An existing 32-bit or 64-bit instance is reused. Query and cleanup commands never launch it.
 /// </summary>
+[System.Diagnostics.CodeAnalysis.SuppressMessage(
+    "Design", "CA1001:Types that own disposable fields should be disposable",
+    Justification = "The async-only startup semaphore never allocates an AvailableWaitHandle.")]
 internal sealed class WallpaperEngineControlClient : IWallpaperEngineControlClient
 {
     private static readonly TimeSpan DefaultCommandTimeout = TimeSpan.FromSeconds(8);
+    private static readonly TimeSpan StartupTimeout = TimeSpan.FromSeconds(30);
     private readonly IWallpaperEngineProcessBoundary _processBoundary;
     private readonly TimeSpan _commandTimeout;
+    private readonly SemaphoreSlim _startupGate = new(1, 1);
 
     internal WallpaperEngineControlClient()
         : this(new WindowsWallpaperEngineProcessBoundary(), DefaultCommandTimeout)
@@ -225,23 +234,38 @@ internal sealed class WallpaperEngineControlClient : IWallpaperEngineControlClie
     {
         ArgumentNullException.ThrowIfNull(installation);
         cancellationToken.ThrowIfCancellationRequested();
-        bool isRunning;
+        await _startupGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            isRunning = await _processBoundary
-                .IsRunningAsync(installation, cancellationToken)
-                .ConfigureAwait(false);
-        }
-        catch (WallpaperEngineProcessException)
-        {
-            throw new WallpaperEnginePlatformUnavailableException(
-                WallpaperEnginePlatformUnavailableReason.ProcessBoundaryUnavailable);
-        }
+            if (await _processBoundary
+                    .IsRunningAsync(installation, cancellationToken)
+                    .ConfigureAwait(false))
+            {
+                return;
+            }
 
-        if (!isRunning)
+            await _processBoundary
+                .StartAsync(installation, StartupTimeout, cancellationToken)
+                .ConfigureAwait(false);
+            if (!await _processBoundary
+                    .IsRunningAsync(installation, cancellationToken)
+                    .ConfigureAwait(false))
+            {
+                throw new WallpaperEnginePlatformUnavailableException(
+                    WallpaperEnginePlatformUnavailableReason.StartupNotProven);
+            }
+        }
+        catch (WallpaperEngineProcessException exception)
         {
             throw new WallpaperEnginePlatformUnavailableException(
-                WallpaperEnginePlatformUnavailableReason.StartupNotProven);
+                exception.Failure is WallpaperEngineProcessFailure.FailedToStart or
+                    WallpaperEngineProcessFailure.TimedOut
+                    ? WallpaperEnginePlatformUnavailableReason.StartupNotProven
+                    : WallpaperEnginePlatformUnavailableReason.ProcessBoundaryUnavailable);
+        }
+        finally
+        {
+            _startupGate.Release();
         }
     }
 
@@ -401,54 +425,136 @@ internal sealed class WindowsWallpaperEngineProcessBoundary : IWallpaperEnginePr
     public ValueTask<bool> IsRunningAsync(
         WallpaperEngineInstallation installation,
         CancellationToken cancellationToken)
+        => ValueTask.FromResult(FindRunningExecutable(installation, cancellationToken) is not null);
+
+    public async ValueTask StartAsync(
+        WallpaperEngineInstallation installation,
+        TimeSpan timeout,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(installation);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (FindRunningExecutable(installation, cancellationToken) is not null)
+        {
+            return;
+        }
+
+        var executablePath = installation.ControlExecutablePath;
+        if (!OperatingSystem.IsWindows() ||
+            !File.Exists(executablePath) || !_trustVerifier.IsTrusted(executablePath))
+        {
+            throw new WallpaperEngineProcessException(WallpaperEngineProcessFailure.FailedToStart);
+        }
+
+        try
+        {
+            using var process = Process.Start(new ProcessStartInfo
+            {
+                FileName = executablePath,
+                WorkingDirectory = installation.InstallRootPath,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                WindowStyle = ProcessWindowStyle.Hidden,
+            }) ?? throw new WallpaperEngineProcessException(
+                WallpaperEngineProcessFailure.FailedToStart);
+
+            var started = Stopwatch.GetTimestamp();
+            while (Stopwatch.GetElapsedTime(started) < timeout)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (FindRunningExecutable(installation, cancellationToken) is not null)
+                {
+                    try
+                    {
+                        if (process.WaitForInputIdle(100))
+                        {
+                            return;
+                        }
+                    }
+                    catch (InvalidOperationException)
+                    {
+                        // A launcher may hand off to the verified engine, or the running
+                        // engine may have no message loop. Its process identity still applies.
+                        return;
+                    }
+                }
+                else if (process.HasExited)
+                {
+                    throw new WallpaperEngineProcessException(
+                        WallpaperEngineProcessFailure.FailedToStart);
+                }
+
+                await Task.Delay(TimeSpan.FromMilliseconds(100), cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
+            throw new WallpaperEngineProcessException(WallpaperEngineProcessFailure.TimedOut);
+        }
+        catch (WallpaperEngineProcessException)
+        {
+            throw;
+        }
+        catch (Exception exception) when (exception is
+            System.ComponentModel.Win32Exception or InvalidOperationException or
+            NotSupportedException or UnauthorizedAccessException or IOException)
+        {
+            throw new WallpaperEngineProcessException(WallpaperEngineProcessFailure.FailedToStart);
+        }
+    }
+
+    private string? FindRunningExecutable(
+        WallpaperEngineInstallation installation,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(installation);
         cancellationToken.ThrowIfCancellationRequested();
         if (!OperatingSystem.IsWindows())
         {
-            return ValueTask.FromResult(false);
+            return null;
         }
 
-        var expectedPath = Path.GetFullPath(installation.ControlExecutablePath);
-        if (!File.Exists(expectedPath) || !_trustVerifier.IsTrusted(expectedPath))
-        {
-            throw new WallpaperEngineProcessException(
-                WallpaperEngineProcessFailure.ProcessInspectionFailed);
-        }
-
-        var processName = Path.GetFileNameWithoutExtension(expectedPath);
         try
         {
             using var currentProcess = Process.GetCurrentProcess();
             var currentSessionId = currentProcess.SessionId;
-            foreach (var process in Process.GetProcessesByName(processName))
+            foreach (var expectedPath in WallpaperEngineInstallation.GetControlExecutablePaths(
+                         installation.InstallRootPath))
             {
-                using (process)
+                if (!File.Exists(expectedPath) || !_trustVerifier.IsTrusted(expectedPath))
                 {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    try
+                    continue;
+                }
+
+                var processName = Path.GetFileNameWithoutExtension(expectedPath);
+                foreach (var process in Process.GetProcessesByName(processName))
+                {
+                    using (process)
                     {
-                        if (process.Id != Environment.ProcessId &&
-                            process.SessionId == currentSessionId &&
-                            string.Equals(
-                                Path.GetFullPath(process.MainModule?.FileName ?? string.Empty),
-                                expectedPath,
-                                StringComparison.OrdinalIgnoreCase) &&
-                            process.StartTime.ToUniversalTime() <= DateTime.UtcNow)
+                        cancellationToken.ThrowIfCancellationRequested();
+                        try
                         {
-                            return ValueTask.FromResult(true);
+                            if (process.Id != Environment.ProcessId &&
+                                process.SessionId == currentSessionId &&
+                                string.Equals(
+                                    Path.GetFullPath(process.MainModule?.FileName ?? string.Empty),
+                                    expectedPath,
+                                    StringComparison.OrdinalIgnoreCase) &&
+                                process.StartTime.ToUniversalTime() <= DateTime.UtcNow)
+                            {
+                                return expectedPath;
+                            }
                         }
-                    }
-                    catch (Exception exception) when (
-                        exception is InvalidOperationException or
-                            System.ComponentModel.Win32Exception or
-                            NotSupportedException or
-                            PlatformNotSupportedException or
-                            System.Security.SecurityException or
-                            IOException or
-                            UnauthorizedAccessException)
-                    {
-                        // An unreadable process is not evidence of the authorized running instance.
+                        catch (Exception exception) when (
+                            exception is InvalidOperationException or
+                                System.ComponentModel.Win32Exception or
+                                NotSupportedException or
+                                PlatformNotSupportedException or
+                                System.Security.SecurityException or
+                                IOException or
+                                UnauthorizedAccessException)
+                        {
+                            // An unreadable process is not evidence of the authorized running instance.
+                        }
                     }
                 }
             }
@@ -465,7 +571,7 @@ internal sealed class WindowsWallpaperEngineProcessBoundary : IWallpaperEnginePr
                 WallpaperEngineProcessFailure.ProcessInspectionFailed);
         }
 
-        return ValueTask.FromResult(false);
+        return null;
     }
 
     public async ValueTask<WallpaperEngineProcessResult> ExecuteAsync(
@@ -483,8 +589,9 @@ internal sealed class WindowsWallpaperEngineProcessBoundary : IWallpaperEnginePr
                 WallpaperEngineProcessFailure.FailedToStart);
         }
 
-        if (!File.Exists(installation.ControlExecutablePath) ||
-            !_trustVerifier.IsTrusted(installation.ControlExecutablePath))
+        var executablePath = FindRunningExecutable(installation, cancellationToken) ??
+            installation.ControlExecutablePath;
+        if (!File.Exists(executablePath) || !_trustVerifier.IsTrusted(executablePath))
         {
             throw new WallpaperEngineProcessException(
                 WallpaperEngineProcessFailure.FailedToStart);
@@ -492,7 +599,7 @@ internal sealed class WindowsWallpaperEngineProcessBoundary : IWallpaperEnginePr
 
         var startInfo = new ProcessStartInfo
         {
-            FileName = installation.ControlExecutablePath,
+            FileName = executablePath,
             WorkingDirectory = installation.InstallRootPath,
             UseShellExecute = false,
             RedirectStandardOutput = true,

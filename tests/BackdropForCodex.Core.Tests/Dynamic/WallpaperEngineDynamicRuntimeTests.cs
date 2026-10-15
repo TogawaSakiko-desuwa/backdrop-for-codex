@@ -31,32 +31,31 @@ public sealed class WallpaperEngineDynamicRuntimeTests
     }
 
     [Fact]
-    public async Task ProbeRequiresAnAlreadyRunningInstanceBeforeRecoveryOrCapture()
+    public async Task ProbeAllowsAStoppedEngineWithoutStartingItOrRunningRecovery()
     {
         var inner = new FakeActivationFactory();
         var recovery = new FakeRecovery();
+        var control = new FakeControlClient(
+            new WallpaperEnginePlatformUnavailableException(
+                WallpaperEnginePlatformUnavailableReason.StartupNotProven));
         var runtime = new WallpaperEngineDynamicRuntime(
             new FakeInstallationLocator(Installation()),
-            new FakeControlClient(
-                new WallpaperEnginePlatformUnavailableException(
-                    WallpaperEnginePlatformUnavailableReason.StartupNotProven)),
+            control,
             recovery,
             inner);
 
         var capability = await runtime.ProbeAsync();
 
-        Assert.False(capability.IsAvailable);
-        Assert.Equal(
-            DynamicWallpaperCapabilityReasonCode.WallpaperEngineNotRunning,
-            capability.ReasonCode);
+        Assert.True(capability.IsAvailable);
+        Assert.Equal(0, control.EnsureRunningCount);
         Assert.Equal(0, recovery.CallCount);
-        Assert.Equal(0, inner.ProbeCount);
+        Assert.Equal(1, inner.ProbeCount);
     }
 
     [Theory]
     [InlineData((int)WallpaperEngineOwnedWindowRecoveryState.PartiallyRecovered)]
     [InlineData((int)WallpaperEngineOwnedWindowRecoveryState.Deferred)]
-    public async Task ProbeFailsClosedWhileAnOwnedWindowRecoveryRemainsPending(
+    public async Task ActivationCanRetryWhileAnOwnedWindowRecoveryRemainsPending(
         int stateValue)
     {
         var state = (WallpaperEngineOwnedWindowRecoveryState)stateValue;
@@ -67,17 +66,41 @@ public sealed class WallpaperEngineDynamicRuntimeTests
             new FakeRecovery(new WallpaperEngineOwnedWindowRecoveryResult(state, 0, 1)),
             inner);
 
-        var capability = await runtime.ProbeAsync();
+        var resolution = Resolution();
+        var failure = await Assert.ThrowsAsync<DynamicWallpaperUnavailableException>(() =>
+            runtime.ActivateAsync(Request(resolution), new FakeProjectLease(resolution)).AsTask());
 
-        Assert.False(capability.IsAvailable);
         Assert.Equal(
             DynamicWallpaperCapabilityReasonCode.WallpaperEngineRecoveryUnavailable,
-            capability.ReasonCode);
-        Assert.Equal(0, inner.ProbeCount);
+            failure.ReasonCode);
+        Assert.Null(inner.ActivationResult);
+        Assert.True((await runtime.ProbeAsync()).IsAvailable);
     }
 
     [Fact]
-    public async Task ProbeDelegatesToCaptureAndEncoderOnlyAfterPlatformPreflight()
+    public async Task StartupFailureDoesNotPermanentlyDisableSceneSelection()
+    {
+        var inner = new FakeActivationFactory();
+        var recovery = new FakeRecovery();
+        var runtime = new WallpaperEngineDynamicRuntime(
+            new FakeInstallationLocator(Installation()),
+            new FakeControlClient(new WallpaperEnginePlatformUnavailableException(
+                WallpaperEnginePlatformUnavailableReason.StartupNotProven)),
+            recovery,
+            inner);
+        var resolution = Resolution();
+
+        var failure = await Assert.ThrowsAsync<DynamicWallpaperUnavailableException>(() =>
+            runtime.ActivateAsync(Request(resolution), new FakeProjectLease(resolution)).AsTask());
+
+        Assert.Equal(DynamicWallpaperCapabilityReasonCode.WallpaperEngineNotRunning, failure.ReasonCode);
+        Assert.Equal(0, recovery.CallCount);
+        Assert.Null(inner.ActivationResult);
+        Assert.True((await runtime.ProbeAsync()).IsAvailable);
+    }
+
+    [Fact]
+    public async Task ActivationStartsEngineAndPreparesRecoveryAndAudioBeforeThePipeline()
     {
         var inner = new FakeActivationFactory();
         var control = new FakeControlClient();
@@ -90,18 +113,19 @@ public sealed class WallpaperEngineDynamicRuntimeTests
             inner,
             audioIsolation: audio);
 
-        var capability = await runtime.ProbeAsync();
+        var resolution = Resolution();
+        var result = await runtime.ActivateAsync(Request(resolution), new FakeProjectLease(resolution));
 
-        Assert.True(capability.IsAvailable);
+        Assert.Same(inner.ActivationResult, result);
         Assert.Equal(1, control.EnsureRunningCount);
         Assert.Equal(1, recovery.CallCount);
         Assert.Equal(1, audio.CaptureCount);
         Assert.Equal(1, audio.Baseline.DisposeCount);
-        Assert.Equal(1, inner.ProbeCount);
+        await result.Lease.DisposeAsync();
     }
 
     [Fact]
-    public async Task ProbeRejectsUnprovenInitialSilenceAfterRecoveryButBeforeOpeningAWindow()
+    public async Task ActivationRejectsUnprovenOptionalAudioIsolationBeforeOpeningAWindow()
     {
         var inner = new FakeActivationFactory();
         var control = new FakeControlClient();
@@ -114,12 +138,13 @@ public sealed class WallpaperEngineDynamicRuntimeTests
             inner,
             audioIsolation: audio);
 
-        var capability = await runtime.ProbeAsync();
+        var resolution = Resolution();
+        var failure = await Assert.ThrowsAsync<DynamicWallpaperUnavailableException>(() =>
+            runtime.ActivateAsync(Request(resolution), new FakeProjectLease(resolution)).AsTask());
 
-        Assert.False(capability.IsAvailable);
         Assert.Equal(
             DynamicWallpaperCapabilityReasonCode.InitialAudioSilenceNotProven,
-            capability.ReasonCode);
+            failure.ReasonCode);
         Assert.Equal(1, audio.CaptureCount);
         Assert.Equal(1, audio.Baseline.DisposeCount);
         Assert.Equal(1, recovery.CallCount);
@@ -128,7 +153,7 @@ public sealed class WallpaperEngineDynamicRuntimeTests
     }
 
     [Fact]
-    public async Task RecoveryRunsOnlyBeforeTheFirstSuccessfulDynamicPreflight()
+    public async Task RecoveryRunsOnlyBeforeTheFirstSuccessfulActivation()
     {
         var recovery = new FakeRecovery();
         var runtime = new WallpaperEngineDynamicRuntime(
@@ -137,14 +162,16 @@ public sealed class WallpaperEngineDynamicRuntimeTests
             recovery,
             new FakeActivationFactory());
 
-        Assert.True((await runtime.ProbeAsync()).IsAvailable);
+        var resolution = Resolution();
+        var result = await runtime.ActivateAsync(Request(resolution), new FakeProjectLease(resolution));
         recovery.Result = new WallpaperEngineOwnedWindowRecoveryResult(
             WallpaperEngineOwnedWindowRecoveryState.PartiallyRecovered,
             0,
             1);
-        Assert.True((await runtime.ProbeAsync()).IsAvailable);
+        _ = await runtime.ActivateAsync(Request(resolution), new FakeProjectLease(resolution));
 
         Assert.Equal(1, recovery.CallCount);
+        await result.Lease.DisposeAsync();
     }
 
     [Fact]
@@ -161,21 +188,23 @@ public sealed class WallpaperEngineDynamicRuntimeTests
             recovery,
             new FakeActivationFactory());
 
-        var first = await runtime.ProbeAsync();
-        Assert.False(first.IsAvailable);
+        var resolution = Resolution();
+        await Assert.ThrowsAsync<DynamicWallpaperUnavailableException>(() =>
+            runtime.ActivateAsync(Request(resolution), new FakeProjectLease(resolution)).AsTask());
 
         recovery.Result = new WallpaperEngineOwnedWindowRecoveryResult(
             WallpaperEngineOwnedWindowRecoveryState.Recovered,
             1,
             0);
-        Assert.True((await runtime.ProbeAsync()).IsAvailable);
+        var result = await runtime.ActivateAsync(Request(resolution), new FakeProjectLease(resolution));
 
         recovery.Result = new WallpaperEngineOwnedWindowRecoveryResult(
             WallpaperEngineOwnedWindowRecoveryState.PartiallyRecovered,
             0,
             1);
-        Assert.True((await runtime.ProbeAsync()).IsAvailable);
+        _ = await runtime.ActivateAsync(Request(resolution), new FakeProjectLease(resolution));
         Assert.Equal(2, recovery.CallCount);
+        await result.Lease.DisposeAsync();
     }
 
     [Fact]

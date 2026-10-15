@@ -53,7 +53,7 @@
   <data name="Source_DiscoveryFailed" xml:space="preserve"><value>部分壁纸来源未能加载。</value></data>
   <data name="Source_RendererUnavailable" xml:space="preserve"><value>实时播放不可用</value></data>
   <data name="Source_LibraryTitle" xml:space="preserve"><value>Wallpaper Engine</value></data>
-  <data name="Source_LibraryHint" xml:space="preserve"><value>浏览本机已安装的 Wallpaper Engine 项目。Scene 与 Web 需要 Wallpaper Engine 已运行，并可能通过它播放声音。</value></data>
+  <data name="Source_LibraryHint" xml:space="preserve"><value>浏览本机已安装的 Wallpaper Engine 项目。应用场景或网页壁纸时会自动启动 Wallpaper Engine，并可能通过它播放声音。</value></data>
   <data name="Source_ProjectCountSuffix" xml:space="preserve"><value> 个项目</value></data>
   <data name="Source_InstalledCountSuffix" xml:space="preserve"><value> 个已安装项目</value></data>
   <data name="Source_SearchHint" xml:space="preserve"><value>搜索已安装项目</value></data>
@@ -76,9 +76,9 @@
   <data name="Source_EmptyTitle" xml:space="preserve"><value>没有符合条件的已安装项目</value></data>
   <data name="Source_EmptyMessage" xml:space="preserve"><value>调整筛选条件，或刷新 Wallpaper Engine 项目。</value></data>
   <data name="Source_ChooseInstallation" xml:space="preserve"><value>选择安装</value></data>
-  <data name="Source_ChooseInstallationHelp" xml:space="preserve"><value>选择通过验证的 Wallpaper Engine wallpaper64.exe。</value></data>
-  <data name="Source_ChooseInstallationDialogTitle" xml:space="preserve"><value>选择 Wallpaper Engine wallpaper64.exe</value></data>
-  <data name="Source_InstallationFileFilter" xml:space="preserve"><value>Wallpaper Engine|wallpaper64.exe</value></data>
+  <data name="Source_ChooseInstallationHelp" xml:space="preserve"><value>选择 Wallpaper Engine 的 wallpaper32.exe 或 wallpaper64.exe。</value></data>
+  <data name="Source_ChooseInstallationDialogTitle" xml:space="preserve"><value>选择 Wallpaper Engine 程序（32 位或 64 位）</value></data>
+  <data name="Source_InstallationFileFilter" xml:space="preserve"><value>Wallpaper Engine|wallpaper32.exe;wallpaper64.exe</value></data>
   <data name="Source_ChooseInstallFolder" xml:space="preserve"><value>选择安装文件夹</value></data>
   <data name="Source_ChooseInstallFolderDialogTitle" xml:space="preserve"><value>选择 Wallpaper Engine 安装文件夹</value></data>
   <data name="Source_UseAutomaticDiscovery" xml:space="preserve"><value>使用自动发现</value></data>
@@ -88,7 +88,7 @@
   <data name="Source_InstallationSelectionRequiredMessage" xml:space="preserve"><value>发现了多个通过验证的安装。请选择这台电脑上应由 Backdrop 使用的一个。</value></data>
   <data name="Source_InstallationSelectionInvalidTitle" xml:space="preserve"><value>安装需要处理</value></data>
   <data name="Source_InstallationSelectionInvalidShort" xml:space="preserve"><value>安装无效</value></data>
-  <data name="Source_InstallationSelectionInvalidMessage" xml:space="preserve"><value>此前选择的安装已无法通过验证。请重新选择 wallpaper64.exe，或恢复自动发现。</value></data>
+  <data name="Source_InstallationSelectionInvalidMessage" xml:space="preserve"><value>此前选择的安装已无法通过验证。请重新选择 wallpaper32.exe 或 wallpaper64.exe，或恢复自动发现。</value></data>
   <data name="Source_InstallationSelectionFailedTitle" xml:space="preserve"><value>未能应用安装选择</value></data>
   <data name="Source_InstallationSelectionFailedShort" xml:space="preserve"><value>未应用选择</value></data>
   <data name="Source_InstallationSelectionFailedMessage" xml:space="preserve"><value>仍在使用此前的选择。请检查该安装后重试。</value></data>

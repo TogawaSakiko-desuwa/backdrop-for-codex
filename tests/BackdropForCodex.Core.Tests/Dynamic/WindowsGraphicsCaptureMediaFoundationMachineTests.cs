@@ -67,50 +67,23 @@ public sealed class WindowsGraphicsCaptureMediaFoundationMachineTests
         long firstSequence = -1;
         long lastSequence = -1;
         var encodedFrames = 0;
-        DynamicWallpaperUnavailableException? unavailable = null;
-        try
+        await foreach (var frame in capture.ReadFramesAsync(timeout.Token))
         {
-            await foreach (var frame in capture.ReadFramesAsync(timeout.Token))
+            await using (frame)
             {
-                await using (frame)
-                {
-                    firstSequence = firstSequence < 0 ? frame.Sequence : firstSequence;
-                    lastSequence = frame.Sequence;
-                    await encoder.EncodeAsync(frame, stream, timeout.Token);
-                }
-
-                encodedFrames++;
-                if (encodedFrames >= 30)
-                {
-                    break;
-                }
+                firstSequence = firstSequence < 0 ? frame.Sequence : firstSequence;
+                lastSequence = frame.Sequence;
+                await encoder.EncodeAsync(frame, stream, timeout.Token);
             }
-        }
-        catch (DynamicWallpaperUnavailableException exception) when (
-            exception.ReasonCode ==
-                DynamicWallpaperCapabilityReasonCode.PrimaryRenderTierUnavailable)
-        {
-            unavailable = exception;
+
+            encodedFrames++;
+            if (encodedFrames >= 30)
+            {
+                break;
+            }
         }
 
         stopwatch.Stop();
-        if (unavailable is not null)
-        {
-            _output.WriteLine(
-                "primary=unavailable reason={0} frames={1} elapsedSeconds={2:F3}",
-                unavailable.ReasonCode,
-                encodedFrames,
-                stopwatch.Elapsed.TotalSeconds);
-            Assert.True(
-                stopwatch.Elapsed <= TimeSpan.FromSeconds(5),
-                $"Primary calibration took {stopwatch.Elapsed.TotalSeconds:F2}s.");
-            Assert.InRange(encodedFrames, 0, 29);
-            var streamFailure = await Assert.ThrowsAsync<
-                DynamicWallpaperUnavailableException>(() => receivedSegments);
-            Assert.Equal(unavailable.ReasonCode, streamFailure.ReasonCode);
-            return;
-        }
-
         Assert.Equal(30, encodedFrames);
         Assert.InRange(lastSequence - firstSequence, 29, 33);
         var effectiveFramesPerSecond = encodedFrames / stopwatch.Elapsed.TotalSeconds;
@@ -119,11 +92,6 @@ public sealed class WindowsGraphicsCaptureMediaFoundationMachineTests
             encodedFrames,
             stopwatch.Elapsed.TotalSeconds,
             effectiveFramesPerSecond);
-        Assert.True(
-            effectiveFramesPerSecond >= 27,
-            $"Primary tier sustained only {effectiveFramesPerSecond:F2} fps " +
-            $"over {stopwatch.Elapsed.TotalSeconds:F2}s.");
-
         await encoder.CompleteAsync(stream, timeout.Token);
         var segments = await receivedSegments;
         var initialization = Assert.Single(

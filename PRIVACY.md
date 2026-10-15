@@ -42,7 +42,7 @@ Backdrop for Codex 是在用户计算机上运行的开源桌面伴侣。本说�
 
 Wallpaper Engine Image / Video 的入口文件仍通过上述固定只读文件 lease 和直接 `blob:` 管线处理，不要求 Wallpaper Engine 进程运行。Workshop 的持久身份是 PublishedFileId，每次使用时重新定位实际目录；Local Project 的身份是本机绝对项目根。取消订阅、项目删除或 Wallpaper Engine 缺失时，设置只保留 last-known 类型与显示名称，Apply 会禁用；内容重新出现后可按稳定身份重新解析。
 
-Scene / Web 只在 Wallpaper Engine 已经运行且项目窗口通过验证时激活。Backdrop 只捕获该窗口的像素，不捕获桌面，不向第三方 Web wallpaper 传递脚本、键盘/鼠标输入、音频或 Codex 内容，也不建立媒体 HTTP 服务。项目声音可能由 Wallpaper Engine 直接播放；Backdrop 不会自动启动 Wallpaper Engine，也不枚举、静音或改变 Wallpaper Engine 音频会话。
+应用 Scene / Web 时，Backdrop 会复用正在运行的 Wallpaper Engine，或从已验证的安装位置按需启动 32 位或 64 位引擎；浏览来源库不会启动引擎。项目窗口通过验证后，Backdrop 只捕获该窗口的像素，不捕获桌面，不向第三方 Web wallpaper 传递脚本、键盘/鼠标输入、音频或 Codex 内容，也不建立媒体 HTTP 服务。项目声音可能由 Wallpaper Engine 直接播放；Backdrop 不枚举、静音或改变其音频会话。关闭壁纸时只关闭本项目创建的独立窗口，不退出 Wallpaper Engine 主进程。
 
 首次应用 Web wallpaper（包括增强快捷启动）前，Backdrop 会明确说明第三方项目可能自行联网并播放声音。只有用户确认后才继续；取消、关闭提示或没有可用提示界面都会失败关闭。该确认只作为本机 UI 偏好保存，不写入可迁移的壁纸方案。
 
@@ -50,7 +50,7 @@ Scene / Web 只在 Wallpaper Engine 已经运行且项目窗口通过验证时�
 
 Codex 页面当前的 CSP 不允许从回环 HTTP 地址加载这些图片或视频。本项目不修改、不放宽也不绕过该 CSP。宿主经本机 CDP 把已校验、由 lease 锁定的文件绑定到页面内本项目拥有的隐藏文件输入，页面再生成 CSP 原生允许的 `blob:` URL。页面脚本在这段时间可以访问所选文件的内容，以及浏览器提供的文件名、大小、MIME type 和修改时间；它不能取得宿主传给 CDP 的完整绝对路径。宿主本身仍知道该路径，并按上一节所述保存设置。
 
-媒体 lease 组件不运行 Kestrel、不监听临时 HTTP 端口，也不生成媒体 endpoint 或媒体访问令牌。媒体文件内容不经过 HTTP、项目自有服务或维护者控制的基础设施。详见 [v1.5.2 威胁模型](https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/blob/v1.5.2/THREAT_MODEL.md)。
+媒体 lease 组件不运行 Kestrel、不监听临时 HTTP 端口，也不生成媒体 endpoint 或媒体访问令牌。媒体文件内容不经过 HTTP、项目自有服务或维护者控制的基础设施。详见 [v1.5.3 威胁模型](https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/blob/v1.5.3/THREAT_MODEL.md)。
 
 ### CDP 与 Codex 页面
 
@@ -94,4 +94,4 @@ Codex 页面当前的 CSP 不允许从回环 HTTP 地址加载这些图片或视
 
 本说明会随数据处理方式的变化更新。版本历史可通过 Git 查看。
 
-隐私或安全问题请按 [v1.5.2 安全策略](https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/blob/v1.5.2/SECURITY.md) 私下报告。
+隐私或安全问题请按 [v1.5.3 安全策略](https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/blob/v1.5.3/SECURITY.md) 私下报告。

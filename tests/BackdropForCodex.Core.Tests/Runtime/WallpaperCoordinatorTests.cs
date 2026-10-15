@@ -853,10 +853,11 @@ public sealed class WallpaperCoordinatorTests
     }
 
     [Fact]
-    public async Task ActivateAsync_RefusesCodexThatWasAlreadyRunningWithoutDomMutation()
+    public async Task ActivateAsync_RefusesRunningCodexWithoutVerifiedEndpointWithoutDomMutation()
     {
         var fixture = new CoordinatorFixture();
         fixture.ProcessSource.Processes = [fixture.ReviewedProcess];
+        fixture.Discovery.Results.Clear();
         await using var coordinator = fixture.CreateCoordinator();
 
         var result = await fixture.ActivateAsync(coordinator);
@@ -870,6 +871,22 @@ public sealed class WallpaperCoordinatorTests
         Assert.Equal(1, fixture.SourceProvider.DisposeCount);
         Assert.Equal(0, fixture.Injection.ApplyCount);
         Assert.Equal(WallpaperRuntimePhase.Faulted, coordinator.Status.Phase);
+    }
+
+    [Fact]
+    public async Task ActivateAsync_ReusesVerifiedRunningCodexWithoutRelaunch()
+    {
+        var fixture = new CoordinatorFixture();
+        fixture.ProcessSource.Processes = [fixture.ReviewedProcess];
+        fixture.Discovery.Results.Enqueue(new CdpDiscoveryResult([fixture.Endpoint], []));
+        await using var coordinator = fixture.CreateCoordinator();
+
+        var result = await fixture.ActivateAsync(coordinator);
+
+        Assert.Equal(RuntimeActivationOutcome.MediaActive, result.Outcome);
+        Assert.Equal(0, fixture.Activation.CallCount);
+        Assert.Equal(1, fixture.Injection.ApplyCount);
+        Assert.Equal(CodexSecurityStatus.Verified, coordinator.Compatibility.Security.Status);
     }
 
     [Fact]

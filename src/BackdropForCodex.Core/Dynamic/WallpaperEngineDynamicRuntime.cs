@@ -81,33 +81,11 @@ internal sealed class WallpaperEngineDynamicRuntime :
         ThrowIfDisposalStarted();
         try
         {
-            var installation = await _installationLocator
+            _ = await _installationLocator
                 .LocateAsync(cancellationToken)
                 .ConfigureAwait(false);
-            await _controlClient
-                .EnsureRunningAsync(installation, cancellationToken)
-                .ConfigureAwait(false);
-            var recovery = await RecoverInitialOwnedWindowsAsync(cancellationToken)
-                .ConfigureAwait(false);
-            if (recovery.State is WallpaperEngineOwnedWindowRecoveryState.PartiallyRecovered or
-                WallpaperEngineOwnedWindowRecoveryState.Deferred)
-            {
-                return DynamicWallpaperCapability.Unavailable(
-                    DynamicWallpaperCapabilityReasonCode.WallpaperEngineRecoveryUnavailable);
-            }
-
-            if (_audioIsolation is not null)
-            {
-                var audioCapability = await ProbeInitialAudioSilenceAsync(
-                        installation,
-                        cancellationToken)
-                    .ConfigureAwait(false);
-                if (!audioCapability.IsAvailable)
-                {
-                    return audioCapability;
-                }
-            }
-
+            // Browsing the library must neither start the engine nor treat a stopped engine
+            // as an unsupported renderer. Process-dependent preparation belongs to activation.
             return await _inner.ProbeAsync(cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
@@ -130,8 +108,37 @@ internal sealed class WallpaperEngineDynamicRuntime :
         CancellationToken cancellationToken = default)
     {
         ThrowIfDisposalStarted();
+        ArgumentNullException.ThrowIfNull(request);
+        WallpaperEngineProjectLeaseContract.Validate(projectLease);
         try
         {
+            var installation = await _installationLocator
+                .LocateAsync(cancellationToken)
+                .ConfigureAwait(false);
+            await _controlClient
+                .EnsureRunningAsync(installation, cancellationToken)
+                .ConfigureAwait(false);
+            var recovery = await RecoverInitialOwnedWindowsAsync(cancellationToken)
+                .ConfigureAwait(false);
+            if (recovery.State is WallpaperEngineOwnedWindowRecoveryState.PartiallyRecovered or
+                WallpaperEngineOwnedWindowRecoveryState.Deferred)
+            {
+                throw new DynamicWallpaperUnavailableException(
+                    DynamicWallpaperCapabilityReasonCode.WallpaperEngineRecoveryUnavailable);
+            }
+
+            if (_audioIsolation is not null)
+            {
+                var audioCapability = await ProbeInitialAudioSilenceAsync(
+                        installation,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                if (!audioCapability.IsAvailable)
+                {
+                    throw new DynamicWallpaperUnavailableException(audioCapability.ReasonCode);
+                }
+            }
+
             return await _inner
                 .ActivateAsync(request, projectLease, cancellationToken)
                 .ConfigureAwait(false);

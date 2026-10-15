@@ -180,7 +180,7 @@ internal sealed class SustainedWallpaperCadenceMonitor
 
 /// <summary>
 /// Owns at most one captured GPU frame. Reading <see cref="Current"/> does not transfer ownership,
-/// allowing the fallback pacer to replay the same surface until a newer frame arrives.
+/// allowing the pacer to replay the same surface until a newer frame arrives.
 /// </summary>
 internal sealed class LatestWallpaperCapturedFrameSlot : IAsyncDisposable
 {

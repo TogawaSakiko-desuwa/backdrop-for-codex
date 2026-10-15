@@ -143,8 +143,8 @@ internal interface IWallpaperEnginePopOutPlacement
 }
 
 /// <summary>
-/// Moves only an already verified Wallpaper Engine pop-out to a one-pixel virtual-screen edge,
-/// then continuously revalidates its identity, focus, geometry, and non-topmost state.
+/// Initially places the owned pop-out at the screen edge and maintains its capture surface.
+/// Window-manager changes are repaired in place without treating focus or position as identity.
 /// </summary>
 internal sealed class WindowsWallpaperEnginePopOutPlacement
     : IWallpaperEnginePopOutPlacement
@@ -269,12 +269,6 @@ internal sealed class WindowsWallpaperEnginePopOutPlacement
         {
             original = _nativeApi.CaptureWindowState(verifiedWindow.WindowHandle);
             EnsureSameIdentity(verifiedWindow, original);
-            if (_nativeApi.GetForegroundWindow() == verifiedWindow.WindowHandle)
-            {
-                throw new InvalidOperationException(
-                    "An active pop-out cannot be moved without interfering with the user.");
-            }
-
             target = CreateTargetRect(
                 options.Width,
                 options.Height,
@@ -306,20 +300,13 @@ internal sealed class WindowsWallpaperEnginePopOutPlacement
                 WallpaperEngineSetWindowPositionFlags.NoActivate |
                     WallpaperEngineSetWindowPositionFlags.NoOwnerZOrder |
                     WallpaperEngineSetWindowPositionFlags.FrameChanged);
-            EnsurePlaced(
-                verifiedWindow,
-                target,
-                targetClientRect,
-                targetStyle,
-                targetExtendedStyle);
+            EnsurePlaced(verifiedWindow);
             var lease = new PlacementLease(
                 _nativeApi,
                 verifiedWindow,
                 original,
                 target,
                 targetClientRect,
-                targetStyle,
-                targetExtendedStyle,
                 _closeConfirmationTimeout,
                 _closePollInterval,
                 _healthPollInterval,
@@ -339,24 +326,10 @@ internal sealed class WindowsWallpaperEnginePopOutPlacement
         }
     }
 
-    private void EnsurePlaced(
-        WallpaperEngineVerifiedWindow verifiedWindow,
-        WallpaperEngineWindowRect target,
-        WallpaperEngineWindowRect targetClientRect,
-        uint targetStyle,
-        uint targetExtendedStyle)
+    private void EnsurePlaced(WallpaperEngineVerifiedWindow verifiedWindow)
     {
         var placed = _nativeApi.CaptureWindowState(verifiedWindow.WindowHandle);
         EnsureSameIdentity(verifiedWindow, placed);
-        if (_nativeApi.GetForegroundWindow() == verifiedWindow.WindowHandle ||
-            placed.Rect != target ||
-            _nativeApi.GetClientRect(verifiedWindow.WindowHandle) != targetClientRect ||
-            placed.Style != targetStyle ||
-            placed.ExtendedStyle != targetExtendedStyle)
-        {
-            throw new InvalidOperationException(
-                "The pop-out placement did not produce the requested capture surface.");
-        }
     }
 
     private static WallpaperEngineWindowRect CreateTargetRect(
@@ -529,8 +502,6 @@ internal sealed class WindowsWallpaperEnginePopOutPlacement
         WallpaperEngineNativeWindowState original,
         WallpaperEngineWindowRect target,
         WallpaperEngineWindowRect targetClientRect,
-        uint targetStyle,
-        uint targetExtendedStyle,
         TimeSpan closeConfirmationTimeout,
         TimeSpan closePollInterval,
         TimeSpan healthPollInterval,
@@ -651,6 +622,7 @@ internal sealed class WindowsWallpaperEnginePopOutPlacement
 
         private async Task MonitorHealthAsync()
         {
+            var consecutiveFailures = 0;
             try
             {
                 while (true)
@@ -658,23 +630,45 @@ internal sealed class WindowsWallpaperEnginePopOutPlacement
                     await healthScheduler
                         .DelayAsync(healthPollInterval, _healthCancellation.Token)
                         .ConfigureAwait(false);
-                    var current = nativeApi.CaptureWindowState(
-                        verifiedWindow.WindowHandle);
-                    EnsureSameIdentity(verifiedWindow, current);
-                    var currentTarget = CreateTargetRect(
-                        target.Width,
-                        target.Height,
-                        nativeApi.GetVirtualScreen());
-                    if (nativeApi.GetForegroundWindow() == verifiedWindow.WindowHandle ||
-                        current.Rect != target ||
-                        current.Rect != currentTarget ||
-                        nativeApi.GetClientRect(verifiedWindow.WindowHandle) !=
-                            targetClientRect ||
-                        current.Style != targetStyle ||
-                        current.ExtendedStyle != targetExtendedStyle)
+                    try
                     {
-                        throw new InvalidOperationException(
-                            "The pop-out left its verified non-topmost edge placement.");
+                        var current = nativeApi.CaptureWindowState(verifiedWindow.WindowHandle);
+                        EnsureSameIdentity(verifiedWindow, current);
+                        var client = nativeApi.GetClientRect(verifiedWindow.WindowHandle);
+                        var style = current.Style & ~WindowStyleNonClientMask;
+                        var extendedStyle = current.ExtendedStyle &
+                            ~(ExtendedStyleTopMost | ExtendedStyleNonClientMask);
+                        if (current.Style != style || current.ExtendedStyle != extendedStyle)
+                        {
+                            nativeApi.SetWindowStyles(verifiedWindow.WindowHandle, style, extendedStyle);
+                        }
+
+                        // Position and focus do not affect WGC capture. Only repair a changed
+                        // capture size or topmost state; keep harmless moves and style changes.
+                        if (client.Width != targetClientRect.Width ||
+                            client.Height != targetClientRect.Height ||
+                            current.Style != style || current.ExtendedStyle != extendedStyle)
+                        {
+                            var resized = new WallpaperEngineWindowRect(
+                                current.Rect.Left,
+                                current.Rect.Top,
+                                checked(current.Rect.Left + target.Width),
+                                checked(current.Rect.Top + target.Height));
+                            nativeApi.SetWindowPosition(
+                                verifiedWindow.WindowHandle,
+                                WindowNotTopMost,
+                                resized,
+                                WallpaperEngineSetWindowPositionFlags.NoActivate |
+                                    WallpaperEngineSetWindowPositionFlags.NoOwnerZOrder |
+                                    WallpaperEngineSetWindowPositionFlags.FrameChanged);
+                        }
+
+                        consecutiveFailures = 0;
+                    }
+                    catch (Exception exception) when (
+                        !ContainsOwnershipFailure(exception) && ++consecutiveFailures < 3)
+                    {
+                        // A brief native/window-manager failure can settle on the next poll.
                     }
                 }
             }

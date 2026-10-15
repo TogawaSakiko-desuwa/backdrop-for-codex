@@ -27,7 +27,7 @@ public sealed class WallpaperEnginePopOutPlacementTests
     }
 
     [Fact]
-    public async Task PlacementHealthFailsWhenThePopOutMovesAwayFromTheOnePixelEdge()
+    public async Task PlacementHealthAllowsThePopOutToMoveWithoutMovingItBack()
     {
         var original = CreateOriginalState();
         var native = CreateNative(original);
@@ -47,19 +47,17 @@ public sealed class WallpaperEnginePopOutPlacementTests
         var lease = await placement.PlaceAsync(verified, DefaultOptions);
         native.State = native.State with { Rect = original.Rect };
 
-        scheduler.Advance();
+        await scheduler.AdvanceAndWaitAsync();
 
-        var exception = await Assert.ThrowsAsync<WallpaperEnginePlatformUnavailableException>(
-            async () => await lease.Completion.WaitAsync(TimeSpan.FromSeconds(1)));
-        Assert.Equal(
-            WallpaperEnginePlatformUnavailableReason.WindowPlacementNotProven,
-            exception.Reason);
+        Assert.False(lease.Completion.IsCompleted);
+        Assert.Equal(original.Rect, native.State.Rect);
+        Assert.Single(native.PositionCalls);
 
         await lease.DisposeAsync();
     }
 
     [Fact]
-    public async Task PlacementHealthFailsWhenThePopOutBecomesTopMost()
+    public async Task PlacementHealthRepairsTopMostWithoutFailingTheLease()
     {
         var original = CreateOriginalState();
         var native = CreateNative(original);
@@ -82,15 +80,34 @@ public sealed class WallpaperEnginePopOutPlacementTests
             ExtendedStyle = native.State.ExtendedStyle | 0x00000008,
         };
 
-        scheduler.Advance();
+        await scheduler.AdvanceAndWaitAsync();
 
-        var exception = await Assert.ThrowsAsync<WallpaperEnginePlatformUnavailableException>(
-            async () => await lease.Completion.WaitAsync(TimeSpan.FromSeconds(1)));
-        Assert.Equal(
-            WallpaperEnginePlatformUnavailableReason.WindowPlacementNotProven,
-            exception.Reason);
+        Assert.False(lease.Completion.IsCompleted);
+        Assert.Equal(0u, native.State.ExtendedStyle & 0x00000008u);
 
         await lease.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task PlacementRepairsCaptureSizeAtTheCurrentPosition()
+    {
+        var original = CreateOriginalState();
+        var native = CreateNative(original);
+        using var scheduler = new ManuallyAdvancedHealthScheduler();
+        var placement = new WindowsWallpaperEnginePopOutPlacement(
+            native, TimeSpan.FromSeconds(1), TimeSpan.Zero, TimeSpan.FromSeconds(1), scheduler);
+        var verified = new WallpaperEngineVerifiedWindow(
+            original.WindowHandle, original.ProcessId, original.ProcessStartTimeUtc,
+            original.ProcessPath, TestWindowName);
+        await using var lease = await placement.PlaceAsync(verified, DefaultOptions);
+        native.State = native.State with { Rect = new WallpaperEngineWindowRect(120, 230, 760, 710) };
+        native.ClientRect = new WallpaperEngineWindowRect(0, 0, 640, 480);
+
+        await scheduler.AdvanceAndWaitAsync();
+
+        Assert.False(lease.Completion.IsCompleted);
+        Assert.Equal(new WallpaperEngineWindowRect(120, 230, 2040, 1310), native.State.Rect);
+        Assert.Equal(new WallpaperEngineWindowRect(0, 0, 1920, 1080), native.ClientRect);
     }
 
     [Fact]
@@ -193,7 +210,7 @@ public sealed class WallpaperEnginePopOutPlacementTests
     }
 
     [Fact]
-    public async Task PlacementHealthFailsIfThePopOutTakesForegroundFocus()
+    public async Task PlacementHealthAllowsThePopOutToTakeForegroundFocus()
     {
         var original = CreateOriginalState();
         var native = CreateNative(original);
@@ -213,13 +230,10 @@ public sealed class WallpaperEnginePopOutPlacementTests
         var lease = await placement.PlaceAsync(verified, DefaultOptions);
         native.ForegroundWindow = original.WindowHandle;
 
-        scheduler.Advance();
+        await scheduler.AdvanceAndWaitAsync();
 
-        var exception = await Assert.ThrowsAsync<WallpaperEnginePlatformUnavailableException>(
-            async () => await lease.Completion.WaitAsync(TimeSpan.FromSeconds(1)));
-        Assert.Equal(
-            WallpaperEnginePlatformUnavailableReason.WindowPlacementNotProven,
-            exception.Reason);
+        Assert.False(lease.Completion.IsCompleted);
+        Assert.Single(native.PositionCalls);
 
         native.ForegroundWindow = (nint)99;
         await lease.DisposeAsync();
@@ -305,7 +319,7 @@ public sealed class WallpaperEnginePopOutPlacementTests
     }
 
     [Fact]
-    public async Task ActivePopOutIsRejectedBeforeAnyWindowMutation()
+    public async Task ActivePopOutCanBePlacedWithoutActivatingItAgain()
     {
         var processStart = new DateTimeOffset(2026, 8, 10, 4, 5, 6, TimeSpan.Zero);
         var original = new WallpaperEngineNativeWindowState(
@@ -329,14 +343,11 @@ public sealed class WallpaperEnginePopOutPlacementTests
             original.ProcessPath,
             TestWindowName);
 
-        var exception = await Assert.ThrowsAsync<WallpaperEnginePlatformUnavailableException>(
-            async () => await placement.PlaceAsync(verified, DefaultOptions));
+        await using var lease = await placement.PlaceAsync(verified, DefaultOptions);
 
-        Assert.Equal(
-            WallpaperEnginePlatformUnavailableReason.WindowPlacementNotProven,
-            exception.Reason);
-        Assert.Empty(native.PositionCalls);
-        Assert.Equal(original, native.State);
+        Assert.False(lease.Completion.IsCompleted);
+        Assert.True(native.PositionCalls.Single().Flags.HasFlag(
+            WallpaperEngineSetWindowPositionFlags.NoActivate));
     }
 
     [Fact]
@@ -581,7 +592,7 @@ public sealed class WallpaperEnginePopOutPlacementTests
         {
             Assert.Equal(State.WindowHandle, windowHandle);
             PositionCalls.Add(new PositionCall(insertAfter, rect, flags));
-            var extendedStyle = insertAfter == (nint)1
+            var extendedStyle = insertAfter == (nint)1 || insertAfter == (nint)(-2)
                 ? State.ExtendedStyle & ~0x00000008u
                 : State.ExtendedStyle;
             State = State with
@@ -589,6 +600,7 @@ public sealed class WallpaperEnginePopOutPlacementTests
                 Rect = rect,
                 ExtendedStyle = extendedStyle,
             };
+            ClientRect = new WallpaperEngineWindowRect(0, 0, rect.Width, rect.Height);
             AfterSetWindowPosition?.Invoke(this);
         }
 
@@ -619,13 +631,26 @@ public sealed class WallpaperEnginePopOutPlacementTests
         IDisposable
     {
         private readonly SemaphoreSlim _ticks = new(0);
+        private TaskCompletionSource? _nextWait;
 
         internal void Advance() => _ticks.Release();
 
+        internal Task AdvanceAndWaitAsync()
+        {
+            var nextWait = new TaskCompletionSource(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+            _nextWait = nextWait;
+            _ticks.Release();
+            return nextWait.Task.WaitAsync(TimeSpan.FromSeconds(1));
+        }
+
         public ValueTask DelayAsync(
             TimeSpan delay,
-            CancellationToken cancellationToken) =>
-            new(_ticks.WaitAsync(cancellationToken));
+            CancellationToken cancellationToken)
+        {
+            Interlocked.Exchange(ref _nextWait, null)?.TrySetResult();
+            return new(_ticks.WaitAsync(cancellationToken));
+        }
 
         public void Dispose() => _ticks.Dispose();
     }

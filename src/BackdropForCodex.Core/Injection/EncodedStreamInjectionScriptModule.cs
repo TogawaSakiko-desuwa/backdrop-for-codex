@@ -154,6 +154,7 @@ internal static class EncodedStreamInjectionScriptModule
                 startRuntime() {
                   if (!state.onPlaybackPolicyChanged) {
                     state.onPlaybackPolicyChanged = () => state.updatePlayback();
+                    document.addEventListener("visibilitychange", state.onPlaybackPolicyChanged);
                     state.motionQuery?.addEventListener?.(
                       "change",
                       state.onPlaybackPolicyChanged);
@@ -180,6 +181,7 @@ internal static class EncodedStreamInjectionScriptModule
                     state.watchdog = 0;
                   }
                   if (state.onPlaybackPolicyChanged) {
+                    document.removeEventListener("visibilitychange", state.onPlaybackPolicyChanged);
                     state.motionQuery?.removeEventListener?.(
                       "change",
                       state.onPlaybackPolicyChanged);

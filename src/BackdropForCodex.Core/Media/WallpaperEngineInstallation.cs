@@ -59,6 +59,12 @@ public sealed record WallpaperEngineInstallation
 
     public IReadOnlyList<string> SteamLibraryPaths { get; }
 
+    internal static IEnumerable<string> GetControlExecutablePaths(string installRootPath)
+    {
+        yield return Path.Combine(installRootPath, "wallpaper64.exe");
+        yield return Path.Combine(installRootPath, "wallpaper32.exe");
+    }
+
     public override string ToString() =>
         $"{nameof(WallpaperEngineInstallation)} {{ SteamApplicationId = {SteamApplicationId}, " +
         $"SteamLibraryCount = {SteamLibraryPaths.Count}, Paths = <redacted> }}";

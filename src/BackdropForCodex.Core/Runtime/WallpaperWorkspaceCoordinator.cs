@@ -963,10 +963,11 @@ public sealed class WallpaperWorkspaceCoordinator : IAsyncDisposable
         }).CreateSnapshot();
     }
 
+    // The editor can assign a temporary catalog ID when reselecting an existing project.
+    // Authorization follows the actual source and content, not that local row identity.
     private static bool MatchesExpectedSourceResolution(
         WallpaperSourceResolution current,
         WallpaperSourceResolution expected) =>
-        current.CanonicalReference.MediaId == expected.CanonicalReference.MediaId &&
         current.Descriptor.SourceKind == expected.Descriptor.SourceKind &&
         WallpaperSourceIdentifier.AreEqual(
             current.Descriptor.SourceKind,
