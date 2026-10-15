@@ -116,6 +116,8 @@ public sealed class PuppeteerWallpaperSession :
     private readonly VerifiedCodexPageSelector _pageSelector = new();
     private readonly InjectedPageRegistry _pageRegistry = new();
     private readonly InitialPageReadinessGate _readinessGate = new();
+    private readonly InitialPageReadinessGate _mediaReadinessGate = new(
+        TimeSpan.FromSeconds(30), InitialPageReadinessGate.DefaultPollInterval);
     private readonly InjectionCapabilityState _capabilityState = new();
     private readonly PresentationContractState _presentationContractState = new();
     private IBrowser? _browser;
@@ -202,7 +204,8 @@ public sealed class PuppeteerWallpaperSession :
                 .WaitAsync(
                     token => ApplyToCurrentPagesAsync(
                         token,
-                        finalizeBaselineFallback: false),
+                        finalizeBaselineFallback: false,
+                        readinessOnly: true),
                     cancellationToken)
                 .ConfigureAwait(false);
             if (ShouldRunFinalBaselineAttempt(
@@ -213,8 +216,18 @@ public sealed class PuppeteerWallpaperSession :
                     .RunFinalAttemptAsync(
                         token => ApplyToCurrentPagesAsync(
                             token,
-                            finalizeBaselineFallback: true),
+                            finalizeBaselineFallback: true,
+                            readinessOnly: true),
                         cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
+            if (applyResult.AppliedCount != 0)
+            {
+                // Loading starts with its own budget, even if Codex used most of the shell
+                // readiness interval. Every attempt still revalidates the selected document.
+                applyResult = await _mediaReadinessGate
+                    .WaitAsync(token => ApplyToCurrentPagesAsync(token), cancellationToken)
                     .ConfigureAwait(false);
             }
 
@@ -520,7 +533,8 @@ public sealed class PuppeteerWallpaperSession :
 
     private async Task<PageApplyResult> ApplyToCurrentPagesAsync(
         CancellationToken cancellationToken,
-        bool finalizeBaselineFallback = false)
+        bool finalizeBaselineFallback = false,
+        bool readinessOnly = false)
     {
         if (_browser is null || _endpoint is null || _options is null)
         {
@@ -645,7 +659,7 @@ public sealed class PuppeteerWallpaperSession :
             capabilityTransition.Previous,
             capabilityTransition.Current);
 
-        if (!_pageRegistry.IsMutatedForGeneration(selectedPage, _options.Generation))
+        if (!readinessOnly && !_pageRegistry.IsMutatedForGeneration(selectedPage, _options.Generation))
         {
             var installed = await TryInstallMediaAsync(selectedPage, _options, cancellationToken)
                 .ConfigureAwait(false);

@@ -1,6 +1,6 @@
 # 威胁模型
 
-版本：Backdrop for Codex `v1.5.2`（2026-09-20）
+版本：Backdrop for Codex `v1.5.3`（2026-10-16）
 
 本文描述 Backdrop for Codex 的安全边界、主要威胁和用户需要了解的剩余风险。
 
@@ -13,7 +13,7 @@
 - 只连接当前用户的官方 Store/MSIX Codex 主工作窗口；
 - CDP 只经严格 IPv4 回环地址通信，不为媒体创建 HTTP 或其他网络监听器；
 - 只处理用户选择的本地媒体和经过验证的已安装 Wallpaper Engine 项目；校验最终文件、项目范围、格式和大小，拒绝 Application / Unknown；
-- Scene / Web 只在 Wallpaper Engine 已经运行且独立项目窗口通过验证时捕获像素；不捕获桌面，不使用全局 Wallpaper Engine 命令，不传递脚本、输入、音频或 Codex 内容。项目可能通过 Wallpaper Engine 播放声音，Backdrop 不枚举、静音或改变其音频会话；
+- 应用 Scene / Web 时复用现有引擎，或按需启动经过验证的 32 位或 64 位 Wallpaper Engine；独立项目窗口通过验证后才捕获像素，不捕获桌面，不使用全局播放/静音命令，不传递脚本、输入、音频或 Codex 内容。项目可能通过 Wallpaper Engine 播放声音，Backdrop 不枚举、静音或改变其音频会话；
 - 官方包、进程、当前会话、监听器和唯一工作页的安全验证先于页面兼容判断；安全失败或目标歧义时停止激活；
 - 不修改或绕过 Codex CSP，不读取聊天，不上传本地媒体、设置或使用数据；
 - 旧设置迁移前保留原始备份；损坏、冲突和未来版本设置不会被隐式覆盖；
@@ -38,7 +38,7 @@
 
 1. **用户 → 本地设置**：保存背景方案、稳定来源标识、显示偏好和最近使用记录。本地文件与 Local Project 可能保存绝对路径；Workshop 使用 PublishedFileId。旧设置迁移前会保留原始备份。
 2. **伴侣 → 本地媒体与 Wallpaper Engine 项目**：只读取用户选择的文件及已安装项目的必要元数据。Image / Video 经本地文件校验后直接加载；Application / Unknown 不执行。
-3. **已运行的 Wallpaper Engine → Scene / Web 像素流**：Backdrop 验证独立项目窗口并捕获其像素，不捕获桌面，不传递第三方脚本、输入、音频或 Codex 内容。Backdrop 不枚举、静音或改变 Wallpaper Engine 音频会话，项目可能直接播放声音；第三方 Web 项目仍可能自行联网。
+3. **经过验证的 Wallpaper Engine → Scene / Web 像素流**：应用时从已验证的安装位置按需启动引擎或复用现有实例；浏览来源库不启动引擎，清理本项目窗口也不终止引擎主进程。Backdrop 验证独立项目窗口并捕获其像素，不捕获桌面，不传递第三方脚本、输入、音频或 Codex 内容。Backdrop 不枚举、静音或改变 Wallpaper Engine 音频会话，项目可能直接播放声音；第三方 Web 项目仍可能自行联网。
 4. **伴侣 ↔ Codex 回环 CDP**：验证官方 Store/MSIX 包、进程、当前会话、监听器和唯一工作页后，伴侣才添加或清理表现层。媒体不使用额外 HTTP 服务。
 5. **用户 → 诊断导出**：只有用户主动选择保存位置时才生成白名单字段的本地 JSON；不包含聊天、媒体路径、页面内容或原始异常，也不自动上传。
 6. **GitHub/NuGet → 发布物**：第三方源码、Actions 和依赖进入构建。发行版提供 ZIP、SHA-256、SPDX SBOM 与 GitHub attestations，不包含 Wallpaper Engine 二进制、Workshop 内容或用户项目。
@@ -84,15 +84,15 @@
 | 租约清理失效 | 背景残留、blob/MSE/文件句柄泄漏、孤立 pop-out、持续捕获或声音 | 先停止页面与捕获资源，再精确关闭 pop-out；关闭失败时保留 1px 非干扰放置和恢复日志，等待重试 | **中**：进程硬终止、设备丢失或外部程序行为变化可能跳过部分主动清理；残留 pop-out 可能继续播放声音，用户可能需要手动关闭 Wallpaper Engine |
 | 权限提升或持久化误用 | 扩大系统影响 | 标准用户运行；不写 Codex 包/系统目录；不安装驱动/服务；自动启动需透明可撤销 | **低/中**：Windows 启动项和用户目录仍可被同用户修改 |
 | 日志、诊断、截图或 Issue 泄露隐私 | 路径、聊天、设置、标识符或账号信息公开 | 不记录聊天/媒体路径；诊断必须由用户主动导出且使用无路径、无页面数据、无标识符/散列的固定类型白名单；报告模板要求脱敏 | **中**：截图、设置、转储、第三方异常以及用户选择的同步目录可能绕过约束 |
-| 依赖或 CI 供应链受损 | 恶意发行物获得 CDP 权限 | Actions 固定完整 SHA、Dependabot、CodeQL、最小权限、SHA-256、SPDX SBOM、GitHub attestation | **中**：NuGet/维护者账号/构建平台仍是信任根；`v1.5.2` 便携版未进行 Authenticode 签名 |
+| 依赖或 CI 供应链受损 | 恶意发行物获得 CDP 权限 | Actions 固定完整 SHA、Dependabot、CodeQL、最小权限、SHA-256、SPDX SBOM、GitHub attestation | **中**：NuGet/维护者账号/构建平台仍是信任根；`v1.5.3` 便携版未进行 Authenticode 签名 |
 | Codex 更新改变页面、协议或 CSP | 背景或可选视觉效果失效 | 安全核验与页面兼容判断分离；无法安全确认时停止注入，只有可选效果失效时使用高可读性回退 | **中**：Codex 是独立更新的外部产品，重大变化可能需要新的 Backdrop 版本 |
-| 首次启动主页面尚未挂载或存在多个合格页面 | 误报成功、注入错误窗口、遗留半注入资源 | 最长 10 秒结构就绪轮询；发现与注入前复验均拒绝任何未明确审查的 `initialRoute`（包括已观察到的 `/avatar-overlay` 辅助页面）、非默认端口和带 userinfo 的 origin；只接受恰好一个合格工作页；持续多目标歧义拒绝且结构探针零调用；窗口结束后的单次 Global fallback 复验与安装另受 10 秒 operation deadline；只在验证页面完成媒体加载后报告成功；失败清理准备态节点 | **低/中**：极慢设备或短暂多窗口状态可能需要用户重试 |
+| 首次启动主页面尚未挂载或存在多个合格页面 | 误报成功、注入错误窗口、遗留半注入资源 | 最长 10 秒结构就绪轮询；发现与注入前复验均拒绝任何未明确审查的 `initialRoute`（包括已观察到的 `/avatar-overlay` 辅助页面）、非默认端口和带 userinfo 的 origin；只接受恰好一个合格工作页；持续多目标歧义拒绝且结构探针零调用；窗口结束后的单次 Global fallback 会重新验证目标；页面结构准备与媒体加载分别计时；隐藏页面的视频可以保持待加载状态，可见后继续加载并检查结果；加载失败清理准备态节点 | **低/中**：极慢设备或短暂多窗口状态可能需要用户重试 |
 
 ## 已知剩余风险与用户建议
 
 最重要的剩余风险是 **CDP 对同一用户进程缺少强隔离**。即使本项目实现完全符合设计，其他本地软件也可能探测调试端口；来源不明的 Backdrop for Codex 构建则可能直接滥用 CDP。关闭壁纸或退出伴侣不能撤销 Codex 的启动参数。只在可信设备和普通用户会话中运行，保持 Windows 与 Codex 更新，不暴露/转发端口，验证发行物，使用完毕后完全退出 Codex。
 
-Scene / Web 还引入 Wallpaper Engine、用户安装项目、GPU/WGC、硬件编码器与 Edge MSE 的外部攻击面。能力探测和失败关闭可以避免在证据不足时继续运行，但不能证明第三方项目安全，也不能阻止 Web wallpaper 自身联网。只使用可信项目；Wallpaper Engine 未运行时不要通过非官方参数或脚本强制启用 Scene / Web。
+Scene / Web 还引入 Wallpaper Engine、用户安装项目、GPU/WGC、硬件编码器与 Edge MSE 的外部攻击面。能力探测和身份验证可以避免在证据不足时捕获错误目标，但不能证明第三方项目安全，也不能阻止 Web wallpaper 自身联网。应用时启动 Wallpaper Engine 还可能恢复其已有壁纸、声音或其他启动行为；只使用可信的引擎安装与项目。
 
 少数驱动、编码器或 Windows 信任验证故障可能使原生系统调用长时间无响应。遇到持续卡住时，请退出 Backdrop for Codex，并关闭相关的 Codex 或 Wallpaper Engine 进程后重试。
 

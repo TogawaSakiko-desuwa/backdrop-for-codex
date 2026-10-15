@@ -24,7 +24,7 @@ public sealed class MediaFoundationFragmentedMp4EncoderFactoryTests
     }
 
     [Fact]
-    public void UndocumentedRenderProfileIsRejectedByTheEncoderContract()
+    public void NonPresetRenderProfileIsAcceptedByTheEncoderContract()
     {
         var descriptor = new EncodedWallpaperStreamDescriptor(
             generation: 41,
@@ -33,7 +33,7 @@ public sealed class MediaFoundationFragmentedMp4EncoderFactoryTests
             height: 480,
             frameRate: 24);
 
-        Assert.False(MediaFoundationFragmentedMp4EncoderFactory.IsSupportedProfile(descriptor));
+        Assert.True(MediaFoundationFragmentedMp4EncoderFactory.IsSupportedProfile(descriptor));
     }
 
     [Fact]
@@ -134,22 +134,6 @@ public sealed class MediaFoundationFragmentedMp4EncoderFactoryTests
     }
 
     [Fact]
-    public void PrimaryPauseResetDoesNotChargeThePausedWallClock()
-    {
-        var gate = new MediaFoundationPrimaryThroughputGate();
-        gate.BeginFrame(TimeSpan.Zero);
-        gate.CompleteFrame(TimeSpan.FromSeconds(0.9));
-
-        gate.ResetForCapturePause();
-        for (var frame = 0; frame < 30; frame++)
-        {
-            var startedAt = TimeSpan.FromSeconds(100 + (frame / 30d));
-            gate.BeginFrame(startedAt);
-            gate.CompleteFrame(startedAt + TimeSpan.FromMilliseconds(1));
-        }
-    }
-
-    [Fact]
     public void FallbackUsesOneSecondStartupThenTwoSecondSteadyFragments()
     {
         var initialFrameCount = MediaFoundationFragmentCadence.GetInitialFrameCount(
@@ -213,13 +197,13 @@ public sealed class MediaFoundationFragmentedMp4EncoderFactoryTests
     }
 
     [Fact]
-    public async Task StartRejectsAnUndocumentedRenderTier()
+    public async Task StartRejectsDimensionsUnsupportedByH264ChromaSampling()
     {
         var factory = new MediaFoundationFragmentedMp4EncoderFactory();
         var descriptor = new EncodedWallpaperStreamDescriptor(
             generation: 29,
             "video/mp4; codecs=\"avc1.640028\"",
-            width: 640,
+            width: 641,
             height: 480,
             frameRate: 24);
 

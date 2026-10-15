@@ -2,7 +2,7 @@
 
 Backdrop for Codex 会连接高权限的本地调试接口。请先阅读[威胁模型](THREAT_MODEL.md)，不要把“仅回环”理解为完整隔离。
 
-本文适用于 Backdrop for Codex `v1.5.2`。
+本文适用于 Backdrop for Codex `v1.5.3`。
 
 ## 支持的版本
 
@@ -57,7 +57,7 @@ Backdrop for Codex 会连接高权限的本地调试接口。请先阅读[威胁
 - 使用普通用户权限运行，不修改或重新签名 Codex 包，不写入系统保护目录。
 - 本地媒体和 Wallpaper Engine Image / Video 入口会验证最终文件、项目根、格式和大小，并在使用期间保持只读句柄；路径和文件名不会拼入可执行脚本或不受控 URL。
 - Wallpaper Engine 来源只读取经过验证的本机安装、已安装 Workshop 和 Local Projects；Application / Unknown 不执行，也不会浏览在线 Workshop、订阅、下载或修改 Steam 配置。
-- Scene / Web 要求 Wallpaper Engine 已经运行，只捕获经过验证的独立项目窗口，不捕获桌面，不使用全局播放/静音命令，也不传递第三方脚本、输入、音频或 Codex 内容。Backdrop 不枚举、静音或改变 Wallpaper Engine 音频会话；项目可能播放声音，第三方 Web 项目也可能自行联网。
+- 应用 Scene / Web 时会复用正在运行的 Wallpaper Engine，或按需启动经过验证的 32 位或 64 位引擎；只捕获经过验证的独立项目窗口，不捕获桌面，不使用全局播放/静音命令，也不传递第三方脚本、输入、音频或 Codex 内容。Backdrop 不枚举、静音或改变 Wallpaper Engine 音频会话；项目可能播放声音，第三方 Web 项目也可能自行联网。
 - Codex 包、进程、当前会话、监听器和唯一工作页的安全验证先于页面兼容判断；页面结构不能覆盖安全失败。
 - 不修改或绕过 Codex 内容安全策略，不读取聊天，不添加遥测或项目自有云服务。
 - 旧设置迁移前保留并核验原始 V1/V2 备份；损坏、冲突或未来版本设置不会被默认值静默覆盖。

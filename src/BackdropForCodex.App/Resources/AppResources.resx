@@ -53,7 +53,7 @@
   <data name="Source_DiscoveryFailed" xml:space="preserve"><value>Some wallpaper sources could not be loaded.</value></data>
   <data name="Source_RendererUnavailable" xml:space="preserve"><value>Live playback unavailable</value></data>
   <data name="Source_LibraryTitle" xml:space="preserve"><value>Wallpaper Engine</value></data>
-  <data name="Source_LibraryHint" xml:space="preserve"><value>Browse installed Wallpaper Engine projects. Scene and Web require Wallpaper Engine to be running and may play sound through it.</value></data>
+  <data name="Source_LibraryHint" xml:space="preserve"><value>Browse installed Wallpaper Engine projects. Applying a Scene or Web wallpaper starts Wallpaper Engine automatically and may play sound through it.</value></data>
   <data name="Source_ProjectCountSuffix" xml:space="preserve"><value> projects</value></data>
   <data name="Source_InstalledCountSuffix" xml:space="preserve"><value> installed projects</value></data>
   <data name="Source_SearchHint" xml:space="preserve"><value>Search installed projects</value></data>
@@ -76,9 +76,9 @@
   <data name="Source_EmptyTitle" xml:space="preserve"><value>No installed projects match</value></data>
   <data name="Source_EmptyMessage" xml:space="preserve"><value>Change the filters or refresh Wallpaper Engine projects.</value></data>
   <data name="Source_ChooseInstallation" xml:space="preserve"><value>Choose installation</value></data>
-  <data name="Source_ChooseInstallationHelp" xml:space="preserve"><value>Choose the verified Wallpaper Engine wallpaper64.exe.</value></data>
-  <data name="Source_ChooseInstallationDialogTitle" xml:space="preserve"><value>Choose Wallpaper Engine wallpaper64.exe</value></data>
-  <data name="Source_InstallationFileFilter" xml:space="preserve"><value>Wallpaper Engine|wallpaper64.exe</value></data>
+  <data name="Source_ChooseInstallationHelp" xml:space="preserve"><value>Choose Wallpaper Engine's wallpaper32.exe or wallpaper64.exe.</value></data>
+  <data name="Source_ChooseInstallationDialogTitle" xml:space="preserve"><value>Choose Wallpaper Engine (32-bit or 64-bit)</value></data>
+  <data name="Source_InstallationFileFilter" xml:space="preserve"><value>Wallpaper Engine|wallpaper32.exe;wallpaper64.exe</value></data>
   <data name="Source_ChooseInstallFolder" xml:space="preserve"><value>Choose install folder</value></data>
   <data name="Source_ChooseInstallFolderDialogTitle" xml:space="preserve"><value>Choose the Wallpaper Engine installation folder</value></data>
   <data name="Source_UseAutomaticDiscovery" xml:space="preserve"><value>Use automatic</value></data>
@@ -88,7 +88,7 @@
   <data name="Source_InstallationSelectionRequiredMessage" xml:space="preserve"><value>Multiple verified installations were found. Choose the one Backdrop should use on this PC.</value></data>
   <data name="Source_InstallationSelectionInvalidTitle" xml:space="preserve"><value>Installation needs attention</value></data>
   <data name="Source_InstallationSelectionInvalidShort" xml:space="preserve"><value>Installation invalid</value></data>
-  <data name="Source_InstallationSelectionInvalidMessage" xml:space="preserve"><value>The selected installation no longer passes validation. Choose wallpaper64.exe again or return to automatic discovery.</value></data>
+  <data name="Source_InstallationSelectionInvalidMessage" xml:space="preserve"><value>The selected installation no longer passes validation. Choose wallpaper32.exe or wallpaper64.exe again, or return to automatic discovery.</value></data>
   <data name="Source_InstallationSelectionFailedTitle" xml:space="preserve"><value>Installation choice was not applied</value></data>
   <data name="Source_InstallationSelectionFailedShort" xml:space="preserve"><value>Choice not applied</value></data>
   <data name="Source_InstallationSelectionFailedMessage" xml:space="preserve"><value>Your previous choice is still in use. Check the installation and retry.</value></data>

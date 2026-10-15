@@ -105,7 +105,10 @@
     lastHeartbeat: 0,
     watchdog: 0,
     hostPaused: false,
+    hostHeartbeatSeen: false,
     mediaReady: false,
+    activationPending: false,
+    activationTask: null,
     blobUrl: null,
     cleaned: false,
     activation: 0,
@@ -134,7 +137,10 @@
     startWatchdog() {
       if (!state.watchdog) {
         state.watchdog = setInterval(() => {
-          if (Date.now() - state.lastHeartbeat >= cfg.leaseTimeoutMs) {
+          // Decoding may consume the full media timeout before the host starts its heartbeat.
+          const leaseTimeout = state.activationPending && !state.hostHeartbeatSeen
+            ? cfg.mediaLoadTimeoutMs + cfg.leaseTimeoutMs : cfg.leaseTimeoutMs;
+          if (Date.now() - state.lastHeartbeat >= leaseTimeout) {
             state.cleanup("lease-expired");
           }
         }, cfg.heartbeatIntervalMs);
@@ -160,6 +166,7 @@
       }
       state.cleaned = true;
       state.mediaReady = false;
+      state.activationPending = false;
       state.cleanupReason = reason || "requested";
       state.activation += 1;
       state.cancelActivation?.(state.cleanupReason);

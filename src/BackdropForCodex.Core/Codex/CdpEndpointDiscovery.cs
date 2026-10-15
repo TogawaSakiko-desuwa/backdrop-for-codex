@@ -259,12 +259,13 @@ public static class CdpEndpointIdentityVerifier
                 "The browser WebSocket endpoint is not on the same loopback port.");
         }
 
+        // Chromium exposes workers and loading auxiliary pages without a title or URL.
+        // Those display fields are not endpoint identity evidence. Only reviewed page
+        // routes below may become injectable; unrelated targets must not block discovery.
         if (targets.Any(target =>
                 target is null ||
                 string.IsNullOrWhiteSpace(target.Id) ||
-                string.IsNullOrWhiteSpace(target.Type) ||
-                target.Title is null ||
-                string.IsNullOrWhiteSpace(target.Url)) ||
+                string.IsNullOrWhiteSpace(target.Type)) ||
             targets.Select(target => target.Id).Distinct(StringComparer.Ordinal).Count() != targets.Count)
         {
             return Reject(

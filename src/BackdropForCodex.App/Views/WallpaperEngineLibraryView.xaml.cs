@@ -71,10 +71,10 @@ public sealed partial class WallpaperEngineLibraryView : UserControl
         {
             Title = _text.GetStringOrFallback(
                 "Source_ChooseInstallationDialogTitle",
-                "Choose Wallpaper Engine wallpaper64.exe"),
+                "Choose Wallpaper Engine wallpaper32.exe or wallpaper64.exe"),
             Filter = _text.GetStringOrFallback(
                 "Source_InstallationFileFilter",
-                "Wallpaper Engine|wallpaper64.exe"),
+                "Wallpaper Engine|wallpaper32.exe;wallpaper64.exe"),
             CheckFileExists = true,
             CheckPathExists = true,
             Multiselect = false,

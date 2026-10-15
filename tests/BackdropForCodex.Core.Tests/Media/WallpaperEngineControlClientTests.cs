@@ -24,9 +24,26 @@ public sealed class WallpaperEngineControlClientTests
     }
 
     [Fact]
-    public async Task MissingRunningInstanceFailsClosedWithoutLaunchingWallpaperEngine()
+    public async Task MissingRunningInstanceStartsOnceAndIsReusedBySubsequentRequests()
     {
         var processBoundary = new RecordingProcessBoundary { IsRunning = false };
+        var client = new WallpaperEngineControlClient(processBoundary, TimeSpan.FromSeconds(1));
+
+        await Task.WhenAll(Enumerable.Range(0, 3).Select(_ =>
+            client.EnsureRunningAsync(CreateInstallation(), CancellationToken.None).AsTask()));
+
+        Assert.True(processBoundary.IsRunning);
+        Assert.Equal(1, processBoundary.StartCount);
+        Assert.Empty(processBoundary.Commands);
+    }
+
+    [Fact]
+    public async Task FailedStartupIsReportedAndCanBeRetried()
+    {
+        var processBoundary = new RecordingProcessBoundary
+        {
+            Failure = WallpaperEngineProcessFailure.FailedToStart,
+        };
         var client = new WallpaperEngineControlClient(processBoundary, TimeSpan.FromSeconds(1));
 
         var exception = await Assert.ThrowsAsync<WallpaperEnginePlatformUnavailableException>(
@@ -37,6 +54,24 @@ public sealed class WallpaperEngineControlClientTests
             exception.Reason);
         Assert.Empty(processBoundary.Commands);
         Assert.DoesNotContain(@"C:\Steam", exception.ToString(), StringComparison.OrdinalIgnoreCase);
+
+        processBoundary.Failure = null;
+        await client.EnsureRunningAsync(CreateInstallation(), CancellationToken.None);
+        Assert.Equal(2, processBoundary.StartCount);
+    }
+
+    [Fact]
+    public async Task CleanupDoesNotRestartAStoppedEngine()
+    {
+        var processBoundary = new RecordingProcessBoundary();
+        var client = new WallpaperEngineControlClient(processBoundary, TimeSpan.FromSeconds(1));
+
+        await Assert.ThrowsAsync<WallpaperEnginePlatformUnavailableException>(() =>
+            client.CloseWindowAsync(CreateInstallation(), WallpaperEngineOwnedWindowName.Create(1),
+                CancellationToken.None).AsTask());
+
+        Assert.Equal(0, processBoundary.StartCount);
+        Assert.Empty(processBoundary.Commands);
     }
 
     [Fact]
@@ -75,6 +110,7 @@ public sealed class WallpaperEngineControlClientTests
             CancellationToken.None);
         await client.CloseWindowAsync(installation, name, CancellationToken.None);
 
+        Assert.Equal(0, processBoundary.StartCount);
         Assert.Equal(@"C:\Projects\scene.pkg", reported);
         Assert.Collection(
             processBoundary.Commands,
@@ -188,12 +224,14 @@ public sealed class WallpaperEngineControlClientTests
 
     private sealed class RecordingProcessBoundary : IWallpaperEngineProcessBoundary
     {
-        internal bool IsRunning { get; init; }
+        internal bool IsRunning { get; set; }
+
+        internal int StartCount { get; private set; }
 
         internal WallpaperEngineProcessResult NextResult { get; init; } =
             new(0, string.Empty);
 
-        internal WallpaperEngineProcessFailure? Failure { get; init; }
+        internal WallpaperEngineProcessFailure? Failure { get; set; }
 
         internal List<WallpaperEngineProcessCommand> Commands { get; } = [];
 
@@ -203,6 +241,22 @@ public sealed class WallpaperEngineControlClientTests
         {
             cancellationToken.ThrowIfCancellationRequested();
             return ValueTask.FromResult(IsRunning);
+        }
+
+        public async ValueTask StartAsync(
+            WallpaperEngineInstallation installation,
+            TimeSpan timeout,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            StartCount++;
+            await Task.Yield();
+            if (Failure is { } failure)
+            {
+                throw new WallpaperEngineProcessException(failure);
+            }
+
+            IsRunning = true;
         }
 
         public ValueTask<WallpaperEngineProcessResult> ExecuteAsync(

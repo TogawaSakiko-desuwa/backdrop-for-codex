@@ -7,6 +7,19 @@ namespace BackdropForCodex.Core.Tests.Media;
 public sealed class WallpaperEngineInstallationLocatorTests
 {
     [Fact]
+    public async Task LocatorAcceptsAnInstallationWithOnlyThe32BitExecutable()
+    {
+        using var fixture = new SteamInstallationFixture();
+        var root = fixture.InstallWallpaperEngine(fixture.SteamRoot);
+        var executable = Path.Combine(root, "wallpaper32.exe");
+        File.Move(Path.Combine(root, "wallpaper64.exe"), executable);
+
+        var installation = await fixture.CreateLocator().LocateAsync();
+
+        Assert.Equal(executable, installation.ControlExecutablePath, ignoreCase: true);
+    }
+
+    [Fact]
     public async Task LocatorFindsManifestAcrossEveryValidatedSteamLibrary()
     {
         using var fixture = new SteamInstallationFixture();

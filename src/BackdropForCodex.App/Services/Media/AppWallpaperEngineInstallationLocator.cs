@@ -41,8 +41,6 @@ public sealed class AppWallpaperEngineInstallationLocator
     : IWallpaperEngineInstallationLocator,
       IWallpaperEngineInstallationPreferenceManager
 {
-    private const string ControlExecutableName = "wallpaper64.exe";
-
     private readonly Func<string?, IWallpaperEngineInstallationLocator> _locatorFactory;
     private SelectionState _state = new(PreferredInstallRootPath: null);
 
@@ -78,7 +76,7 @@ public sealed class AppWallpaperEngineInstallationLocator
     }
 
     /// <summary>
-    /// Strictly validates a selected <c>wallpaper64.exe</c> or its installation directory without
+    /// Validates a selected <c>wallpaper32.exe</c>, <c>wallpaper64.exe</c>, or its directory without
     /// publishing the selection. The returned canonical root may only be retained in process and
     /// subsequently passed to <see cref="SetPreferredInstallRootPath"/>.
     /// </summary>
@@ -171,11 +169,10 @@ public sealed class AppWallpaperEngineInstallationLocator
             return normalized;
         }
 
+        var executableName = Path.GetFileName(normalized);
         if (!File.Exists(normalized) ||
-            !string.Equals(
-                Path.GetFileName(normalized),
-                ControlExecutableName,
-                StringComparison.OrdinalIgnoreCase))
+            !(string.Equals(executableName, "wallpaper64.exe", StringComparison.OrdinalIgnoreCase) ||
+              string.Equals(executableName, "wallpaper32.exe", StringComparison.OrdinalIgnoreCase)))
         {
             throw new WallpaperEngineUnavailableException(
                 WallpaperEngineAvailabilityReason.PreferredInstallationInvalid);

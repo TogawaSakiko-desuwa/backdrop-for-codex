@@ -22,7 +22,8 @@ internal static class InjectionLifecycleScriptModule
             (() => {
               "use strict";
               const state = globalThis[{{JsonSerializer.Serialize(InjectionOwnershipContract.StateProperty)}}];
-              if (!state || state.generation !== {{generation}} || !state.mediaReady ||
+              if (!state || state.generation !== {{generation}} || state.cleaned ||
+                  (!state.mediaReady && !state.activationPending) ||
                   !state.root?.isConnected || !state.style?.isConnected ||
                   !state.media?.isConnected || !state.overlay?.isConnected ||
                   state.root.id !== {{JsonSerializer.Serialize(InjectionOwnershipContract.RootElementId)}} ||
@@ -39,17 +40,19 @@ internal static class InjectionLifecycleScriptModule
                   state.overlay.dataset.codexWallpaperGeneration !== {{JsonSerializer.Serialize(generation.ToString(System.Globalization.CultureInfo.InvariantCulture))}} ||
                   state.media.parentElement !== state.root ||
                   state.overlay.parentElement !== state.root || !state.blobUrl ||
-                  state.media.currentSrc !== state.blobUrl || state.media.error) {
+                  (state.activationPending ? state.media.src : state.media.currentSrc) !== state.blobUrl ||
+                  state.media.error) {
                 return false;
               }
               const dimensionsReady = state.mediaKind === "video"
                 ? state.media.readyState >= state.media.HAVE_CURRENT_DATA &&
                   state.media.videoWidth > 0 && state.media.videoHeight > 0
                 : state.media.naturalWidth > 0 && state.media.naturalHeight > 0;
-              if (!dimensionsReady) {
+              if (!state.activationPending && !dimensionsReady) {
                 return false;
               }
               state.lastHeartbeat = Date.now();
+              state.hostHeartbeatSeen = true;
               return true;
             })()
             """;

@@ -4,8 +4,14 @@
 
 ## 未发布
 
+## [1.5.3] - 2026-10-16
+
 ### Fixed
 
+- 修复 Wallpaper Engine 未运行时场景或网页壁纸被误判为“实时播放不可用”的问题；应用时自动启动经过验证的引擎，兼容 `wallpaper32.exe` 与 `wallpaper64.exe`，手动选择安装位置也支持两种入口。
+- 修复再次选择已加入媒体库的同一场景或网页项目时，内部媒体编号变化导致应用失败的问题。
+- 修复由伴侣启动 Codex 后首次应用未生效、需要再次应用的问题；允许页面与媒体分阶段就绪，并在页面重新可见时继续播放。
+- 放宽动态壁纸的帧率、编码尺寸和项目窗口位置要求；低帧率来源可以正常播放，窗口移动、短暂采集故障或瞬时性能波动不再立即终止播放或降级，持续压力下仍会逐级调整画质并尝试恢复。
 - 适配 Codex `26.1007` 的侧栏外层容器与拆分后的输入区底板、渐变层，恢复背景透出；保留输入框、按钮、提示文字和嵌套内容的原生表面。
 - 适配 Codex `26.924` 的页面外框和工作区内部背景层，修复新版排版遮挡壁纸的问题；关闭可选玻璃效果后仍保留基础背景。
 - 修复新版侧栏导航、页面标题和右侧标签内容外框叠加实色背景，以及对话顶部渐变残留的问题；保留原生布局、导航控件、浏览器内容和编辑器表面。
@@ -310,6 +316,7 @@
 - 复验完整 MSIX 包名、激活 PID、进程启动时间、Windows 会话和监听器所有权；媒体服务保持已校验文件的只读句柄。
 - 明确禁止 CSP bypass；关闭、更换或 lease 到期时移除媒体 `src`、撤销 `blob:` URL，并仅删除带有本项目 owner/generation 的节点和样式。
 
+[1.5.3]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.5.2...v1.5.3
 [1.5.2]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.5.1...v1.5.2
 [1.5.1]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.5.0...v1.5.1
 [1.5.0]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.4.5...v1.5.0

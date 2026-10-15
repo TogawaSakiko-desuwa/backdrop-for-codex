@@ -12,11 +12,11 @@ Backdrop for Codex 是一个面向 **Windows 11 x64** 的非官方开源伴侣�
 [![CI](https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/actions/workflows/ci.yml/badge.svg)](https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-[快速开始](#下载与快速开始) · [v1.5.2 更新](#v152-更新亮点) · [核心功能](#核心功能) · [兼容性](#兼容性与限制) · [源码构建](#从源码构建)
+[快速开始](#下载与快速开始) · [v1.5.3 更新](#v153-更新亮点) · [核心功能](#核心功能) · [兼容性](#兼容性与限制) · [源码构建](#从源码构建)
 
 [**下载 Windows 11 x64 便携版 →**](https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/releases/latest)
 
-`v1.5.2` · 无需安装 · 使用普通用户权限运行 · 支持本地媒体、Wallpaper Engine Image / Video，以及实验性 Scene / Web
+`v1.5.3` · 无需安装 · 使用普通用户权限运行 · 支持本地媒体、Wallpaper Engine Image / Video，以及实验性 Scene / Web
 
 > [!CAUTION]
 > Backdrop for Codex 是独立社区项目，与 OpenAI 或 Microsoft 无隶属、赞助、认可或支持关系。它通过本机回环地址上的 Chrome DevTools Protocol（CDP）工作；请勿以管理员身份运行或转发调试端口，使用完毕后应完全退出 Codex。详情见[安全说明](SECURITY.md)和[威胁模型](THREAT_MODEL.md)。
@@ -44,20 +44,20 @@ Backdrop for Codex 是一个面向 **Windows 11 x64** 的非官方开源伴侣�
 
 <p align="center"><sub>示例媒体仅用于展示本地背景效果，不随本项目或 Release 发布。</sub></p>
 
-## v1.5.2 更新亮点
+## v1.5.3 更新亮点
 
-### 最新 Codex 兼容
+### Wallpaper Engine 播放修复
 
-- 修复 Codex `26.915` 进入或切换对话后壁纸消失、恢复官方背景的问题。
-- 页面标题变为对话名称后，仍可正常应用背景并保持播放。
+- 支持 32 位和 64 位 Wallpaper Engine；应用场景或网页项目时自动启动引擎，修复“实时播放不可用”和重复选择项目后应用失败的问题。
+- 低帧率来源、窗口移动和短暂性能波动不再立即中断播放或降级；持续压力下仍会自动调整画质并尝试恢复。
 
-### 工作区与玻璃效果
+### Codex 首次应用与布局兼容
 
-- 适配 Codex `26.901` 起的工作区背景层、侧边工具面板和设置画布，修复实色背景遮挡壁纸的问题。
-- 浏览器内容、编辑器、选中标签和操作控件继续保留原生表面。
+- 修复由伴侣启动 Codex 后需要再次应用壁纸的问题，页面重新可见时自动继续播放。
+- 适配 Codex `26.924` / `26.1007` 的工作区、侧栏和输入区背景层；浏览器内容、编辑器和操作控件保留原生表面。
 
 > [!IMPORTANT]
-> Scene / Web 在 v1.5.2 中仍为实验性功能；Image / Video 是稳定使用路径。
+> Scene / Web 在 v1.5.3 中仍为实验性功能；Image / Video 是稳定使用路径。
 
 [查看完整更新日志](CHANGELOG.md#152---2026-09-20)
 
@@ -65,19 +65,19 @@ Backdrop for Codex 是一个面向 **Windows 11 x64** 的非官方开源伴侣�
 
 | Release 文件 | 用途 |
 | --- | --- |
-| `BackdropForCodex-v1.5.2-win-x64.zip` | 普通用户下载；解压后直接运行 |
-| `BackdropForCodex-v1.5.2-SHA256SUMS.txt` | 核对下载文件的 SHA-256 |
-| `BackdropForCodex-v1.5.2-win-x64.spdx.json` | 机器可读的 SPDX SBOM |
+| `BackdropForCodex-v1.5.3-win-x64.zip` | 普通用户下载；解压后直接运行 |
+| `BackdropForCodex-v1.5.3-SHA256SUMS.txt` | 核对下载文件的 SHA-256 |
+| `BackdropForCodex-v1.5.3-win-x64.spdx.json` | 机器可读的 SPDX SBOM |
 
 1. 在 Windows 11 x64 上安装官方 Microsoft Store / MSIX x64 Codex。
-2. 从 [GitHub Releases](https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/releases/latest) 下载 `BackdropForCodex-v1.5.2-win-x64.zip`，解压到普通用户可写的空目录。
+2. 从 [GitHub Releases](https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/releases/latest) 下载 `BackdropForCodex-v1.5.3-win-x64.zip`，解压到普通用户可写的空目录。
 3. 完全退出所有 Codex 进程；升级时也请从通知区域退出旧版 Backdrop，再启动新版 `BackdropForCodex.exe`。
 4. 新建或选择背景方案，添加本地图片、视频或已安装的 Wallpaper Engine 项目，调整预览后点击“应用并启动 Codex”。
 5. 在随后出现的 CDP 风险提示中阅读安全边界；确认后，应用才会继续启动 Codex 并应用背景。
 6. 首次媒体激活成功后，应用会尝试在桌面创建 `Codex（动态背景）.lnk`；以后可用它执行增强启动。
 
 > [!NOTE]
-> `v1.5.2` 便携版未进行 Authenticode 代码签名。遇到 Windows SmartScreen 提示时，请先确认文件来自本仓库的 Release，并核对 SHA-256 或 GitHub artifact attestation。
+> `v1.5.3` 便携版未进行 Authenticode 代码签名。遇到 Windows SmartScreen 提示时，请先确认文件来自本仓库的 Release，并核对 SHA-256 或 GitHub artifact attestation。
 
 <details>
 <summary><strong>验证 SHA-256 与 GitHub 构建来源</strong></summary>
@@ -85,14 +85,14 @@ Backdrop for Codex 是一个面向 **Windows 11 x64** 的非官方开源伴侣�
 在下载目录打开 PowerShell：
 
 ```powershell
-Get-FileHash .\BackdropForCodex-v1.5.2-win-x64.zip -Algorithm SHA256
-Get-Content .\BackdropForCodex-v1.5.2-SHA256SUMS.txt
+Get-FileHash .\BackdropForCodex-v1.5.3-win-x64.zip -Algorithm SHA256
+Get-Content .\BackdropForCodex-v1.5.3-SHA256SUMS.txt
 ```
 
 确认 ZIP 的散列与清单完全一致。安装 [GitHub CLI](https://cli.github.com/) 后还可以验证构建来源：
 
 ```powershell
-gh attestation verify .\BackdropForCodex-v1.5.2-win-x64.zip `
+gh attestation verify .\BackdropForCodex-v1.5.3-win-x64.zip `
   --repo TogawaSakiko-desuwa/backdrop-for-codex
 ```
 
@@ -105,7 +105,7 @@ gh attestation verify .\BackdropForCodex-v1.5.2-win-x64.zip `
 - 使用本地 PNG、JPEG、WebP 图片或静音循环 MP4、WebM 视频。
 - 从经过验证的官方 Steam / Wallpaper Engine 安装中发现本机已安装的 Workshop 项目和 `projects/myprojects`、`projects/backup` 本地项目；不浏览在线 Workshop，不订阅、下载或修改 Steam 配置。
 - 唯一有效安装会自动选择；存在多个安装或自动发现失败时，可在来源库手动选择安装位置，并可随时恢复自动发现。手动选择仅在本次运行中生效。
-- Wallpaper Engine Image / Video 项目可直接播放；实验性 Scene / Web 要求 Wallpaper Engine 已经运行。项目可能通过 Wallpaper Engine 播放声音，Backdrop 不静音或转发该音频。
+- Wallpaper Engine Image / Video 项目可直接播放；应用实验性 Scene / Web 时会按需启动经过验证的 32 位或 64 位引擎，或复用现有实例。项目可能通过 Wallpaper Engine 播放声音，Backdrop 不静音或转发该音频。
 
 ### 工作台与方案
 
@@ -136,14 +136,14 @@ gh attestation verify .\BackdropForCodex-v1.5.2-win-x64.zip `
 | PNG、JPEG、WebP | 支持 |
 | MP4、WebM | 支持静音循环播放 |
 | 已安装的 Wallpaper Engine Image / Video | 支持 Workshop 与 Local Project；直接使用受验证媒体文件，不要求 Wallpaper Engine 正在运行 |
-| 已安装的 Wallpaper Engine Scene / Web | 实验性支持 Workshop 与 Local Project；要求经过验证的 Wallpaper Engine 已经运行，且系统支持动态捕获与播放。项目声音可能由 Wallpaper Engine 直接播放 |
+| 已安装的 Wallpaper Engine Scene / Web | 实验性支持 Workshop 与 Local Project；应用时按需启动 Wallpaper Engine，兼容 32 位和 64 位；系统需支持动态捕获与播放。项目声音可能由 Wallpaper Engine 直接播放 |
 | Wallpaper Engine Application、Unknown | 永久拒绝，不执行 |
 | 在线 Workshop、自动订阅/下载、用户属性、预设、播放列表、向 Codex 转发声音或输入 | 不支持 |
 | 本地媒体限制 | 仅本地普通磁盘文件；图片不超过 512 MiB、单边 32,768 像素和约 33.5 MP，视频不超过 8 GiB |
 | Codex Win32 便携版、Codex 网页版/CLI、Windows 10、Windows on Arm、macOS、Linux | 不支持 |
 | 多窗口独立壁纸、分区域壁纸、视频声音 | 当前不支持 |
 
-实验性 Scene / Web 不会使用 Wallpaper Engine 的全局 pause/play/mute 命令，也不会捕获桌面。使用前请先启动 Wallpaper Engine；Backdrop 不会自动启动它。Scene / Web 可能播放声音，Backdrop 不枚举、静音或改变任何 Wallpaper Engine 音频会话，也不会把音频转发到 Codex。首次使用 Web 项目会提示其可能联网和播放声音。项目仓库和 Release 不包含 Wallpaper Engine 二进制、Workshop 内容或用户项目。
+实验性 Scene / Web 不会使用 Wallpaper Engine 的全局 pause/play/mute 命令，也不会捕获桌面。应用项目时会按需启动经过验证的引擎，浏览来源库不会启动它；关闭本项目创建的独立窗口后，引擎主进程仍保持运行。Scene / Web 可能播放声音，Backdrop 不枚举、静音或改变任何 Wallpaper Engine 音频会话，也不会把音频转发到 Codex。首次使用 Web 项目会提示其可能联网和播放声音。项目仓库和 Release 不包含 Wallpaper Engine 二进制、Workshop 内容或用户项目。
 
 兼容性依据实际 Codex 页面和进程状态判断。安全核验失败时不会注入；只有部分视觉效果不可用时，应用会保留可用背景并使用高可读性回退。Codex 更新可能暂时影响兼容性，请优先使用最新版本的 Backdrop for Codex。
 
@@ -194,7 +194,7 @@ gh attestation verify .\BackdropForCodex-v1.5.2-win-x64.zip `
 ## 工作原理
 
 1. 本地文件和 Wallpaper Engine Image / Video 经本机校验后，以页面允许的本地媒体方式加载。
-2. Scene / Web 从已运行的 Wallpaper Engine 捕获独立项目窗口的画面，再把像素传给 Codex；不传递项目脚本、输入或 Codex 内容。
+2. 应用 Scene / Web 时会按需启动 Wallpaper Engine，兼容 32 位和 64 位，并复用已有进程。独立项目窗口的画面被捕获后传给 Codex；不传递项目脚本、输入或 Codex 内容。
 3. 应用前会核验 Codex、回环调试端点和目标页面；更换背景、恢复或退出时只清理本项目创建的资源。
 
 ## 从源码构建

@@ -209,7 +209,7 @@ public sealed class WallpaperCoordinator :
     private Task? _disposeInjectionFaultTask;
     private long _activeRevision;
     private long _generation;
-    private bool _launchedByThisCoordinator;
+    private bool _hasActivationProcess;
     private bool _paused;
     private bool _disposeInjectionObservationStopped;
     private bool _disposeRuntimeCleanupCompleted;
@@ -595,13 +595,13 @@ public sealed class WallpaperCoordinator :
         var reviewedProcesses = processes
             .Where(process => IsReviewedCodexProcess(process, identity))
             .ToArray();
-        var activationProcessIsRunning = _launchedByThisCoordinator &&
+        var activationProcessIsRunning = _hasActivationProcess &&
             _activationProcessId != 0 &&
             reviewedProcesses.Any(process =>
                 process.ProcessId == _activationProcessId &&
                 (_activationProcessStartTimeUtc is null ||
                  process.StartTimeUtc == _activationProcessStartTimeUtc));
-        if (_launchedByThisCoordinator && !activationProcessIsRunning)
+        if (_hasActivationProcess && !activationProcessIsRunning)
         {
             try
             {
@@ -610,19 +610,41 @@ public sealed class WallpaperCoordinator :
             }
             finally
             {
-                _launchedByThisCoordinator = false;
+                _hasActivationProcess = false;
                 _activationProcessId = 0;
                 _activationProcessStartTimeUtc = null;
                 _endpoint = null;
             }
         }
 
-        if (!_launchedByThisCoordinator && reviewedProcesses.Length != 0)
+        if (!_hasActivationProcess && reviewedProcesses.Length != 0)
         {
+            // A companion restart must not require restarting an already debuggable Codex.
+            // Discovery proves the official package, live listener ownership and page route.
+            var discovery = await _endpointDiscovery
+                .DiscoverAsync(identity, attempt.CallerCancellation)
+                .ConfigureAwait(false);
+            var existing = discovery.Endpoints.Where(endpoint => reviewedProcesses.Any(process =>
+                process.ProcessId == endpoint.Candidate.ProcessId &&
+                process.StartTimeUtc == endpoint.Candidate.StartTimeUtc)).ToArray();
+            if (existing.Length > 1)
+            {
+                throw new AmbiguousCdpEndpointException();
+            }
+
+            if (existing.Length == 1)
+            {
+                _endpoint = existing[0];
+                _activationProcessId = checked((uint)_endpoint.Candidate.ProcessId);
+                _activationProcessStartTimeUtc = _endpoint.Candidate.StartTimeUtc;
+                _hasActivationProcess = true;
+                return;
+            }
+
             _injectionMonitor.CaptureSecurity(CodexSecurityResult.Rejected(
                 CodexSecurityStage.ProcessIdentity,
                 CodexSecurityFailureCode.ProcessIdentityMismatch,
-                "A verified Codex process exists but was not launched by this runtime.",
+                "The running Codex process does not expose a verified debugging endpoint.",
                 identity));
             throw new CodexAlreadyRunningException();
         }
@@ -632,7 +654,7 @@ public sealed class WallpaperCoordinator :
     {
         var request = attempt.Request;
         var identity = attempt.RequireIdentity();
-        if (!_launchedByThisCoordinator && !_injectionSession.IsActive)
+        if (!_hasActivationProcess && !_injectionSession.IsActive)
         {
             Publish(
                 WallpaperRuntimePhase.LaunchingCodex,
@@ -641,7 +663,7 @@ public sealed class WallpaperCoordinator :
             var activation = _activationManager.Activate(identity, RemoteDebuggingArguments);
             _activationProcessId = activation.ProcessId;
             _activationProcessStartTimeUtc = null;
-            _launchedByThisCoordinator = true;
+            _hasActivationProcess = true;
         }
 
         if (_endpoint is null || !_injectionSession.IsActive)
@@ -1382,7 +1404,7 @@ public sealed class WallpaperCoordinator :
 
             if (failures.Count == 0)
             {
-                _launchedByThisCoordinator = false;
+                _hasActivationProcess = false;
                 _activationProcessId = 0;
                 _activationProcessStartTimeUtc = null;
                 _endpoint = null;

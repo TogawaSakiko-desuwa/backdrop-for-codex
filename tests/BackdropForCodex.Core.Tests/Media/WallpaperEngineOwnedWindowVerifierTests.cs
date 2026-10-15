@@ -565,6 +565,26 @@ public sealed class WallpaperEngineOwnedWindowVerifierTests
     }
 
     [Fact]
+    public async Task AbsentWindowIsConfirmedWithoutWaitingForTheDiscoveryTimeout()
+    {
+        var installation = CreateInstallation();
+        var name = WallpaperEngineOwnedWindowName.Create(13);
+        var clock = new ManuallyAdvancedTimeProvider(DateTimeOffset.UtcNow);
+        var source = new SequenceWindowSource([], [])
+        {
+            CaptureObserved = _ => clock.Advance(
+                TimeSpan.FromMilliseconds(50), TimeSpan.FromMilliseconds(50)),
+        };
+        var verifier = new WindowsWallpaperEngineOwnedWindowVerifier(
+            source, TimeSpan.FromSeconds(8), TimeSpan.Zero, clock);
+        var baseline = await verifier.CaptureBaselineAsync(installation, CancellationToken.None);
+
+        await verifier.ConfirmOwnedWindowAbsentAsync(installation, name, baseline, CancellationToken.None);
+
+        Assert.InRange(source.CaptureCount, 3, 10);
+    }
+
+    [Fact]
     public async Task AbsenceProofRequiresAQuietWindowForTheEntireBoundedInterval()
     {
         var installation = CreateInstallation();

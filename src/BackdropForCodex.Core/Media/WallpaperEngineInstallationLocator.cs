@@ -13,7 +13,6 @@ namespace BackdropForCodex.Core.Media;
 public sealed class WallpaperEngineInstallationLocator : IWallpaperEngineInstallationLocator
 {
     private const string WallpaperEngineManifestName = "appmanifest_431960.acf";
-    private const string WallpaperEngineExecutableName = "wallpaper64.exe";
 
     private readonly IReadOnlyList<string> _steamRootCandidates;
     private readonly IWallpaperEngineExecutableTrustVerifier _trustVerifier;
@@ -338,7 +337,7 @@ public sealed class WallpaperEngineInstallationLocator : IWallpaperEngineInstall
         return CreateInstallation(candidate, libraries);
     }
 
-    private static async ValueTask<InstallationCandidate> ReadInstallationCandidateAsync(
+    private async ValueTask<InstallationCandidate> ReadInstallationCandidateAsync(
         string manifestPath,
         string libraryPath,
         IReadOnlyList<string> steamRoots,
@@ -369,17 +368,16 @@ public sealed class WallpaperEngineInstallationLocator : IWallpaperEngineInstall
             "common");
         var installRootPath = WallpaperEngineLocalPath.ValidateExistingDirectory(
             WallpaperEngineLocalPath.CombineContained(commonPath, installDirectoryName));
-        var executablePath = WallpaperEngineLocalPath.CombineContained(
-            installRootPath,
-            WallpaperEngineExecutableName);
-        if (!File.Exists(executablePath))
+        var executables = WallpaperEngineInstallation.GetControlExecutablePaths(installRootPath)
+            .Where(File.Exists)
+            .Select(path => WallpaperEngineLocalPath.ValidateExistingRegularFile(path, installRootPath))
+            .ToArray();
+        if (executables.Length == 0)
         {
             throw new FileNotFoundException("The Wallpaper Engine control executable is missing.");
         }
 
-        executablePath = WallpaperEngineLocalPath.ValidateExistingRegularFile(
-            executablePath,
-            installRootPath);
+        var executablePath = executables.FirstOrDefault(_trustVerifier.IsTrusted) ?? executables[0];
         var steamRootPath = steamRoots.FirstOrDefault(root =>
             WallpaperEngineLocalPath.IsContainedBy(root, libraryPath)) ?? libraryPath;
         return new InstallationCandidate(steamRootPath, installRootPath, executablePath);

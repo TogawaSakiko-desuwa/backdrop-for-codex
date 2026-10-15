@@ -53,6 +53,36 @@ public sealed class CdpEndpointDiscoveryTests
         Assert.Equal("app://-/index.html", target.Url);
     }
 
+    [Theory]
+    [InlineData("worker")]
+    [InlineData("shared_worker")]
+    [InlineData("iframe")]
+    [InlineData("page")]
+    public async Task DiscoverAsync_AllowsUnrelatedTargetsWithoutDisplayMetadata(string type)
+    {
+        var transport = new StubTransport(new Dictionary<string, string>
+        {
+            ["/json/version"] = VersionJson(9222),
+            ["/json/list"] = $$"""
+                [
+                  {"id":"background", "type":"{{type}}", "title":"", "url":""},
+                  {"id":"initializing", "type":"{{type}}"},
+                  {"id":"codex-page", "type":"page", "url":"app://-/index.html",
+                   "webSocketDebuggerUrl":"ws://127.0.0.1:9222/devtools/page/codex-page"}
+                ]
+                """,
+        });
+        var discovery = new CdpEndpointDiscovery(
+            new StubCandidateSource([Candidate("http://127.0.0.1:9222/")]),
+            transport);
+
+        var result = await discovery.DiscoverAsync(CodexSecurityValidatorTests.GetIdentity());
+
+        var endpoint = Assert.Single(result.Endpoints);
+        Assert.Empty(result.Rejections);
+        Assert.Equal("codex-page", Assert.Single(endpoint.InjectableTargets).Id);
+    }
+
     [Fact]
     public async Task DiscoverAsync_ExcludesAvatarOverlayFromInjectableTargets()
     {

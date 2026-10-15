@@ -6,12 +6,14 @@ namespace BackdropForCodex.Core.Tests.AppSupport;
 
 public sealed class AppWallpaperEngineInstallationLocatorTests
 {
-    [Fact]
-    public async Task ValidationDoesNotPublishTheSelectionUntilTheCallerCommitsIt()
+    [Theory]
+    [InlineData("wallpaper32.exe")]
+    [InlineData("wallpaper64.exe")]
+    public async Task ValidationDoesNotPublishTheSelectionUntilTheCallerCommitsIt(string executableName)
     {
         using var fixture = new InstallationPathFixture();
         var automatic = fixture.CreateInstallation(fixture.AutomaticRoot);
-        var selected = fixture.CreateInstallation(fixture.SelectedRoot);
+        var selected = fixture.CreateInstallation(fixture.SelectedRoot, executableName);
         var locator = new AppWallpaperEngineInstallationLocator(
             preferred => new StubLocator(
                 preferred is null
@@ -91,8 +93,8 @@ public sealed class AppWallpaperEngineInstallationLocatorTests
 
     [Theory]
     [InlineData("not-wallpaper-engine.exe")]
-    [InlineData("wallpaper32.exe")]
-    public async Task SelectionRejectsAnExecutableThatIsNotWallpaper64(string fileName)
+    [InlineData("launcher.exe")]
+    public async Task SelectionRejectsAnExecutableThatIsNotAnEngine(string fileName)
     {
         using var fixture = new InstallationPathFixture();
         var locator = new AppWallpaperEngineInstallationLocator(
@@ -155,11 +157,13 @@ public sealed class AppWallpaperEngineInstallationLocatorTests
 
         public string InvalidRoot { get; }
 
-        public WallpaperEngineInstallation CreateInstallation(string installRoot)
+        public WallpaperEngineInstallation CreateInstallation(
+            string installRoot,
+            string executableName = "wallpaper64.exe")
         {
             ObjectDisposedException.ThrowIf(!Directory.Exists(RootPath), this);
             Directory.CreateDirectory(installRoot);
-            var executable = Path.Combine(installRoot, "wallpaper64.exe");
+            var executable = Path.Combine(installRoot, executableName);
             File.WriteAllText(executable, "fixture");
             var library = Directory.GetParent(Directory.GetParent(installRoot)!.FullName)!.FullName;
             return new WallpaperEngineInstallation(

@@ -64,8 +64,7 @@ public sealed class MediaFoundationFragmentedMp4EncoderFactory :
 
     internal static bool IsSupportedProfile(EncodedWallpaperStreamDescriptor descriptor) =>
         descriptor.MimeType.Contains("avc1.640028", StringComparison.OrdinalIgnoreCase) &&
-        DynamicWallpaperRenderProfiles.InPreferenceOrder.Any(
-            profile => Matches(descriptor, profile));
+        descriptor.Width % 2 == 0 && descriptor.Height % 2 == 0;
 
     private static bool Matches(
         EncodedWallpaperStreamDescriptor descriptor,
@@ -239,7 +238,6 @@ public sealed class MediaFoundationFragmentedMp4EncoderFactory :
         private readonly MediaFoundationFragmentedMp4Segmenter _segmenter;
         private readonly GenerationScopedWallpaperFrameOrder _frameOrder;
         private readonly DynamicWallpaperBackpressureMonitor _backpressureMonitor = new();
-        private readonly MediaFoundationPrimaryThroughputGate _primaryThroughputGate = new();
         private readonly MediaFoundationFragmentBoundaryState _fragmentBoundary;
         private readonly MediaFoundationEncoderOperationGate _operationGate = new();
         private readonly long _sampleDuration;
@@ -342,10 +340,6 @@ public sealed class MediaFoundationFragmentedMp4EncoderFactory :
 
                 cancellationToken.ThrowIfCancellationRequested();
                 _frameOrder.Accept(frame);
-                if (_isPrimary)
-                {
-                    _primaryThroughputGate.BeginFrame(GetMonotonicNow());
-                }
                 using var surfaceFrame =
                     MediaFoundationDxgiSurfaceFrame.Create(windowsFrame.Surface);
                 _chunk ??= CreateChunkWriter(surfaceFrame.Device);
@@ -354,10 +348,6 @@ public sealed class MediaFoundationFragmentedMp4EncoderFactory :
                     checked(_sampleDuration * _fragmentBoundary.PendingFrameCount),
                     _sampleDuration);
                 var fragmentBoundaryReached = _fragmentBoundary.RecordFrame();
-                if (_isPrimary)
-                {
-                    _primaryThroughputGate.CompleteFrame(GetMonotonicNow());
-                }
                 if (fragmentBoundaryReached)
                 {
                     await FlushChunkAsync(output, cancellationToken).ConfigureAwait(false);
@@ -502,7 +492,6 @@ public sealed class MediaFoundationFragmentedMp4EncoderFactory :
         {
             var chunk = _chunk ?? throw new InvalidOperationException(
                 "No Media Foundation chunk is active.");
-            var completedFrameCount = _fragmentBoundary.PendingFrameCount;
             _chunk = null;
             byte[] finalized;
             try
@@ -552,7 +541,6 @@ public sealed class MediaFoundationFragmentedMp4EncoderFactory :
             {
                 _segmenter.DiscardPendingBatch();
                 _fragmentBoundary.ResetForCapturePause();
-                _primaryThroughputGate.ResetForCapturePause();
                 _backpressureMonitor.ResetForCapturePause();
                 _chunkOutput!.Reset();
             }
@@ -1280,60 +1268,5 @@ internal sealed class MediaFoundationFragmentBoundaryState
     {
         PendingFrameCount = 0;
         _requiredFrameCount = _initialFrameCount;
-    }
-}
-
-/// <summary>
-/// Validates primary-tier hardware throughput and lets a capture pause open a fresh measurement
-/// epoch instead of charging paused wall-clock time to the renderer.
-/// </summary>
-internal sealed class MediaFoundationPrimaryThroughputGate
-{
-    private const int CalibrationFrameCount = 30;
-    private const double MinimumFramesPerSecond = 27;
-    private static readonly TimeSpan MaximumCalibrationWindow = TimeSpan.FromSeconds(5);
-
-    private TimeSpan? _startedAt;
-    private int _completedFrameCount;
-
-    internal void BeginFrame(TimeSpan monotonicNow)
-    {
-        ArgumentOutOfRangeException.ThrowIfLessThan(monotonicNow, TimeSpan.Zero);
-        _startedAt ??= monotonicNow;
-    }
-
-    internal void CompleteFrame(TimeSpan monotonicNow)
-    {
-        ArgumentOutOfRangeException.ThrowIfLessThan(monotonicNow, TimeSpan.Zero);
-        var startedAt = _startedAt ??
-            throw new InvalidOperationException("No primary throughput epoch is active.");
-        if (monotonicNow < startedAt)
-        {
-            throw new DynamicWallpaperUnavailableException(
-                DynamicWallpaperCapabilityReasonCode.EncodingFailed);
-        }
-
-        _completedFrameCount++;
-        var elapsed = monotonicNow - startedAt;
-        if (_completedFrameCount < CalibrationFrameCount &&
-            elapsed < MaximumCalibrationWindow)
-        {
-            return;
-        }
-
-        var effectiveFramesPerSecond = elapsed == TimeSpan.Zero
-            ? double.PositiveInfinity
-            : _completedFrameCount / elapsed.TotalSeconds;
-        if (effectiveFramesPerSecond < MinimumFramesPerSecond)
-        {
-            throw new DynamicWallpaperUnavailableException(
-                DynamicWallpaperCapabilityReasonCode.PrimaryRenderTierUnavailable);
-        }
-    }
-
-    internal void ResetForCapturePause()
-    {
-        _startedAt = null;
-        _completedFrameCount = 0;
     }
 }

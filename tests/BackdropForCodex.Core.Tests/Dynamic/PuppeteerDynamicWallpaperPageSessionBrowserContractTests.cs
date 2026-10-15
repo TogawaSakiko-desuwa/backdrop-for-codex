@@ -66,7 +66,13 @@ public sealed class PuppeteerDynamicWallpaperPageSessionBrowserContractTests
 
             await page.EvaluateExpressionAsync(
                 "document.dispatchEvent(new Event('visibilitychange'))");
-            await AssertPlaybackCallsAsync(page, expectedPlayCalls: 3, expectedPauseCalls: 2);
+            await AssertPlaybackCallsAsync(page, expectedPlayCalls: 4, expectedPauseCalls: 2);
+
+            // Visibility changes can resume a suspended stream, but cannot override host pause.
+            Assert.True(await sink.SetPausedAsync(generation, paused: true));
+            await page.EvaluateExpressionAsync(
+                "document.dispatchEvent(new Event('visibilitychange'))");
+            await AssertPlaybackCallsAsync(page, expectedPlayCalls: 4, expectedPauseCalls: 4);
         });
     }
 
