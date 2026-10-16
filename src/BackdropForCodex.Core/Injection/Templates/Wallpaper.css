@@ -152,6 +152,35 @@
         background-color: transparent !important;
       }
       /* codex-wallpaper-glass:start */
+      /*
+       * 26.1013 leaves page gutters outside the menu, sidebar and main surfaces.
+       * Tint only those reserved strips; do not move or resize native chrome.
+       */
+      __BFC_GLASS_BODY_SELECTOR__ > #root
+        [data-app-shell-frame="true"][data-app-shell-page-surface="true"][data-app-shell-application-menu-header]
+        > [data-app-shell-workspace-row="true"][class~="relative"]::before {
+        content: "";
+        position: absolute;
+        inset-inline: 0;
+        top: 0;
+        height: var(--app-shell-titlebar-height, 0px);
+        z-index: 1;
+        pointer-events: none;
+        background-color: var(--codex-wallpaper-glass);
+        -webkit-backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
+        backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
+      }
+      __BFC_GLASS_BODY_SELECTOR__ > #root
+        [data-app-shell-frame="true"][data-app-shell-page-surface="true"][data-app-shell-application-menu-header]::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        z-index: 1;
+        pointer-events: none;
+        box-sizing: border-box;
+        border-inline-end: var(--app-shell-page-inline-end-inset, 0px) solid var(--codex-wallpaper-glass);
+        border-block-end: var(--spacing, 0px) solid var(--codex-wallpaper-glass);
+      }
       __BFC_GLASS_BODY_SELECTOR__ [role="main"]:has([data-home-ambient-suggestions])
         section[class~="group/home-suggestions"]
         button[type="button"][aria-labelledby] {
@@ -299,6 +328,82 @@
         [class~="sticky"][class~="z-30"][class~="bg-token-main-surface-primary"]:has(input[type="text"])::after {
         background-image: none !important;
       }
+      /*
+       * 26.1013 settings replaces the viewport wrapper chain with a focus area
+       * and history-swipe page. Keep the navigation and default-main guards.
+       */
+      __BFC_GLASS_BODY_SELECTOR__ [data-app-shell-frame="true"]:has(
+        [class~="app-shell-left-panel"] [data-settings-panel-slug]
+      ) main[data-app-shell-main-surface="default"]
+        [data-app-shell-focus-area="main"]
+        [data-codex-history-swipe-page]
+        > div[class~="flex"][class~="h-full"][class~="min-h-0"][class~="flex-col"][class~="electron:overflow-hidden"][class~="electron:bg-surface"][class~="windows:rounded-tl-lg"],
+      /* Shared inline pages (including Sites) now own a sticky ::before fill. */
+      __BFC_GLASS_BODY_SELECTOR__ main[data-app-shell-main-surface="default"]
+        [data-app-shell-focus-area="main"]
+        [data-app-shell-inline-page-header="true"]:has(
+          > div[class~="flex"][class~="min-h-full"][class~="w-full"][class~="flex-col"] > [data-sticky]
+        ),
+      /* The extension host is chrome; embedded plugin documents remain native. */
+      __BFC_GLASS_BODY_SELECTOR__ main[data-app-shell-main-surface="default"]
+        [data-app-shell-focus-area="main"]
+        > [data-mcp-extension-surface][class~="flex"][class~="h-full"][class~="min-h-0"][class~="flex-col"][class~="bg-surface"] {
+        background-color: var(--codex-wallpaper-glass) !important;
+        -webkit-backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
+        backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
+        border-color: var(--codex-wallpaper-border);
+      }
+      __BFC_GLASS_BODY_SELECTOR__ main[data-app-shell-main-surface="default"]
+        [data-app-shell-focus-area="main"] [data-app-shell-inline-page-header="true"]
+        > div[class~="flex"][class~="min-h-full"][class~="w-full"][class~="flex-col"]
+        > [data-sticky]::before,
+      __BFC_GLASS_BODY_SELECTOR__ main[data-app-shell-main-surface="default"]
+        [data-app-shell-focus-area="main"] [data-app-shell-inline-page-header="true"]
+        > div[class~="flex"][class~="min-h-full"][class~="w-full"][class~="flex-col"]
+        > div[class~="mx-auto"][class~="flex"][class~="min-h-0"][class~="w-full"][class~="flex-1"][class~="flex-col"][class~="bg-surface"],
+      __BFC_GLASS_BODY_SELECTOR__ main[data-app-shell-main-surface="default"]
+        [data-app-shell-focus-area="main"] [data-app-shell-inline-page-header="true"]
+        > div[class~="flex"][class~="min-h-full"][class~="w-full"][class~="flex-col"]
+        > div[class~="mx-auto"][class~="flex"][class~="min-h-0"][class~="w-full"][class~="flex-1"][class~="flex-col"]
+        > div[class~="mx-auto"][class~="flex"][class~="min-h-full"][class~="w-full"][class~="flex-1"][class~="flex-col"][class~="bg-surface"] {
+        background-color: transparent !important;
+      }
+      /* Dot has its own messaging renderer; preserve bubbles, inputs and media. */
+      __BFC_GLASS_BODY_SELECTOR__ main[data-app-shell-main-surface="default"]
+        .messaging-root:not(.messaging-attachments):not([data-floating]):has(> .workspace > .thread-pane) {
+        background-color: var(--codex-wallpaper-glass) !important;
+        -webkit-backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
+        backdrop-filter: blur(var(--codex-wallpaper-blur)) saturate(var(--codex-wallpaper-saturation));
+      }
+      __BFC_GLASS_BODY_SELECTOR__ main[data-app-shell-main-surface="default"]
+        .messaging-root:not(.messaging-attachments):not([data-floating])
+        > .workspace > .thread-pane {
+        background-color: transparent !important;
+      }
+      /* The mounted Dot room adds a second embedded root inside main.thread-pane. */
+      __BFC_GLASS_BODY_SELECTOR__ main[data-app-shell-main-surface="default"]
+        .messaging-root:not(.messaging-attachments):not([data-floating])
+        > .workspace > main.thread-pane
+        > .messaging-root.messaging-embedded:not(.messaging-attachments):not([data-floating]):has(> .thread-pane > .conversation-viewport),
+      __BFC_GLASS_BODY_SELECTOR__ main[data-app-shell-main-surface="default"]
+        .messaging-root:not(.messaging-attachments):not([data-floating])
+        > .workspace > main.thread-pane
+        > .messaging-root.messaging-embedded:not(.messaging-attachments):not([data-floating])
+        > .thread-pane:has(> .conversation-viewport),
+      __BFC_GLASS_BODY_SELECTOR__ main[data-app-shell-main-surface="default"]
+        .messaging-root:not(.messaging-attachments):not([data-floating])
+        > .workspace > main.thread-pane
+        > .messaging-root.messaging-embedded:not(.messaging-attachments):not([data-floating])
+        > .thread-pane:has(> .conversation-viewport) .composer-disclaimer {
+        background-color: transparent !important;
+      }
+      __BFC_GLASS_BODY_SELECTOR__ main[data-app-shell-main-surface="default"]
+        .messaging-root:not(.messaging-attachments):not([data-floating])
+        > .workspace > main.thread-pane
+        > .messaging-root.messaging-embedded:not(.messaging-attachments):not([data-floating])
+        > .thread-pane:has(> .conversation-viewport) .composer-wrap:not([data-has-composer-surface]) {
+        border-bottom-color: transparent !important;
+      }
       /* codex-wallpaper-glass:end */
       /*
        * The reviewed right-panel shell owns the opaque theme surface. Glass that
@@ -307,6 +412,10 @@
        * split mode; the bounded wrapper chain and tab controller identify it.
        */
       /* codex-wallpaper-glass:start */
+      __BFC_GLASS_BODY_SELECTOR__ aside[data-app-shell-focus-area="right-panel"]
+        > div[class~="absolute"][class~="inset-x-0"][class~="bottom-0"][class~="min-h-0"][class~="min-w-0"][class~="overflow-visible"]
+        > div[class~="absolute"][class~="inset-0"][class~="min-h-0"][class~="min-w-0"][class~="overflow-hidden"]
+        > [data-app-shell-pane-frame="true"][class~="absolute"][class~="top-0"][class~="bottom-0"][class~="min-w-0"]:is([class~="left-0"], [class~="right-0"]),
       __BFC_GLASS_BODY_SELECTOR__ aside[data-app-shell-focus-area="right-panel"]
         > div:has([role="tabpanel"][data-app-shell-tab-panel-controller="right"])
         > div[class~="bg-token-main-surface-primary"],
@@ -389,6 +498,12 @@
         [class~="flex"][class~="h-full"][class~="min-h-0"][class~="flex-col"][class~="overflow-x-hidden"][class~="overflow-y-auto"][class~="bg-surface"][class~="p-2"][class~="select-none"]
         > [class~="flex"][class~="w-full"][class~="flex-1"][class~="flex-col"][class~="justify-center"]
         > [class~="sticky"][class~="top-0"][class~="z-10"][class~="flex"][class~="flex-col"][class~="gap-6"][class~="bg-surface"] {
+        background-color: transparent !important;
+      }
+      /* 26.1013's new launcher is identified independently of tab-controller state. */
+      __BFC_GLASS_BODY_SELECTOR__ aside[data-app-shell-focus-area="right-panel"]
+        [data-app-shell-pane-frame="true"]
+        [data-new-tab-scroll-root="true"][class~="flex"][class~="h-full"][class~="min-h-0"][class~="flex-col"][class~="overflow-x-hidden"][class~="overflow-y-auto"][class~="bg-surface-canvas"] {
         background-color: transparent !important;
       }
       /* codex-wallpaper-glass:end */
@@ -496,6 +611,26 @@
         > [data-thread-scroll-footer="true"][class~="pointer-events-none"][class~="absolute"][class~="inset-x-0"][class~="bottom-0"][class~="z-20"]
         [class~="composer-disclaimer-above"][class~="relative"]
         > [aria-hidden="true"][class~="pointer-events-none"][class~="absolute"][class~="inset-x-0"][class~="-top-8"][class~="z-0"][class~="bottom-0"][class~="mt-8"][class~="bg-surface"] {
+        background: transparent !important;
+      }
+      /*
+       * 26.1013 moves fade/surface geometry into CSS modules. Match their token
+       * boundaries plus the reviewed decorative owners, without pinning hashes.
+       */
+      __BFC_ADVANCED_BODY_SELECTOR__ main[data-app-shell-main-surface="default"]
+        .thread-scroll-container:has(> [data-thread-scroll-footer="true"])
+        > [class~="[container-name:thread-content]"]
+        > [aria-hidden="true"][class~="pointer-events-none"][class~="sticky"][class~="bottom-0"][class~="z-10"][class~="mt-auto"][class~="w-full"][class~="shrink-0"]
+        > [aria-hidden="true"][class~="pointer-events-none"][class~="absolute"][class~="inset-x-0"][class~="z-0"][class~="from-surface"]:is([class^="_background_"], [class*=" _background_"]):is([class^="_fade_"], [class*=" _fade_"]),
+      __BFC_ADVANCED_BODY_SELECTOR__ main[data-app-shell-main-surface="default"]
+        .thread-scroll-container
+        > [data-thread-scroll-footer="true"][class~="pointer-events-none"][class~="absolute"][class~="inset-x-0"][class~="bottom-0"][class~="z-20"]
+        > [aria-hidden="true"][class~="pointer-events-none"][class~="absolute"][class~="inset-x-0"][class~="z-0"][class~="bottom-0"][class~="bg-surface"]:is([class^="_background_"], [class*=" _background_"]):is([class^="_surface_"], [class*=" _surface_"]),
+      __BFC_ADVANCED_BODY_SELECTOR__ main[data-app-shell-main-surface="default"]
+        .thread-scroll-container
+        > [data-thread-scroll-footer="true"][class~="pointer-events-none"][class~="absolute"][class~="inset-x-0"][class~="bottom-0"][class~="z-20"]
+        [class~="composer-disclaimer-above"][class~="relative"]
+        > [aria-hidden="true"][class~="pointer-events-none"][class~="absolute"][class~="inset-x-0"][class~="z-0"][class~="bottom-0"][class~="bg-surface"]:is([class^="_background_"], [class*=" _background_"]):is([class^="_surface_"], [class*=" _surface_"]) {
         background: transparent !important;
       }
       /*

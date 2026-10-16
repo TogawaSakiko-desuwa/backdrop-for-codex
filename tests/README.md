@@ -90,6 +90,8 @@ They also cover the composer backdrop extending above its spacer without `h-full
 
 The Codex 26.1007 fixtures cover the `data-slate-sidebar-content` wrapper without `relative`, and the composer backdrop split between a transcript fade and an absolute footer (including its notice backdrop). They check both themes, composer geometry at 720 and 1280 px, protected controls and nested content, unrelated scrollers, and independent Glass/Advanced downgrades. These are isolated Edge checks based on installed package `26.1007.21434`, not live Codex visual verification.
 
+The Codex 26.1013 fixtures cover the settings history-swipe container, shared inline-page header/list surfaces, explicit pane frames and new-tab roots, the extension host, dot's nested messaging canvases and composer border, and the composer's CSS-module backgrounds. They also check the reserved window gutters at 125% device scale, both themes and 720/1280 px widths, unchanged geometry and hit targets, protected content, near misses, and independent capability downgrades. These isolated fixtures use synthetic content based on package `26.1013.31256`; they do not verify embedded extension documents or every route in the live app.
+
 ### Current-machine Codex identity
 
 On a supported Windows 11 x64 machine with the reviewed official Microsoft Store/MSIX Codex package installed and, where required, running:
