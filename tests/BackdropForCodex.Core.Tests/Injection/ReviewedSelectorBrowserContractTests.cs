@@ -13,7 +13,7 @@ public sealed class ReviewedSelectorBrowserContractGroup
 }
 
 [Collection("Reviewed selector browser contracts")]
-public sealed class ReviewedSelectorBrowserContractTests
+public sealed partial class ReviewedSelectorBrowserContractTests
 {
     private const long Generation = 7;
     private const string NativeBackground = "rgb(41, 42, 43)";
