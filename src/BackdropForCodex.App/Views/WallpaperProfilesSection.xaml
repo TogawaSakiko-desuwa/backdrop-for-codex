@@ -116,128 +116,129 @@
         </Style.Triggers>
       </Style>
 
-      <DataTemplate x:Key="ProfilePreviewTemplate">
-        <Border Width="32"
-                Height="32"
-                Background="{DynamicResource ControlFillColorSecondaryBrush}"
-                BorderThickness="0"
-                CornerRadius="{DynamicResource WorkbenchRadius8}"
-                ClipToBounds="True">
-          <Grid>
-            <Image Source="{Binding PreviewPath, Converter={StaticResource ProfileThumbnailConverter}}"
-                   Stretch="UniformToFill"
-                   IsHitTestVisible="False">
-              <Image.Style>
-                <Style TargetType="Image">
-                  <Setter Property="Visibility" Value="Collapsed" />
-                  <Style.Triggers>
-                    <DataTrigger Binding="{Binding IsImagePreviewAvailable}" Value="True">
-                      <Setter Property="Visibility" Value="Visible" />
-                    </DataTrigger>
-                  </Style.Triggers>
-                </Style>
-              </Image.Style>
-            </Image>
-            <ui:SymbolIcon Symbol="Image24"
-                           HorizontalAlignment="Center"
-                           VerticalAlignment="Center">
-              <ui:SymbolIcon.Style>
-                <Style TargetType="ui:SymbolIcon">
-                  <Setter Property="Visibility" Value="Visible" />
-                  <Style.Triggers>
-                    <DataTrigger Binding="{Binding IsImagePreviewAvailable}" Value="True">
-                      <Setter Property="Visibility" Value="Collapsed" />
-                    </DataTrigger>
-                    <DataTrigger Binding="{Binding IsVideo}" Value="True">
-                      <Setter Property="Visibility" Value="Collapsed" />
-                    </DataTrigger>
-                    <DataTrigger Binding="{Binding IsMissing}" Value="True">
-                      <Setter Property="Visibility" Value="Collapsed" />
-                    </DataTrigger>
-                  </Style.Triggers>
-                </Style>
-              </ui:SymbolIcon.Style>
-            </ui:SymbolIcon>
-            <ui:SymbolIcon Symbol="VideoClip24"
-                           HorizontalAlignment="Center"
-                           VerticalAlignment="Center">
-              <ui:SymbolIcon.Style>
-                <Style TargetType="ui:SymbolIcon">
-                  <Setter Property="Visibility" Value="Collapsed" />
-                  <Style.Triggers>
-                    <MultiDataTrigger>
-                      <MultiDataTrigger.Conditions>
-                        <Condition Binding="{Binding IsVideo}" Value="True" />
-                        <Condition Binding="{Binding IsMissing}" Value="False" />
-                      </MultiDataTrigger.Conditions>
-                      <Setter Property="Visibility" Value="Visible" />
-                    </MultiDataTrigger>
-                  </Style.Triggers>
-                </Style>
-              </ui:SymbolIcon.Style>
-            </ui:SymbolIcon>
-            <ui:SymbolIcon Symbol="ErrorCircle24"
-                           Foreground="{DynamicResource SystemFillColorCriticalBrush}"
-                           HorizontalAlignment="Center"
-                           VerticalAlignment="Center">
-              <ui:SymbolIcon.Style>
-                <Style TargetType="ui:SymbolIcon">
-                  <Setter Property="Visibility" Value="Collapsed" />
-                  <Style.Triggers>
-                    <DataTrigger Binding="{Binding IsMissing}" Value="True">
-                      <Setter Property="Visibility" Value="Visible" />
-                    </DataTrigger>
-                  </Style.Triggers>
-                </Style>
-              </ui:SymbolIcon.Style>
-            </ui:SymbolIcon>
-          </Grid>
-        </Border>
-      </DataTemplate>
-
-      <DataTemplate x:Key="ExpandedProfileTemplate">
+      <!-- Thumbnail contents shared by the 16:9 card and the compact tile. -->
+      <DataTemplate x:Key="ProfileThumbnailContentTemplate">
         <Grid>
-          <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="36" />
-            <ColumnDefinition Width="*" />
-            <ColumnDefinition Width="32" />
-          </Grid.ColumnDefinitions>
-          <ContentControl Content="{Binding}"
-                          ContentTemplate="{StaticResource ProfilePreviewTemplate}"
-                          IsHitTestVisible="False" />
-          <StackPanel Grid.Column="1"
-                      Margin="8,0,4,0"
-                      VerticalAlignment="Center"
-                      ToolTip="{Binding MediaDisplayName}">
-              <TextBlock Text="{Binding DisplayName}"
-                       FontSize="{DynamicResource WorkbenchTypeBody}"
-                       FontWeight="SemiBold"
-                       TextTrimming="CharacterEllipsis" />
-            <TextBlock Margin="0,2,0,0"
-                       Text="{Binding Subtitle}"
-                       Style="{DynamicResource WorkbenchCaptionTextStyle}"
-                       TextTrimming="CharacterEllipsis"
-                       TextWrapping="NoWrap" />
-          </StackPanel>
-          <ui:Button Grid.Column="2"
-                     Width="32"
-                     Height="32"
-                     Padding="0"
-                     Style="{StaticResource ProfileActionsButtonStyle}"
-                     Tag="{Binding RelativeSource={RelativeSource AncestorType={x:Type views:WallpaperProfilesSection}}}"
-                     ContextMenu="{StaticResource ProfileActionsMenu}"
-                     ToolTip="{Binding ActionsAutomationName}"
-                     AutomationProperties.Name="{Binding ActionsAutomationName}"
-                     Click="ProfileActions_Click">
-            <ui:SymbolIcon Symbol="MoreHorizontal24" />
-          </ui:Button>
+          <Rectangle RadiusX="6" RadiusY="6"
+                     Fill="{DynamicResource ControlFillColorSecondaryBrush}" />
+          <Rectangle RadiusX="6" RadiusY="6">
+            <Rectangle.Style>
+              <Style TargetType="Rectangle">
+                <Setter Property="Visibility" Value="Collapsed" />
+                <Style.Triggers>
+                  <DataTrigger Binding="{Binding IsImagePreviewAvailable}" Value="True">
+                    <Setter Property="Visibility" Value="Visible" />
+                  </DataTrigger>
+                </Style.Triggers>
+              </Style>
+            </Rectangle.Style>
+            <Rectangle.Fill>
+              <ImageBrush ImageSource="{Binding PreviewPath, Converter={StaticResource ProfileThumbnailConverter}}"
+                          Stretch="UniformToFill" />
+            </Rectangle.Fill>
+          </Rectangle>
+          <ui:SymbolIcon Symbol="VideoClip24"
+                         Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                         HorizontalAlignment="Center"
+                         VerticalAlignment="Center">
+            <ui:SymbolIcon.Style>
+              <Style TargetType="ui:SymbolIcon">
+                <Setter Property="Visibility" Value="Collapsed" />
+                <Style.Triggers>
+                  <MultiDataTrigger>
+                    <MultiDataTrigger.Conditions>
+                      <Condition Binding="{Binding IsVideo}" Value="True" />
+                      <Condition Binding="{Binding IsMissing}" Value="False" />
+                    </MultiDataTrigger.Conditions>
+                    <Setter Property="Visibility" Value="Visible" />
+                  </MultiDataTrigger>
+                </Style.Triggers>
+              </Style>
+            </ui:SymbolIcon.Style>
+          </ui:SymbolIcon>
+          <ui:SymbolIcon Symbol="ErrorCircle24"
+                         Foreground="{DynamicResource SystemFillColorCriticalBrush}"
+                         HorizontalAlignment="Center"
+                         VerticalAlignment="Center">
+            <ui:SymbolIcon.Style>
+              <Style TargetType="ui:SymbolIcon">
+                <Setter Property="Visibility" Value="Collapsed" />
+                <Style.Triggers>
+                  <DataTrigger Binding="{Binding IsMissing}" Value="True">
+                    <Setter Property="Visibility" Value="Visible" />
+                  </DataTrigger>
+                </Style.Triggers>
+              </Style>
+            </ui:SymbolIcon.Style>
+          </ui:SymbolIcon>
+          <Rectangle RadiusX="6" RadiusY="6"
+                     Stroke="{DynamicResource ControlStrokeColorDefaultBrush}"
+                     StrokeThickness="1" />
         </Grid>
       </DataTemplate>
 
+      <DataTemplate x:Key="ExpandedProfileTemplate">
+        <StackPanel Margin="6,0,0,0">
+          <ContentControl Height="104"
+                          Content="{Binding}"
+                          ContentTemplate="{StaticResource ProfileThumbnailContentTemplate}"
+                          IsHitTestVisible="False" />
+          <Grid Margin="2,8,0,0">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <StackPanel VerticalAlignment="Center"
+                        ToolTip="{Binding MediaDisplayName}">
+              <TextBlock Text="{Binding DisplayName}"
+                         FontSize="{DynamicResource WorkbenchTypeBody}"
+                         FontWeight="SemiBold"
+                         TextTrimming="CharacterEllipsis" />
+              <TextBlock Margin="0,2,0,0"
+                         Text="{Binding Subtitle}"
+                         TextTrimming="CharacterEllipsis"
+                         TextWrapping="NoWrap">
+                <TextBlock.Style>
+                  <Style TargetType="TextBlock"
+                         BasedOn="{StaticResource WorkbenchCaptionTextStyle}">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                    <Style.Triggers>
+                      <DataTrigger Binding="{Binding IsOfficial}" Value="True">
+                        <Setter Property="Visibility" Value="Visible" />
+                      </DataTrigger>
+                      <DataTrigger Binding="{Binding IsMissing}" Value="True">
+                        <Setter Property="Visibility" Value="Visible" />
+                        <Setter Property="Foreground" Value="{DynamicResource SystemFillColorCriticalBrush}" />
+                      </DataTrigger>
+                    </Style.Triggers>
+                  </Style>
+                </TextBlock.Style>
+              </TextBlock>
+            </StackPanel>
+            <ui:Button Grid.Column="1"
+                       Width="28"
+                       Height="28"
+                       Margin="4,0,0,0"
+                       Padding="0"
+                       VerticalAlignment="Top"
+                       Style="{StaticResource ProfileActionsButtonStyle}"
+                       Tag="{Binding RelativeSource={RelativeSource AncestorType={x:Type views:WallpaperProfilesSection}}}"
+                       ContextMenu="{StaticResource ProfileActionsMenu}"
+                       ToolTip="{Binding ActionsAutomationName}"
+                       AutomationProperties.Name="{Binding ActionsAutomationName}"
+                       Click="ProfileActions_Click">
+              <ui:SymbolIcon Symbol="MoreHorizontal24" FontSize="16" />
+            </ui:Button>
+          </Grid>
+        </StackPanel>
+      </DataTemplate>
+
       <DataTemplate x:Key="CompactProfileTemplate">
-        <ContentControl HorizontalAlignment="Center"
+        <ContentControl Width="32"
+                        Height="32"
+                        HorizontalAlignment="Center"
                         Content="{Binding}"
-                        ContentTemplate="{StaticResource ProfilePreviewTemplate}"
+                        ContentTemplate="{StaticResource ProfileThumbnailContentTemplate}"
                         ToolTip="{Binding AutomationName}" />
       </DataTemplate>
     </ResourceDictionary>

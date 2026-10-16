@@ -191,48 +191,12 @@
             Grid.Row="1"
             Grid.Column="1"
             Style="{DynamicResource WorkbenchStageStyle}">
-        <Grid.RowDefinitions>
-          <RowDefinition Height="52" />
-          <RowDefinition Height="*" />
-        </Grid.RowDefinitions>
-
-        <Border x:Name="PreviewStageHeader"
-                Style="{DynamicResource WorkbenchStageHeaderStyle}">
-          <Grid Margin="20,0">
-            <Grid.ColumnDefinitions>
-              <ColumnDefinition Width="3" />
-              <ColumnDefinition Width="*" />
-              <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
-            <Border Width="3"
-                    Height="20"
-                    CornerRadius="2"
-                    Background="{DynamicResource AccentFillColorDefaultBrush}" />
-            <TextBlock Grid.Column="1"
-                       Margin="10,0,0,0"
-                       Text="{localization:Loc Section_Preview, Fallback=Preview}"
-                       Style="{DynamicResource WorkbenchStageHeaderTextStyle}"
-                       VerticalAlignment="Center"
-                       AutomationProperties.HeadingLevel="Level2" />
-            <ui:SymbolIcon Grid.Column="2"
-                           Symbol="Info24"
-                           FontSize="16"
-                           Foreground="{DynamicResource WorkbenchStageMutedTextBrush}"
-                           VerticalAlignment="Center"
-                           ToolTip="{localization:Loc Focus_AutomationHelp, Fallback='Drag to set the crop focus. Arrow keys move one percent; hold Shift to move ten percent.'}"
-                           AutomationProperties.Name="{localization:Loc Label_Focus, Fallback='Crop focus'}"
-                           AutomationProperties.HelpText="{localization:Loc Focus_AutomationHelp, Fallback='Drag to set the crop focus. Arrow keys move one percent; hold Shift to move ten percent.'}" />
-          </Grid>
-        </Border>
-
         <views:AspectRatioDecorator x:Name="PreviewAspectFrame"
-                                    Grid.Row="1"
-                                    Margin="20,16,20,20"
+                                    Margin="24"
                                     Ratio="1.7777777777777777"
-                                    ContentInset="9">
-        <Grid>
+                                    ContentInset="1">
           <Border x:Name="CalibrationFrame"
-                  Padding="8"
+                  Padding="0"
                   Style="{DynamicResource WorkbenchCalibrationSurfaceStyle}">
             <views:WallpaperPreviewView x:Name="PreviewView"
                                         HorizontalAlignment="Stretch"
@@ -248,24 +212,6 @@
                                         LightOverlay="{Binding LightOverlay}"
                                         FocusChangeRequested="PreviewView_FocusChangeRequested" />
           </Border>
-
-          <Grid Width="16" Height="16" Margin="9" HorizontalAlignment="Left" VerticalAlignment="Top" Opacity="0.72" IsHitTestVisible="False">
-            <Border Height="1" VerticalAlignment="Top" Background="{DynamicResource AccentFillColorDefaultBrush}" />
-            <Border Width="1" HorizontalAlignment="Left" Background="{DynamicResource AccentFillColorDefaultBrush}" />
-          </Grid>
-          <Grid Width="16" Height="16" Margin="9" HorizontalAlignment="Right" VerticalAlignment="Top" Opacity="0.72" IsHitTestVisible="False">
-            <Border Height="1" VerticalAlignment="Top" Background="{DynamicResource AccentFillColorDefaultBrush}" />
-            <Border Width="1" HorizontalAlignment="Right" Background="{DynamicResource AccentFillColorDefaultBrush}" />
-          </Grid>
-          <Grid Width="16" Height="16" Margin="9" HorizontalAlignment="Left" VerticalAlignment="Bottom" Opacity="0.72" IsHitTestVisible="False">
-            <Border Height="1" VerticalAlignment="Bottom" Background="{DynamicResource AccentFillColorDefaultBrush}" />
-            <Border Width="1" HorizontalAlignment="Left" Background="{DynamicResource AccentFillColorDefaultBrush}" />
-          </Grid>
-          <Grid Width="16" Height="16" Margin="9" HorizontalAlignment="Right" VerticalAlignment="Bottom" Opacity="0.72" IsHitTestVisible="False">
-            <Border Height="1" VerticalAlignment="Bottom" Background="{DynamicResource AccentFillColorDefaultBrush}" />
-            <Border Width="1" HorizontalAlignment="Right" Background="{DynamicResource AccentFillColorDefaultBrush}" />
-          </Grid>
-        </Grid>
         </views:AspectRatioDecorator>
       </Grid>
 
@@ -277,8 +223,7 @@
                                       DataContext="{Binding Editor}"
                                       ChooseMediaRequested="ChooseMedia_Click"
                                       ClearMediaRequested="ClearMedia_Click"
-                                      CenterFocusRequested="CenterFocus_Click"
-                                      ReviewRiskRequested="ReviewRisk_Click" />
+                                      CenterFocusRequested="CenterFocus_Click" />
       </Border>
 
     </Grid>
@@ -337,21 +282,6 @@
                              Margin="0,0,8,0"
                              IsIndeterminate="True"
                              Visibility="{Binding IsBusy, Converter={StaticResource BooleanToVisibilityConverter}}" />
-            <Ellipse Width="7"
-                     Height="7"
-                     Margin="0,0,8,0"
-                     Fill="{DynamicResource AccentFillColorDefaultBrush}">
-              <Ellipse.Style>
-                <Style TargetType="Ellipse">
-                  <Setter Property="Visibility" Value="Visible" />
-                  <Style.Triggers>
-                    <DataTrigger Binding="{Binding IsBusy}" Value="True">
-                      <Setter Property="Visibility" Value="Collapsed" />
-                    </DataTrigger>
-                  </Style.Triggers>
-                </Style>
-              </Ellipse.Style>
-            </Ellipse>
             <TextBlock VerticalAlignment="Center"
                        Text="{Binding FooterStatusText}"
                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"

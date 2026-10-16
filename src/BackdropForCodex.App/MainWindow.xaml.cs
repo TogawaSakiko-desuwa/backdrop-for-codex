@@ -568,19 +568,6 @@ public partial class MainWindow : FluentWindow
         }
     }
 
-    private async void ReviewRisk_Click(object sender, RoutedEventArgs e)
-    {
-        try
-        {
-            _ = await ShowRiskDialogAsync(
-                allowRevoke: _viewModel.Editor.AcceptedCdpRisk);
-        }
-        catch (Exception exception)
-        {
-            ReportUnexpectedError(exception);
-        }
-    }
-
     private async Task<bool> ShowRiskDialogAsync(bool allowRevoke)
     {
         var content = new StackPanel

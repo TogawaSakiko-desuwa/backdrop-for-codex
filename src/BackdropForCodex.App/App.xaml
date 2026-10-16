@@ -11,40 +11,31 @@
         <ResourceDictionary Source="/BackdropForCodex;component/Themes/WorkbenchTheme.xaml" />
       </ResourceDictionary.MergedDictionaries>
 
+      <!-- A layer sitting behind a window: the backdrop. Monochrome so it reads at 16 px. -->
       <DrawingImage x:Key="AppIconImage">
         <DrawingImage.Drawing>
           <DrawingGroup>
-            <GeometryDrawing Brush="#0F6CBD">
+            <GeometryDrawing Brush="#1E2733">
               <GeometryDrawing.Geometry>
-                <RectangleGeometry Rect="0,0,32,32" RadiusX="7" RadiusY="7" />
+                <RectangleGeometry Rect="0,0,32,32" RadiusX="8" RadiusY="8" />
               </GeometryDrawing.Geometry>
             </GeometryDrawing>
-            <GeometryDrawing Brush="#F7FAFF">
+            <GeometryDrawing Brush="#4C8DFF">
               <GeometryDrawing.Geometry>
-                <RectangleGeometry Rect="5,6,22,18" RadiusX="3" RadiusY="3" />
+                <RectangleGeometry Rect="6,6,15,13" RadiusX="3.5" RadiusY="3.5" />
               </GeometryDrawing.Geometry>
             </GeometryDrawing>
-            <GeometryDrawing Brush="#8AB4F8"
-                             Geometry="M 5,19 L 12,12 L 17,17 L 21,13 L 27,19 L 27,24 L 5,24 Z" />
-            <GeometryDrawing Brush="#DCEAFF">
+            <GeometryDrawing Brush="#331E2733">
               <GeometryDrawing.Geometry>
-                <EllipseGeometry Center="22,11" RadiusX="2.5" RadiusY="2.5" />
+                <RectangleGeometry Rect="11,12,15,13" RadiusX="3.5" RadiusY="3.5" />
               </GeometryDrawing.Geometry>
-            </GeometryDrawing>
-            <GeometryDrawing Brush="#FFFFFF">
-              <GeometryDrawing.Geometry>
-                <RectangleGeometry Rect="10,26,12,2" RadiusX="1" RadiusY="1" />
-              </GeometryDrawing.Geometry>
+              <GeometryDrawing.Pen>
+                <Pen Brush="#F4F7FB" Thickness="2" LineJoin="Round" />
+              </GeometryDrawing.Pen>
             </GeometryDrawing>
           </DrawingGroup>
         </DrawingImage.Drawing>
       </DrawingImage>
-
-      <Style x:Key="PageHeadingStyle" TargetType="TextBlock">
-        <Setter Property="FontSize" Value="28" />
-        <Setter Property="FontWeight" Value="SemiBold" />
-        <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
-      </Style>
 
       <Style x:Key="SectionHeadingStyle" TargetType="TextBlock">
         <Setter Property="FontSize" Value="16" />

@@ -22,16 +22,6 @@ namespace BackdropForCodex.Core.Tests.AppSupport;
 [Collection("Wpf")]
 public sealed class MainWindowLayoutTests
 {
-    private static readonly string[] MetricIconNames =
-    [
-        "FitMetricIcon",
-        "FocusMetricIcon",
-        "PanelOpacityMetricIcon",
-        "BlurMetricIcon",
-        "DarkOverlayMetricIcon",
-        "LightOverlayMetricIcon",
-    ];
-
     [Fact]
     public void EditorPanes_UseTheEditorAsTheirDirectDataContext()
     {
@@ -124,17 +114,16 @@ public sealed class MainWindowLayoutTests
     }
 
     [Fact]
-    public void InspectorUsesOneFluentMetricIconForEveryCalibrationRow()
+    public void InspectorRowsUsePlainLabelsWithoutDecorativeIcons()
     {
         StaTest.Run(
             () =>
             {
                 var inspector = new WallpaperInspectorView();
 
-                Assert.All(
-                    MetricIconNames,
-                    name => Assert.IsType<Wpf.Ui.Controls.SymbolIcon>(
-                        inspector.FindName(name)));
+                Assert.Empty(FindVisualDescendants<Wpf.Ui.Controls.SymbolIcon>(inspector)
+                    .Where(icon => icon.Symbol != Wpf.Ui.Controls.SymbolRegular.Dismiss16));
+                Assert.Empty(FindVisualDescendants<Expander>(inspector));
             });
     }
 
@@ -494,14 +483,10 @@ public sealed class MainWindowLayoutTests
                     window.UpdateLayout();
 
                     var stage = Assert.IsType<Grid>(FindElement(window, "PreviewPane"));
-                    var header = Assert.IsType<Border>(
-                        FindElement(window, "PreviewStageHeader"));
                     var frame = Assert.IsType<Border>(
                         FindElement(window, "CalibrationFrame"));
 
                     Assert.Same(SystemColors.WindowBrush, stage.Background);
-                    Assert.Same(SystemColors.WindowBrush, header.Background);
-                    Assert.Same(SystemColors.WindowTextBrush, header.BorderBrush);
                     Assert.Same(SystemColors.WindowBrush, frame.Background);
                     Assert.Same(SystemColors.WindowTextBrush, frame.BorderBrush);
                 }
@@ -853,25 +838,6 @@ public sealed class MainWindowLayoutTests
             });
     }
 
-    [Theory]
-    [InlineData(0, 0)]
-    [InlineData(1, 204)]
-    [InlineData(3, 612)]
-    public void ProfileCardTrackWidth_AllocatesEveryFixedCard(
-        int profileCount,
-        double expectedWidth)
-    {
-        var converter = new ProfileCardTrackWidthConverter();
-
-        var actual = converter.Convert(
-            profileCount,
-            typeof(double),
-            parameter: null,
-            CultureInfo.InvariantCulture);
-
-        Assert.Equal(expectedWidth, Assert.IsType<double>(actual));
-    }
-
     private static void AssertPreviewSurfaceLayout(
         double width,
         double height)
@@ -923,7 +889,7 @@ public sealed class MainWindowLayoutTests
                 GetBounds(previewSurface, previewPane);
             var frameInset = CombinedFrameInset(calibrationFrame);
             var dpi = VisualTreeHelper.GetDpi(window);
-            Assert.Equal(new Thickness(8), calibrationFrame.Padding);
+            Assert.Equal(new Thickness(0), calibrationFrame.Padding);
             Assert.Equal(new Thickness(1), calibrationFrame.BorderThickness);
             Assert.Equal(frameInset, aspectFrame.ContentInset);
             Assert.InRange(
@@ -1116,6 +1082,24 @@ public sealed class MainWindowLayoutTests
         FrameworkElement root,
         string name) =>
         Assert.IsAssignableFrom<FrameworkElement>(root.FindName(name));
+
+    private static IEnumerable<T> FindVisualDescendants<T>(DependencyObject parent)
+        where T : DependencyObject
+    {
+        for (var index = 0; index < VisualTreeHelper.GetChildrenCount(parent); index++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, index);
+            if (child is T match)
+            {
+                yield return match;
+            }
+
+            foreach (var descendant in FindVisualDescendants<T>(child))
+            {
+                yield return descendant;
+            }
+        }
+    }
 
     private static FrameworkElement? FindVisualElement(
         DependencyObject root,

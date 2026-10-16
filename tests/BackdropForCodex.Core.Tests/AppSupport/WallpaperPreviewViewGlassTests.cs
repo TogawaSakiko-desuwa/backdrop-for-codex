@@ -20,11 +20,10 @@ public sealed class WallpaperPreviewViewGlassTests
         "TopBarGlassSurface",
         "MessageGlassSurface",
         "ComposerGlassSurface",
-        "RightGlassSurface",
     ];
 
     [Fact]
-    public void GlassBlur_ReusesTheClearBackdropAndMatchesAllFiveSurfaces()
+    public void GlassBlur_ReusesTheClearBackdropAndMatchesEveryGlassSurface()
     {
         StaTest.Run(
             () =>
