@@ -466,7 +466,6 @@ public sealed partial class WallpaperPreviewView : UserControl
             TopBarGlassSurface,
             MessageGlassSurface,
             ComposerGlassSurface,
-            RightGlassSurface,
         ];
         foreach (var surface in glassSurfaces)
         {

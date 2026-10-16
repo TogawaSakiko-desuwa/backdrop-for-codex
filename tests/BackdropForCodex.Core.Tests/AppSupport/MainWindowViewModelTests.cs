@@ -328,8 +328,7 @@ public sealed class MainWindowViewModelTests
         await viewModel.SourceLibrary.RefreshCommand.ExecuteAsync(parameter: null);
 
         Assert.False(viewModel.SourceLibrary.HasDiscoveryFailures);
-        Assert.Equal(UiStatusTone.Informational, viewModel.StatusTone);
-        Assert.Equal("Ready", viewModel.StatusTitle);
+        Assert.False(viewModel.IsStatusOpen);
     }
 
     [Fact]

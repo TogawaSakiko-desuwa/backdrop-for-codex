@@ -1240,7 +1240,6 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     private async Task InitializeCoreAsync()
     {
-        var preferenceWarning = false;
         try
         {
             await Settings
@@ -1250,7 +1249,6 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         catch (Exception exception)
         {
             Settings.UseDefaultPreferences();
-            preferenceWarning = true;
             ShowError(_errorMapper.Map(exception));
         }
 
@@ -1280,15 +1278,6 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             .ConfigureAwait(true);
         Settings.SetRuntimeActivity(_wallpaper.IsActive);
         IsPaused = _wallpaper.IsPaused;
-        if (!preferenceWarning && !IsStatusOpen)
-        {
-            ShowStatus(
-                _text.GetStringOrFallback("Status_ReadyTitle", "Ready"),
-                _text.GetStringOrFallback(
-                    "Status_ReadyMessage",
-                    "Choose local media, tune the glass panel, then apply when ready."),
-                UiStatusTone.Informational);
-        }
     }
 
     private async Task<bool> RunApplyAsync(
@@ -1791,12 +1780,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             _sourceDiscoveryStatusActive = false;
             if (IsCurrentSourceDiscoveryStatus(failureTitle, failureMessage))
             {
-                ShowStatus(
-                    _text.GetStringOrFallback("Status_ReadyTitle", "Ready"),
-                    _text.GetStringOrFallback(
-                        "Status_ReadyMessage",
-                        "Choose local media, tune the glass panel, then apply when ready."),
-                    UiStatusTone.Informational);
+                IsStatusOpen = false;
             }
         }
 

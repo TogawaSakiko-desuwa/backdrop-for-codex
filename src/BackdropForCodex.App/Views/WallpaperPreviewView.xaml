@@ -11,50 +11,27 @@
   <UserControl.Resources>
     <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
 
-    <Style x:Key="CalibrationUnderlayShapeStyle" TargetType="Rectangle">
-      <Setter Property="Stroke" Value="#FF0B0D10" />
-      <Setter Property="StrokeThickness" Value="2" />
-      <Style.Triggers>
-        <DataTrigger Binding="{Binding IsWorkbenchHighContrast, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
-                     Value="True">
-          <Setter Property="Stroke"
-                  Value="{DynamicResource {x:Static SystemColors.WindowBrushKey}}" />
-        </DataTrigger>
-      </Style.Triggers>
+    <!-- Translucent Codex surfaces. Opacity follows the panel setting; the stroke keeps them legible without media. -->
+    <Style x:Key="GlassSurfaceStyle" TargetType="Border">
+      <Setter Property="Background" Value="{DynamicResource ApplicationBackgroundBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource ControlStrokeColorDefaultBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Opacity" Value="{Binding PanelOpacity}" />
     </Style>
 
-    <Style x:Key="CalibrationForegroundShapeStyle" TargetType="Rectangle">
-      <Setter Property="Stroke" Value="White" />
-      <Setter Property="StrokeThickness" Value="1" />
-      <Style.Triggers>
-        <DataTrigger Binding="{Binding IsWorkbenchHighContrast, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
-                     Value="True">
-          <Setter Property="Stroke"
-                  Value="{DynamicResource {x:Static SystemColors.WindowTextBrushKey}}" />
-        </DataTrigger>
-      </Style.Triggers>
+    <!-- Placeholder text lines inside the Codex mock. -->
+    <Style x:Key="TextLineStyle" TargetType="Rectangle">
+      <Setter Property="Height" Value="6" />
+      <Setter Property="RadiusX" Value="3" />
+      <Setter Property="RadiusY" Value="3" />
+      <Setter Property="HorizontalAlignment" Value="Left" />
+      <Setter Property="Fill" Value="{DynamicResource TextFillColorSecondaryBrush}" />
+      <Setter Property="Opacity" Value="0.55" />
     </Style>
 
-    <Style x:Key="CalibrationUnderlayAxisStyle" TargetType="Border">
-      <Setter Property="Background" Value="#FF0B0D10" />
-      <Style.Triggers>
-        <DataTrigger Binding="{Binding IsWorkbenchHighContrast, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
-                     Value="True">
-          <Setter Property="Background"
-                  Value="{DynamicResource {x:Static SystemColors.WindowBrushKey}}" />
-        </DataTrigger>
-      </Style.Triggers>
-    </Style>
-
-    <Style x:Key="CalibrationForegroundAxisStyle" TargetType="Border">
-      <Setter Property="Background" Value="White" />
-      <Style.Triggers>
-        <DataTrigger Binding="{Binding IsWorkbenchHighContrast, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
-                     Value="True">
-          <Setter Property="Background"
-                  Value="{DynamicResource {x:Static SystemColors.WindowTextBrushKey}}" />
-        </DataTrigger>
-      </Style.Triggers>
+    <Style x:Key="FocusGuideLineStyle" TargetType="Border">
+      <Setter Property="Background" Value="#E6FFFFFF" />
+      <Setter Property="SnapsToDevicePixels" Value="True" />
     </Style>
   </UserControl.Resources>
 
@@ -72,15 +49,14 @@
       <Border x:Name="PreviewCard"
               HorizontalAlignment="Center"
               VerticalAlignment="Center"
-              CornerRadius="8"
-              Background="#171A20"
+              Background="{DynamicResource SolidBackgroundFillColorTertiaryBrush}"
               ClipToBounds="True">
         <Grid x:Name="PreviewSurface"
-              Background="#171A20"
+              Background="{DynamicResource SolidBackgroundFillColorTertiaryBrush}"
               ClipToBounds="True"
               SizeChanged="PreviewSurface_SizeChanged">
           <Grid x:Name="BackdropSource"
-                Background="#171A20"
+                Background="{DynamicResource SolidBackgroundFillColorTertiaryBrush}"
                 IsHitTestVisible="False">
             <Grid x:Name="MediaViewport"
                   ClipToBounds="True"
@@ -147,32 +123,170 @@
             </Rectangle>
           </Grid>
 
+          <!-- Codex workspace mock: sidebar, thread header, one exchange, composer. -->
+          <Grid x:Name="PreviewChromeLayer"
+                Margin="14">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="200" />
+              <ColumnDefinition Width="8" />
+              <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <Grid Grid.Column="0">
+              <Border x:Name="LeftGlassSurface"
+                      CornerRadius="10"
+                      Style="{StaticResource GlassSurfaceStyle}" />
+              <Grid Margin="14">
+                <Grid.RowDefinitions>
+                  <RowDefinition Height="Auto" />
+                  <RowDefinition Height="Auto" />
+                  <RowDefinition Height="*" />
+                  <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <StackPanel Orientation="Horizontal">
+                  <Border x:Name="CodexBadge"
+                          Width="16"
+                          Height="16"
+                          CornerRadius="4"
+                          Background="{DynamicResource TextFillColorPrimaryBrush}"
+                          Opacity="0.85" />
+                  <Rectangle Width="58"
+                             Margin="8,0,0,0"
+                             VerticalAlignment="Center"
+                             Style="{StaticResource TextLineStyle}"
+                             Fill="{DynamicResource TextFillColorPrimaryBrush}"
+                             Opacity="0.8" />
+                </StackPanel>
+                <Border Grid.Row="1"
+                        Height="28"
+                        Margin="0,16,0,0"
+                        CornerRadius="7"
+                        Background="{DynamicResource ControlFillColorDefaultBrush}">
+                  <StackPanel Margin="9,0"
+                              Orientation="Horizontal"
+                              VerticalAlignment="Center">
+                    <ui:SymbolIcon Symbol="Add16"
+                                   FontSize="11"
+                                   Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                    <Rectangle Width="50"
+                               Margin="7,0,0,0"
+                               VerticalAlignment="Center"
+                               Style="{StaticResource TextLineStyle}" />
+                  </StackPanel>
+                </Border>
+                <StackPanel Grid.Row="2" Margin="6,22,0,0">
+                  <Rectangle Width="40" Height="5" Style="{StaticResource TextLineStyle}" Opacity="0.35" />
+                  <Rectangle Width="128" Margin="0,14,0,0" Style="{StaticResource TextLineStyle}" />
+                  <Rectangle Width="96" Margin="0,12,0,0" Style="{StaticResource TextLineStyle}" />
+                  <Rectangle Width="140" Margin="0,12,0,0" Style="{StaticResource TextLineStyle}" />
+                  <Rectangle Width="84" Margin="0,12,0,0" Style="{StaticResource TextLineStyle}" />
+                  <Rectangle Width="118" Margin="0,12,0,0" Style="{StaticResource TextLineStyle}" />
+                </StackPanel>
+                <StackPanel Grid.Row="3" Orientation="Horizontal">
+                  <Ellipse Width="18"
+                           Height="18"
+                           Fill="{DynamicResource ControlStrongFillColorDefaultBrush}" />
+                  <Rectangle Width="54"
+                             Margin="8,0,0,0"
+                             VerticalAlignment="Center"
+                             Style="{StaticResource TextLineStyle}" />
+                </StackPanel>
+              </Grid>
+            </Grid>
+
+            <Grid Grid.Column="2">
+              <Grid.RowDefinitions>
+                <RowDefinition Height="36" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="52" />
+              </Grid.RowDefinitions>
+
+              <Border x:Name="TopBarGlassSurface"
+                      Grid.Row="0"
+                      CornerRadius="10"
+                      Style="{StaticResource GlassSurfaceStyle}" />
+              <Grid Grid.Row="0" Margin="14,0">
+                <Rectangle Width="96"
+                           VerticalAlignment="Center"
+                           Style="{StaticResource TextLineStyle}"
+                           Fill="{DynamicResource TextFillColorPrimaryBrush}"
+                           Opacity="0.8" />
+                <Border Width="60"
+                        Height="18"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Center"
+                        CornerRadius="9"
+                        Background="{DynamicResource ControlFillColorDefaultBrush}" />
+              </Grid>
+
+              <Grid Grid.Row="1" Margin="40,0,40,0">
+                <Grid.RowDefinitions>
+                  <RowDefinition Height="*" />
+                  <RowDefinition Height="Auto" />
+                  <RowDefinition Height="Auto" />
+                  <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+                <Grid Grid.Row="1"
+                      Width="290"
+                      Height="44"
+                      HorizontalAlignment="Right">
+                  <Border x:Name="MessageGlassSurface"
+                          CornerRadius="12"
+                          Style="{StaticResource GlassSurfaceStyle}" />
+                  <StackPanel Margin="14,0" VerticalAlignment="Center">
+                    <Rectangle Width="236" Style="{StaticResource TextLineStyle}" />
+                    <Rectangle Width="150" Margin="0,9,0,0" Style="{StaticResource TextLineStyle}" />
+                  </StackPanel>
+                </Grid>
+                <StackPanel Grid.Row="2" Margin="4,26,0,0">
+                  <Rectangle Width="380" Style="{StaticResource TextLineStyle}" Fill="{DynamicResource TextFillColorPrimaryBrush}" Opacity="0.75" />
+                  <Rectangle Width="440" Margin="0,11,0,0" Style="{StaticResource TextLineStyle}" Fill="{DynamicResource TextFillColorPrimaryBrush}" Opacity="0.75" />
+                  <Rectangle Width="300" Margin="0,11,0,0" Style="{StaticResource TextLineStyle}" Fill="{DynamicResource TextFillColorPrimaryBrush}" Opacity="0.75" />
+                  <Rectangle Width="410" Margin="0,11,0,0" Style="{StaticResource TextLineStyle}" Fill="{DynamicResource TextFillColorPrimaryBrush}" Opacity="0.75" />
+                </StackPanel>
+              </Grid>
+
+              <Border x:Name="ComposerGlassSurface"
+                      Grid.Row="2"
+                      Margin="40,0,40,0"
+                      CornerRadius="14"
+                      Style="{StaticResource GlassSurfaceStyle}" />
+              <Grid Grid.Row="2" Margin="56,0,54,0">
+                <Rectangle Width="150"
+                           VerticalAlignment="Center"
+                           Style="{StaticResource TextLineStyle}"
+                           Opacity="0.4" />
+                <StackPanel HorizontalAlignment="Right"
+                            VerticalAlignment="Center"
+                            Orientation="Horizontal">
+                  <Ellipse Width="22"
+                           Height="22"
+                           Margin="0,0,8,0"
+                           Stroke="{DynamicResource ControlStrongStrokeColorDefaultBrush}"
+                           StrokeThickness="1" />
+                  <Ellipse Width="24"
+                           Height="24"
+                           Fill="{DynamicResource TextFillColorPrimaryBrush}" />
+                </StackPanel>
+              </Grid>
+            </Grid>
+          </Grid>
+
           <Border x:Name="EmptyPreview"
                   Margin="32"
                   Background="Transparent">
             <StackPanel HorizontalAlignment="Center"
                         VerticalAlignment="Center"
-                        MaxWidth="340">
-              <Border Width="64"
-                      Height="64"
-                      Margin="0,0,0,16"
-                      CornerRadius="18"
-                      Background="#242B36">
-                <ui:SymbolIcon Symbol="Image24"
-                               FontSize="30"
-                               Foreground="#A9C7FF"
-                               HorizontalAlignment="Center"
-                               VerticalAlignment="Center" />
-              </Border>
-              <TextBlock Text="{localization:Loc Hint_NoMedia, Fallback='Choose media to start designing your wallpaper.'}"
-                         Foreground="#F5F7FA"
+                        MaxWidth="360">
+              <TextBlock Text="{localization:Loc Hint_NoMedia, Fallback='Choose an image or video as the background'}"
+                         Foreground="{DynamicResource TextFillColorPrimaryBrush}"
                          FontSize="18"
                          FontWeight="SemiBold"
                          TextAlignment="Center"
                          TextWrapping="Wrap" />
               <TextBlock Margin="0,8,0,0"
-                         Text="{localization:Loc Hint_DropMedia, Fallback='Drop one image or video here'}"
-                         Foreground="#AAB2BF"
+                         Text="{localization:Loc Hint_DropMedia, Fallback='or drop one here'}"
+                         Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                          TextAlignment="Center" />
             </StackPanel>
           </Border>
@@ -184,17 +298,6 @@
             <StackPanel HorizontalAlignment="Center"
                         VerticalAlignment="Center"
                         MaxWidth="380">
-              <Border Width="64"
-                      Height="64"
-                      Margin="0,0,0,16"
-                      CornerRadius="18"
-                      Background="{DynamicResource ControlFillColorDefaultBrush}">
-                <ui:SymbolIcon Symbol="Image24"
-                               FontSize="28"
-                               Foreground="{DynamicResource AccentFillColorDefaultBrush}"
-                               HorizontalAlignment="Center"
-                               VerticalAlignment="Center" />
-              </Border>
               <TextBlock Text="{localization:Loc Preview_Unavailable_Title, Fallback='Preview unavailable'}"
                          Foreground="{DynamicResource TextFillColorPrimaryBrush}"
                          FontSize="18"
@@ -202,191 +305,20 @@
                          TextAlignment="Center"
                          TextWrapping="Wrap" />
               <TextBlock Margin="0,8,0,0"
-                     Text="{localization:Loc Preview_Unavailable_Message, Fallback='This source cannot be previewed here. You can still apply it after safety checks pass.'}"
+                         Text="{localization:Loc Preview_Unavailable_Message, Fallback='This source cannot be previewed here. It can still be applied.'}"
                          Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                          TextAlignment="Center"
                          TextWrapping="Wrap" />
             </StackPanel>
           </Border>
 
-          <!-- Keep the preview compact, but preserve Codex's left navigation,
-               central task surface, and right context panel. -->
-          <Grid x:Name="PreviewChromeLayer"
-                Margin="12">
-            <Grid.ColumnDefinitions>
-              <ColumnDefinition Width="1.2*" MinWidth="88" />
-              <ColumnDefinition Width="8" />
-              <ColumnDefinition Width="3.5*" MinWidth="150" />
-              <ColumnDefinition Width="8" />
-              <ColumnDefinition Width="1.35*" MinWidth="96" />
-            </Grid.ColumnDefinitions>
-
-            <Grid Grid.Column="0">
-              <Border x:Name="LeftGlassSurface"
-                      CornerRadius="12"
-                      Background="{DynamicResource ApplicationBackgroundBrush}"
-                      Opacity="{Binding PanelOpacity}" />
-              <Grid Margin="12">
-                <Grid.RowDefinitions>
-                  <RowDefinition Height="Auto" />
-                  <RowDefinition Height="12" />
-                  <RowDefinition Height="*" />
-                  <RowDefinition Height="Auto" />
-                </Grid.RowDefinitions>
-                <StackPanel Orientation="Horizontal">
-                  <Border x:Name="CodexBadge"
-                          Width="18" Height="18" CornerRadius="5"
-                          Background="{DynamicResource AccentFillColorDefaultBrush}">
-                    <TextBlock Text="C"
-                               HorizontalAlignment="Center"
-                               VerticalAlignment="Center"
-                               Foreground="White"
-                               FontSize="10"
-                               FontWeight="Bold" />
-                  </Border>
-                  <TextBlock Margin="7,0,0,0"
-                             VerticalAlignment="Center"
-                             Text="Codex"
-                             FontWeight="SemiBold" />
-                </StackPanel>
-                <StackPanel Grid.Row="2">
-                  <Border Height="26" CornerRadius="7"
-                          Background="{DynamicResource ControlFillColorDefaultBrush}">
-                    <StackPanel Margin="8,0" Orientation="Horizontal"
-                                VerticalAlignment="Center">
-                      <ui:SymbolIcon Symbol="Add16" FontSize="11" />
-                      <Rectangle Width="44" Height="5" Margin="6,0,0,0"
-                                 RadiusX="2.5" RadiusY="2.5"
-                                 Fill="{DynamicResource TextFillColorSecondaryBrush}" />
-                    </StackPanel>
-                  </Border>
-                  <Rectangle Height="5" Margin="8,12,18,0"
-                             RadiusX="2.5" RadiusY="2.5"
-                             Fill="{DynamicResource TextFillColorSecondaryBrush}"
-                             Opacity="0.72" />
-                  <Rectangle Height="5" Margin="8,10,10,0"
-                             RadiusX="2.5" RadiusY="2.5"
-                             Fill="{DynamicResource TextFillColorSecondaryBrush}"
-                             Opacity="0.58" />
-                  <Rectangle Height="5" Margin="8,10,24,0"
-                             RadiusX="2.5" RadiusY="2.5"
-                             Fill="{DynamicResource TextFillColorSecondaryBrush}"
-                             Opacity="0.45" />
-                </StackPanel>
-                <Ellipse Grid.Row="3" Width="18" Height="18"
-                         HorizontalAlignment="Left"
-                         Fill="{DynamicResource AccentFillColorSecondaryBrush}" />
-              </Grid>
-            </Grid>
-
-            <Grid Grid.Column="2">
-              <Grid.RowDefinitions>
-                <RowDefinition Height="34" />
-                <RowDefinition Height="*" />
-                <RowDefinition Height="36" />
-              </Grid.RowDefinitions>
-              <Border x:Name="TopBarGlassSurface"
-                      Grid.Row="0"
-                      CornerRadius="10"
-                      Background="{DynamicResource ApplicationBackgroundBrush}"
-                      Opacity="{Binding PanelOpacity}" />
-              <Grid Grid.Row="0" Margin="11,0">
-                <Rectangle Width="82" Height="6"
-                           HorizontalAlignment="Left"
-                           VerticalAlignment="Center"
-                           RadiusX="3" RadiusY="3"
-                           Fill="{DynamicResource TextFillColorPrimaryBrush}"
-                           Opacity="0.8" />
-                <StackPanel HorizontalAlignment="Right"
-                            VerticalAlignment="Center"
-                            Orientation="Horizontal">
-                  <Ellipse Width="6" Height="6"
-                           Fill="{DynamicResource AccentFillColorDefaultBrush}" />
-                  <Rectangle Width="28" Height="5" Margin="6,0,0,0"
-                             RadiusX="2.5" RadiusY="2.5"
-                             Fill="{DynamicResource TextFillColorSecondaryBrush}" />
-                </StackPanel>
-              </Grid>
-
-              <StackPanel Grid.Row="1"
-                          Margin="14,12"
-                          VerticalAlignment="Center">
-                <Border Width="72"
-                        Height="24"
-                        HorizontalAlignment="Right"
-                        CornerRadius="8"
-                        Background="{DynamicResource ControlFillColorDefaultBrush}" />
-                <Border x:Name="MessageGlassSurface"
-                        Height="42"
-                        Margin="0,9,26,0"
-                        CornerRadius="9"
-                        Background="{DynamicResource ApplicationBackgroundBrush}"
-                        Opacity="{Binding PanelOpacity}" />
-                <Border Width="96"
-                        Height="24"
-                        Margin="0,9,0,0"
-                        HorizontalAlignment="Left"
-                        CornerRadius="8"
-                        Background="{DynamicResource ControlFillColorDefaultBrush}" />
-              </StackPanel>
-
-              <Border x:Name="ComposerGlassSurface"
-                      Grid.Row="2"
-                      CornerRadius="10"
-                      Background="{DynamicResource ApplicationBackgroundBrush}"
-                      Opacity="{Binding PanelOpacity}" />
-              <Grid Grid.Row="2" Margin="11,0">
-                <Rectangle Height="5"
-                           Margin="0,0,42,0"
-                           VerticalAlignment="Center"
-                           RadiusX="2.5" RadiusY="2.5"
-                           Fill="{DynamicResource TextFillColorSecondaryBrush}"
-                           Opacity="0.55" />
-                <Border Width="22" Height="22"
-                        HorizontalAlignment="Right"
-                        CornerRadius="7"
-                        Background="{DynamicResource AccentFillColorDefaultBrush}">
-                  <ui:SymbolIcon Symbol="Send24"
-                                 FontSize="11"
-                                 Foreground="White" />
-                </Border>
-              </Grid>
-            </Grid>
-
-            <Grid Grid.Column="4">
-              <Border x:Name="RightGlassSurface"
-                      CornerRadius="12"
-                      Background="{DynamicResource ApplicationBackgroundBrush}"
-                      Opacity="{Binding PanelOpacity}" />
-              <StackPanel Margin="12">
-                <TextBlock Text="{localization:Loc Section_Preview, Fallback=Preview}"
-                           FontWeight="SemiBold" />
-                <Rectangle Height="5" Margin="0,12,10,0"
-                           RadiusX="2.5" RadiusY="2.5"
-                           Fill="{DynamicResource TextFillColorSecondaryBrush}"
-                           Opacity="0.72" />
-                <Rectangle Height="5" Margin="0,10,22,0"
-                           RadiusX="2.5" RadiusY="2.5"
-                           Fill="{DynamicResource TextFillColorSecondaryBrush}"
-                           Opacity="0.55" />
-                <Border Height="38" Margin="0,14,0,0"
-                        CornerRadius="8"
-                        Background="{DynamicResource ControlFillColorDefaultBrush}" />
-                <Border Height="24" Margin="0,8,0,0"
-                        CornerRadius="8"
-                        Background="{DynamicResource ControlFillColorDefaultBrush}" />
-              </StackPanel>
-            </Grid>
-          </Grid>
-
-          <Grid x:Name="CalibrationOverlay"
-                Margin="18"
+          <!-- Rule-of-thirds guide. Hidden until the crop focus is adjustable and the pointer is over the preview. -->
+          <Grid x:Name="FocusGuideOverlay"
                 IsHitTestVisible="False"
                 Visibility="{Binding HasSelectedMedia, Converter={StaticResource BooleanToVisibilityConverter}}">
             <Grid.Style>
-              <!-- Emphasize calibration only while crop focus is adjustable and hovered. -->
               <Style TargetType="Grid">
-                <Setter Property="Opacity" Value="0.34" />
+                <Setter Property="Opacity" Value="0" />
                 <Style.Triggers>
                   <MultiDataTrigger>
                     <MultiDataTrigger.Conditions>
@@ -394,7 +326,7 @@
                       <Condition Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType={x:Type views:WallpaperPreviewView}}}"
                                  Value="True" />
                     </MultiDataTrigger.Conditions>
-                    <Setter Property="Opacity" Value="0.62" />
+                    <Setter Property="Opacity" Value="0.45" />
                   </MultiDataTrigger>
                   <DataTrigger Binding="{Binding IsWorkbenchHighContrast, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
                                Value="True">
@@ -403,44 +335,40 @@
                 </Style.Triggers>
               </Style>
             </Grid.Style>
-
-            <Rectangle x:Name="ProofBoundaryContrastUnderlay"
-                       Margin="8"
-                       Style="{StaticResource CalibrationUnderlayShapeStyle}" />
-            <Rectangle x:Name="SafeAreaBoundaryContrastUnderlay"
-                       Margin="42,32"
-                       StrokeDashArray="1.5,2.5"
-                       StrokeDashCap="Round"
-                       Style="{StaticResource CalibrationUnderlayShapeStyle}" />
-            <Border x:Name="VerticalProofAxisContrastUnderlay"
-                    Width="2"
-                    Margin="0,8"
-                    HorizontalAlignment="Center"
-                    Style="{StaticResource CalibrationUnderlayAxisStyle}" />
-            <Border x:Name="HorizontalProofAxisContrastUnderlay"
-                    Height="2"
-                    Margin="8,0"
-                    VerticalAlignment="Center"
-                    Style="{StaticResource CalibrationUnderlayAxisStyle}" />
-
-            <Rectangle x:Name="ProofBoundary"
-                       Margin="8"
-                       Style="{StaticResource CalibrationForegroundShapeStyle}" />
-            <Rectangle x:Name="SafeAreaBoundary"
-                       Margin="42,32"
-                       StrokeDashArray="3,5"
-                       StrokeDashCap="Round"
-                       Style="{StaticResource CalibrationForegroundShapeStyle}" />
-            <Border x:Name="VerticalProofAxis"
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+              <RowDefinition Height="*" />
+              <RowDefinition Height="*" />
+              <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+            <Border x:Name="FocusGuideVerticalLeft"
+                    Grid.Column="0"
+                    Grid.RowSpan="3"
                     Width="1"
-                    Margin="0,8"
-                    HorizontalAlignment="Center"
-                    Style="{StaticResource CalibrationForegroundAxisStyle}" />
-            <Border x:Name="HorizontalProofAxis"
+                    HorizontalAlignment="Right"
+                    Style="{StaticResource FocusGuideLineStyle}" />
+            <Border x:Name="FocusGuideVerticalRight"
+                    Grid.Column="1"
+                    Grid.RowSpan="3"
+                    Width="1"
+                    HorizontalAlignment="Right"
+                    Style="{StaticResource FocusGuideLineStyle}" />
+            <Border x:Name="FocusGuideHorizontalTop"
+                    Grid.Row="0"
+                    Grid.ColumnSpan="3"
                     Height="1"
-                    Margin="8,0"
-                    VerticalAlignment="Center"
-                    Style="{StaticResource CalibrationForegroundAxisStyle}" />
+                    VerticalAlignment="Bottom"
+                    Style="{StaticResource FocusGuideLineStyle}" />
+            <Border x:Name="FocusGuideHorizontalBottom"
+                    Grid.Row="1"
+                    Grid.ColumnSpan="3"
+                    Height="1"
+                    VerticalAlignment="Bottom"
+                    Style="{StaticResource FocusGuideLineStyle}" />
           </Grid>
 
           <Border x:Name="FocusInteractionSurface"
@@ -503,16 +431,11 @@
                   BorderThickness="0"
                   Background="#B020242B"
                   Visibility="{Binding HasSelectedMedia, Converter={StaticResource BooleanToVisibilityConverter}}">
-            <StackPanel Orientation="Horizontal">
-              <ui:SymbolIcon Symbol="Image24" Foreground="White" />
-              <TextBlock Margin="7,0,0,0"
-                         MaxWidth="280"
-                         VerticalAlignment="Center"
-                         Foreground="White"
-                         FontWeight="SemiBold"
-                         Text="{Binding SelectedMediaName}"
-                         TextTrimming="CharacterEllipsis" />
-            </StackPanel>
+            <TextBlock MaxWidth="300"
+                       VerticalAlignment="Center"
+                       Foreground="White"
+                       Text="{Binding SelectedMediaName}"
+                       TextTrimming="CharacterEllipsis" />
           </Border>
 
           <Border x:Name="StaticPreviewPill"
@@ -527,17 +450,9 @@
                   IsHitTestVisible="False"
                   AutomationProperties.Name="{localization:Loc Source_StaticPreview, Fallback='Static preview'}"
                   AutomationProperties.HelpText="{localization:Loc Source_StaticPreviewHint, Fallback='This is the project thumbnail, not the live Wallpaper Engine output.'}">
-            <StackPanel Orientation="Horizontal">
-              <ui:SymbolIcon Symbol="Image24"
-                             FontSize="14"
-                             Foreground="White"
-                             VerticalAlignment="Center" />
-              <TextBlock Margin="6,0,0,0"
-                         Text="{localization:Loc Source_StaticPreview, Fallback='Static preview'}"
-                         Foreground="White"
-                         FontWeight="SemiBold"
-                         VerticalAlignment="Center" />
-            </StackPanel>
+            <TextBlock Text="{localization:Loc Source_StaticPreview, Fallback='Static preview'}"
+                       Foreground="White"
+                       VerticalAlignment="Center" />
           </Border>
 
           <Border x:Name="DropOverlay"
@@ -546,18 +461,14 @@
                   CornerRadius="8"
                   BorderBrush="{DynamicResource AccentFillColorDefaultBrush}"
                   BorderThickness="2"
-                  Background="#D9192636"
+                  Background="#CC16191E"
                   IsHitTestVisible="False">
-            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-              <ui:SymbolIcon Symbol="ArrowUpload24"
-                             FontSize="36"
-                             Foreground="#DCEAFF" />
-              <TextBlock Margin="0,12,0,0"
-                         Text="{localization:Loc Hint_DropMedia, Fallback='Drop one image or video here'}"
-                         Foreground="White"
-                         FontSize="17"
-                         FontWeight="SemiBold" />
-            </StackPanel>
+            <TextBlock HorizontalAlignment="Center"
+                       VerticalAlignment="Center"
+                       Text="{localization:Loc Hint_DropTarget, Fallback='Drop to use it here'}"
+                       Foreground="White"
+                       FontSize="17"
+                       FontWeight="SemiBold" />
           </Border>
         </Grid>
       </Border>
