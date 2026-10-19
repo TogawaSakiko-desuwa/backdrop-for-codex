@@ -144,6 +144,12 @@ public sealed partial class WallpaperPreviewView : UserControl
 
     public event EventHandler<WallpaperFocusChangeRequestedEventArgs>? FocusChangeRequested;
 
+    /// <summary>
+    /// The sampled wallpaper layer (media plus theme veil) without the Codex mock, for the
+    /// stage's ambient field.
+    /// </summary>
+    public Visual PreviewBackdropVisual => BackdropSource;
+
     public MediaReference? MediaReference
     {
         get => ((MediaReference?)GetValue(MediaReferenceProperty))?.Snapshot();
@@ -466,7 +472,6 @@ public sealed partial class WallpaperPreviewView : UserControl
             TopBarGlassSurface,
             MessageGlassSurface,
             ComposerGlassSurface,
-            RightGlassSurface,
         ];
         foreach (var surface in glassSurfaces)
         {

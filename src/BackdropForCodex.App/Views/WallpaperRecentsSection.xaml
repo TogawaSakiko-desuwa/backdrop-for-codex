@@ -3,9 +3,9 @@
              x:Name="Root"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:converters="clr-namespace:BackdropForCodex.App.Converters"
              xmlns:localization="clr-namespace:BackdropForCodex.App.Services.Localization"
              xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+             xmlns:views="clr-namespace:BackdropForCodex.App.Views"
              Focusable="False"
              Style="{DynamicResource WorkbenchRootStyle}">
   <UserControl.Resources>
@@ -13,8 +13,6 @@
       <ResourceDictionary.MergedDictionaries>
         <ResourceDictionary Source="/BackdropForCodex;component/Themes/WorkbenchTheme.xaml" />
       </ResourceDictionary.MergedDictionaries>
-
-      <converters:MediaThumbnailConverter x:Key="RecentThumbnailConverter" />
 
       <Style x:Key="RecentListItemStyle" TargetType="ListBoxItem">
         <Setter Property="MinHeight" Value="48" />
@@ -118,127 +116,113 @@
       </Style>
 
       <DataTemplate x:Key="RecentPreviewTemplate">
-        <Border Width="32"
-                Height="32"
-                Background="{DynamicResource ControlFillColorSecondaryBrush}"
-                BorderThickness="0"
-                CornerRadius="{DynamicResource WorkbenchRadius8}"
-                ClipToBounds="True">
-          <Grid>
-            <Image x:Name="RecentThumbnail"
-                   Source="{Binding Path, Converter={StaticResource RecentThumbnailConverter}}"
-                   Stretch="UniformToFill"
-                   IsHitTestVisible="False" />
-            <ui:SymbolIcon Symbol="Image24"
-                           HorizontalAlignment="Center"
-                           VerticalAlignment="Center">
-              <ui:SymbolIcon.Style>
-                <Style TargetType="ui:SymbolIcon">
-                  <Setter Property="Visibility" Value="Collapsed" />
-                  <Style.Triggers>
-                    <MultiDataTrigger>
-                      <MultiDataTrigger.Conditions>
-                        <Condition Binding="{Binding ElementName=RecentThumbnail, Path=Source}"
-                                   Value="{x:Null}" />
-                        <Condition Binding="{Binding Kind}" Value="Image" />
-                        <Condition Binding="{Binding Exists}" Value="True" />
-                      </MultiDataTrigger.Conditions>
-                      <Setter Property="Visibility" Value="Visible" />
-                    </MultiDataTrigger>
-                  </Style.Triggers>
-                </Style>
-              </ui:SymbolIcon.Style>
-            </ui:SymbolIcon>
-            <ui:SymbolIcon Symbol="VideoClip24"
-                           HorizontalAlignment="Center"
-                           VerticalAlignment="Center">
-              <ui:SymbolIcon.Style>
-                <Style TargetType="ui:SymbolIcon">
-                  <Setter Property="Visibility" Value="Collapsed" />
-                  <Style.Triggers>
-                    <MultiDataTrigger>
-                      <MultiDataTrigger.Conditions>
-                        <Condition Binding="{Binding ContentKind}" Value="Video" />
-                        <Condition Binding="{Binding Exists}" Value="True" />
-                      </MultiDataTrigger.Conditions>
-                      <Setter Property="Visibility" Value="Visible" />
-                    </MultiDataTrigger>
-                  </Style.Triggers>
-                </Style>
-              </ui:SymbolIcon.Style>
-            </ui:SymbolIcon>
-            <ui:SymbolIcon Symbol="Apps24"
-                           HorizontalAlignment="Center"
-                           VerticalAlignment="Center">
-              <ui:SymbolIcon.Style>
-                <Style TargetType="ui:SymbolIcon">
-                  <Setter Property="Visibility" Value="Collapsed" />
-                  <Style.Triggers>
-                    <MultiDataTrigger>
-                      <MultiDataTrigger.Conditions>
-                        <Condition Binding="{Binding ContentKind}" Value="Scene" />
-                        <Condition Binding="{Binding Exists}" Value="True" />
-                      </MultiDataTrigger.Conditions>
-                      <Setter Property="Visibility" Value="Visible" />
-                    </MultiDataTrigger>
-                  </Style.Triggers>
-                </Style>
-              </ui:SymbolIcon.Style>
-            </ui:SymbolIcon>
-            <ui:SymbolIcon Symbol="Globe24"
-                           HorizontalAlignment="Center"
-                           VerticalAlignment="Center">
-              <ui:SymbolIcon.Style>
-                <Style TargetType="ui:SymbolIcon">
-                  <Setter Property="Visibility" Value="Collapsed" />
-                  <Style.Triggers>
-                    <MultiDataTrigger>
-                      <MultiDataTrigger.Conditions>
-                        <Condition Binding="{Binding ContentKind}" Value="Web" />
-                        <Condition Binding="{Binding Exists}" Value="True" />
-                      </MultiDataTrigger.Conditions>
-                      <Setter Property="Visibility" Value="Visible" />
-                    </MultiDataTrigger>
-                  </Style.Triggers>
-                </Style>
-              </ui:SymbolIcon.Style>
-            </ui:SymbolIcon>
-            <ui:SymbolIcon Symbol="ErrorCircle24"
-                           Foreground="{DynamicResource SystemFillColorCriticalBrush}"
-                           HorizontalAlignment="Center"
-                           VerticalAlignment="Center">
-              <ui:SymbolIcon.Style>
-                <Style TargetType="ui:SymbolIcon">
-                  <Setter Property="Visibility" Value="Collapsed" />
-                  <Style.Triggers>
-                    <DataTrigger Binding="{Binding Exists}" Value="False">
-                      <Setter Property="Visibility" Value="Visible" />
-                    </DataTrigger>
-                  </Style.Triggers>
-                </Style>
-              </ui:SymbolIcon.Style>
-            </ui:SymbolIcon>
-          </Grid>
-        </Border>
+        <Grid>
+          <views:MediaThumbnail x:Name="RecentThumbnail"
+                                Reference="{Binding Reference}"
+                                LocalPath="{Binding Path}"
+                                CornerRadius="5"
+                                Fill="{DynamicResource ControlFillColorSecondaryBrush}"
+                                Stroke="{DynamicResource ControlStrokeColorDefaultBrush}" />
+          <ui:SymbolIcon Symbol="VideoClip24"
+                         FontSize="16"
+                         Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                         HorizontalAlignment="Center"
+                         VerticalAlignment="Center">
+            <ui:SymbolIcon.Style>
+              <Style TargetType="ui:SymbolIcon">
+                <Setter Property="Visibility" Value="Collapsed" />
+                <Style.Triggers>
+                  <MultiDataTrigger>
+                    <MultiDataTrigger.Conditions>
+                      <Condition Binding="{Binding ContentKind}" Value="Video" />
+                      <Condition Binding="{Binding Exists}" Value="True" />
+                      <Condition Binding="{Binding HasImage, ElementName=RecentThumbnail}" Value="False" />
+                    </MultiDataTrigger.Conditions>
+                    <Setter Property="Visibility" Value="Visible" />
+                  </MultiDataTrigger>
+                </Style.Triggers>
+              </Style>
+            </ui:SymbolIcon.Style>
+          </ui:SymbolIcon>
+          <ui:SymbolIcon Symbol="Apps24"
+                         FontSize="16"
+                         Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                         HorizontalAlignment="Center"
+                         VerticalAlignment="Center">
+            <ui:SymbolIcon.Style>
+              <Style TargetType="ui:SymbolIcon">
+                <Setter Property="Visibility" Value="Collapsed" />
+                <Style.Triggers>
+                  <MultiDataTrigger>
+                    <MultiDataTrigger.Conditions>
+                      <Condition Binding="{Binding ContentKind}" Value="Scene" />
+                      <Condition Binding="{Binding Exists}" Value="True" />
+                      <Condition Binding="{Binding HasImage, ElementName=RecentThumbnail}" Value="False" />
+                    </MultiDataTrigger.Conditions>
+                    <Setter Property="Visibility" Value="Visible" />
+                  </MultiDataTrigger>
+                </Style.Triggers>
+              </Style>
+            </ui:SymbolIcon.Style>
+          </ui:SymbolIcon>
+          <ui:SymbolIcon Symbol="Globe24"
+                         FontSize="16"
+                         Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                         HorizontalAlignment="Center"
+                         VerticalAlignment="Center">
+            <ui:SymbolIcon.Style>
+              <Style TargetType="ui:SymbolIcon">
+                <Setter Property="Visibility" Value="Collapsed" />
+                <Style.Triggers>
+                  <MultiDataTrigger>
+                    <MultiDataTrigger.Conditions>
+                      <Condition Binding="{Binding ContentKind}" Value="Web" />
+                      <Condition Binding="{Binding Exists}" Value="True" />
+                      <Condition Binding="{Binding HasImage, ElementName=RecentThumbnail}" Value="False" />
+                    </MultiDataTrigger.Conditions>
+                    <Setter Property="Visibility" Value="Visible" />
+                  </MultiDataTrigger>
+                </Style.Triggers>
+              </Style>
+            </ui:SymbolIcon.Style>
+          </ui:SymbolIcon>
+          <ui:SymbolIcon Symbol="ErrorCircle24"
+                         FontSize="16"
+                         Foreground="{DynamicResource SystemFillColorCriticalBrush}"
+                         HorizontalAlignment="Center"
+                         VerticalAlignment="Center">
+            <ui:SymbolIcon.Style>
+              <Style TargetType="ui:SymbolIcon">
+                <Setter Property="Visibility" Value="Collapsed" />
+                <Style.Triggers>
+                  <DataTrigger Binding="{Binding Exists}" Value="False">
+                    <Setter Property="Visibility" Value="Visible" />
+                  </DataTrigger>
+                </Style.Triggers>
+              </Style>
+            </ui:SymbolIcon.Style>
+          </ui:SymbolIcon>
+        </Grid>
       </DataTemplate>
 
       <DataTemplate x:Key="ExpandedRecentTemplate">
-        <Grid>
+        <Grid Margin="6,0,0,0">
           <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="36" />
+            <ColumnDefinition Width="64" />
             <ColumnDefinition Width="*" />
-            <ColumnDefinition Width="32" />
+            <ColumnDefinition Width="28" />
           </Grid.ColumnDefinitions>
-          <ContentControl Content="{Binding}"
+          <ContentControl Width="64"
+                          Height="36"
+                          Content="{Binding}"
                           ContentTemplate="{StaticResource RecentPreviewTemplate}"
                           IsHitTestVisible="False" />
           <StackPanel Grid.Column="1"
-                      Margin="8,0,4,0"
+                      Margin="10,0,4,0"
                       VerticalAlignment="Center"
                       ToolTip="{Binding DisplayName}">
             <TextBlock Text="{Binding DisplayName}"
-                       FontSize="{DynamicResource WorkbenchTypeBody}"
-                       FontWeight="SemiBold"
+                       FontSize="{DynamicResource WorkbenchTypeControl}"
                        TextTrimming="CharacterEllipsis" />
             <TextBlock Margin="0,2,0,0"
                        TextTrimming="CharacterEllipsis"
@@ -246,21 +230,21 @@
               <TextBlock.Style>
                 <Style TargetType="TextBlock"
                        BasedOn="{StaticResource WorkbenchCaptionTextStyle}">
-                  <Setter Property="Text" Value="{localization:Loc Media_Image, Fallback=Image}" />
+                  <Setter Property="Visibility" Value="Collapsed" />
                   <Style.Triggers>
-                    <DataTrigger Binding="{Binding ContentKind}" Value="Video">
-                      <Setter Property="Text"
-                              Value="{localization:Loc Media_Video, Fallback=Video}" />
-                    </DataTrigger>
                     <DataTrigger Binding="{Binding ContentKind}" Value="Scene">
+                      <Setter Property="Visibility" Value="Visible" />
                       <Setter Property="Text"
                               Value="{localization:Loc Media_Scene, Fallback=Scene}" />
                     </DataTrigger>
                     <DataTrigger Binding="{Binding ContentKind}" Value="Web">
+                      <Setter Property="Visibility" Value="Visible" />
                       <Setter Property="Text"
                               Value="{localization:Loc Media_Web, Fallback=Web}" />
                     </DataTrigger>
                     <DataTrigger Binding="{Binding Exists}" Value="False">
+                      <Setter Property="Visibility" Value="Visible" />
+                      <Setter Property="Foreground" Value="{DynamicResource SystemFillColorCriticalBrush}" />
                       <Setter Property="Text"
                               Value="{localization:Loc Hint_MissingMediaCompact, Fallback=Missing}" />
                     </DataTrigger>
@@ -270,8 +254,8 @@
             </TextBlock>
           </StackPanel>
           <ui:Button Grid.Column="2"
-                     Width="32"
-                     Height="32"
+                     Width="28"
+                     Height="28"
                      Padding="0"
                      Style="{StaticResource RecentRemoveButtonStyle}"
                      Command="{Binding RemoveRecentCommand, ElementName=Root}"
@@ -284,7 +268,9 @@
       </DataTemplate>
 
       <DataTemplate x:Key="CompactRecentTemplate">
-        <ContentControl HorizontalAlignment="Center"
+        <ContentControl Width="32"
+                        Height="32"
+                        HorizontalAlignment="Center"
                         Content="{Binding}"
                         ContentTemplate="{StaticResource RecentPreviewTemplate}"
                         ToolTip="{Binding DisplayName}" />
@@ -330,7 +316,7 @@
     </Border>
 
     <TextBlock Margin="8,4,8,8"
-               Text="{localization:Loc Hint_NoRecentMedia, Fallback='Your recently used media will appear here.'}">
+               Text="{localization:Loc Hint_NoRecentMedia, Fallback='No recent media yet.'}">
       <TextBlock.Style>
         <Style TargetType="TextBlock"
                BasedOn="{StaticResource WorkbenchCaptionTextStyle}">

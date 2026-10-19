@@ -68,6 +68,8 @@ public partial class MainWindow : FluentWindow
             typeof(MainWindow),
             new FrameworkPropertyMetadata(false));
 
+    internal const double PaneGutter = 12;
+    private const double InspectorWidth = 360;
     private const double MobileBreakpoint = 960;
     private const double ExpandedRailBreakpoint = 1280;
     private const double DesignedMinimumWidth = 640;
@@ -225,11 +227,6 @@ public partial class MainWindow : FluentWindow
     private void ViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         _ = sender;
-        if (e.PropertyName == nameof(MainWindowViewModel.ThemeMode))
-        {
-            ApplyTheme();
-        }
-
         if (e.PropertyName is
             nameof(MainWindowViewModel.FooterStatusText) or
             nameof(MainWindowViewModel.StatusTitle) or
@@ -280,7 +277,7 @@ public partial class MainWindow : FluentWindow
 
     private void ApplyTheme()
     {
-        _themeController.Apply(_viewModel.ThemeMode);
+        _themeController.Apply();
         SetCurrentValue(
             IsWorkbenchHighContrastProperty,
             SystemParameters.HighContrast);
@@ -568,19 +565,6 @@ public partial class MainWindow : FluentWindow
         }
     }
 
-    private async void ReviewRisk_Click(object sender, RoutedEventArgs e)
-    {
-        try
-        {
-            _ = await ShowRiskDialogAsync(
-                allowRevoke: _viewModel.Editor.AcceptedCdpRisk);
-        }
-        catch (Exception exception)
-        {
-            ReportUnexpectedError(exception);
-        }
-    }
-
     private async Task<bool> ShowRiskDialogAsync(bool allowRevoke)
     {
         var content = new StackPanel
@@ -667,17 +651,6 @@ public partial class MainWindow : FluentWindow
         var restoreBackupRequested = false;
         ContentDialog? dialog = null;
 
-        content.ThemeChangeRequested += async (_, eventArgs) =>
-        {
-            try
-            {
-                await _viewModel.SetThemeModeAsync(eventArgs.Mode);
-            }
-            catch (Exception exception)
-            {
-                ReportUnexpectedError(exception);
-            }
-        };
         content.RiskRevokeRequested += async (_, _) =>
         {
             try
@@ -1206,7 +1179,16 @@ public partial class MainWindow : FluentWindow
         UpdateWallpaperEngineLibraryLayout(width);
         InspectorHost.BorderThickness = isMobile
             ? new Thickness(0)
-            : new Thickness(1, 0, 0, 0);
+            : new Thickness(1);
+        InspectorHost.CornerRadius = isMobile
+            ? new CornerRadius(0)
+            : new CornerRadius(12);
+        InspectorHost.Margin = isMobile
+            ? new Thickness(0)
+            : new Thickness(0, PaneGutter, PaneGutter, PaneGutter);
+        LibraryPane.Margin = isMobile
+            ? new Thickness(PaneGutter)
+            : new Thickness(PaneGutter, PaneGutter, 0, PaneGutter);
         FooterCommandBar.Padding = isMobile
             ? new Thickness(12, 8, 12, 8)
             : new Thickness(16, 10, 16, 10);
@@ -1243,11 +1225,11 @@ public partial class MainWindow : FluentWindow
             LibraryPane.IsCompact = useCompactRail;
             LibraryPane.HorizontalAlignment = HorizontalAlignment.Stretch;
             LibraryColumn.Width = new GridLength(
-                useCompactRail
+                (useCompactRail
                     ? WallpaperLibraryView.CompactWidth
-                    : WallpaperLibraryView.ExpandedWidth);
+                    : WallpaperLibraryView.ExpandedWidth) + PaneGutter);
             PreviewColumn.Width = new GridLength(1, GridUnitType.Star);
-            InspectorColumn.Width = new GridLength(360);
+            InspectorColumn.Width = new GridLength(InspectorWidth + PaneGutter);
             Grid.SetRow(LibraryPane, 1);
             Grid.SetRowSpan(LibraryPane, 1);
             Grid.SetColumn(LibraryPane, 0);

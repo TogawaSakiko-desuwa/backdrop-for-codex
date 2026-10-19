@@ -22,16 +22,6 @@ namespace BackdropForCodex.Core.Tests.AppSupport;
 [Collection("Wpf")]
 public sealed class MainWindowLayoutTests
 {
-    private static readonly string[] MetricIconNames =
-    [
-        "FitMetricIcon",
-        "FocusMetricIcon",
-        "PanelOpacityMetricIcon",
-        "BlurMetricIcon",
-        "DarkOverlayMetricIcon",
-        "LightOverlayMetricIcon",
-    ];
-
     [Fact]
     public void EditorPanes_UseTheEditorAsTheirDirectDataContext()
     {
@@ -124,17 +114,17 @@ public sealed class MainWindowLayoutTests
     }
 
     [Fact]
-    public void InspectorUsesOneFluentMetricIconForEveryCalibrationRow()
+    public void InspectorRowsUsePlainLabelsWithoutDecorativeIcons()
     {
         StaTest.Run(
             () =>
             {
                 var inspector = new WallpaperInspectorView();
 
-                Assert.All(
-                    MetricIconNames,
-                    name => Assert.IsType<Wpf.Ui.Controls.SymbolIcon>(
-                        inspector.FindName(name)));
+                Assert.DoesNotContain(
+                    FindVisualDescendants<Wpf.Ui.Controls.SymbolIcon>(inspector),
+                    icon => icon.Symbol != Wpf.Ui.Controls.SymbolRegular.Dismiss16);
+                Assert.Empty(FindVisualDescendants<Expander>(inspector));
             });
     }
 
@@ -238,12 +228,14 @@ public sealed class MainWindowLayoutTests
                     var applyAction = Assert.IsAssignableFrom<Wpf.Ui.Controls.Button>(
                         FindElement(window, "ApplyActionButton"));
                     Assert.Equal(
-                        new GridLength(WallpaperLibraryView.ExpandedWidth),
+                        new GridLength(
+                            WallpaperLibraryView.ExpandedWidth + MainWindow.PaneGutter),
                         workbench.ColumnDefinitions[0].Width);
                     Assert.False(library.IsCompact);
                     Assert.Equal(Visibility.Visible, preview.Visibility);
                     Assert.Equal(Visibility.Visible, inspector.Visibility);
-                    Assert.Equal(new Thickness(1, 0, 0, 0), inspector.BorderThickness);
+                    Assert.Equal(new Thickness(1), inspector.BorderThickness);
+                    Assert.Equal(new CornerRadius(12), inspector.CornerRadius);
                     Assert.Equal(Visibility.Collapsed, mobileToolbar.Visibility);
                     Assert.Equal(2, Assert.IsType<Grid>(footerCommandBar.Child).RowDefinitions.Count);
                     Assert.Equal(Visibility.Visible, statusMessage.Visibility);
@@ -262,7 +254,8 @@ public sealed class MainWindowLayoutTests
 
                     ApplyResponsiveLayout(window, width: 1024);
                     Assert.Equal(
-                        new GridLength(WallpaperLibraryView.CompactWidth),
+                        new GridLength(
+                            WallpaperLibraryView.CompactWidth + MainWindow.PaneGutter),
                         workbench.ColumnDefinitions[0].Width);
                     Assert.True(library.IsCompact);
                     Assert.Equal(Visibility.Visible, inspector.Visibility);
@@ -494,14 +487,10 @@ public sealed class MainWindowLayoutTests
                     window.UpdateLayout();
 
                     var stage = Assert.IsType<Grid>(FindElement(window, "PreviewPane"));
-                    var header = Assert.IsType<Border>(
-                        FindElement(window, "PreviewStageHeader"));
                     var frame = Assert.IsType<Border>(
                         FindElement(window, "CalibrationFrame"));
 
                     Assert.Same(SystemColors.WindowBrush, stage.Background);
-                    Assert.Same(SystemColors.WindowBrush, header.Background);
-                    Assert.Same(SystemColors.WindowTextBrush, header.BorderBrush);
                     Assert.Same(SystemColors.WindowBrush, frame.Background);
                     Assert.Same(SystemColors.WindowTextBrush, frame.BorderBrush);
                 }
@@ -594,7 +583,7 @@ public sealed class MainWindowLayoutTests
     [Theory]
     [InlineData("4")]
     [InlineData("2147483648")]
-    public async Task ProtectedPreferencesDisableThemeSelectionAndExplainResetRequirement(
+    public async Task ProtectedPreferencesExplainResetRequirement(
         string schemaVersion)
     {
         var preferencesPath = Path.Combine(
@@ -621,18 +610,15 @@ public sealed class MainWindowLayoutTests
                         var content = new SettingsDialogContent(
                             fixture.ViewModel,
                             fixture.Text);
-                        var theme = Assert.IsType<ComboBox>(
-                            content.FindName("ThemeComboBox"));
                         var notice = Assert.IsType<TextBlock>(
                             content.FindName("ProtectedPreferencesNotice"));
 
-                        Assert.False(theme.IsEnabled);
+                        Assert.Null(content.FindName("ThemeComboBox"));
                         Assert.Equal(Visibility.Visible, notice.Visibility);
                         Assert.Contains(
                             schemaVersion,
                             notice.Text,
                             StringComparison.Ordinal);
-                        Assert.Equal(fixture.ViewModel.ThemeMode, theme.SelectedValue);
                     });
             }
             finally
@@ -658,8 +644,6 @@ public sealed class MainWindowLayoutTests
                     var content = new SettingsDialogContent(
                         fixture.ViewModel,
                         fixture.Text);
-                    var theme = Assert.IsType<ComboBox>(
-                        content.FindName("ThemeComboBox"));
                     var notice = Assert.IsType<TextBlock>(
                         content.FindName("ProtectedPreferencesNotice"));
                     content.RaiseEvent(
@@ -678,14 +662,13 @@ public sealed class MainWindowLayoutTests
                         "2147483648");
                     protectedProperty.SetValue(fixture.ViewModel.Settings, true);
 
-                    Assert.False(theme.IsEnabled);
                     Assert.Equal(Visibility.Visible, notice.Visibility);
                     Assert.Contains("2147483648", notice.Text, StringComparison.Ordinal);
 
                     content.RaiseEvent(
                         new RoutedEventArgs(FrameworkElement.UnloadedEvent));
                     protectedProperty.SetValue(fixture.ViewModel.Settings, false);
-                    Assert.False(theme.IsEnabled);
+                    Assert.Equal(Visibility.Visible, notice.Visibility);
                 }
                 finally
                 {
@@ -853,25 +836,6 @@ public sealed class MainWindowLayoutTests
             });
     }
 
-    [Theory]
-    [InlineData(0, 0)]
-    [InlineData(1, 204)]
-    [InlineData(3, 612)]
-    public void ProfileCardTrackWidth_AllocatesEveryFixedCard(
-        int profileCount,
-        double expectedWidth)
-    {
-        var converter = new ProfileCardTrackWidthConverter();
-
-        var actual = converter.Convert(
-            profileCount,
-            typeof(double),
-            parameter: null,
-            CultureInfo.InvariantCulture);
-
-        Assert.Equal(expectedWidth, Assert.IsType<double>(actual));
-    }
-
     private static void AssertPreviewSurfaceLayout(
         double width,
         double height)
@@ -923,7 +887,7 @@ public sealed class MainWindowLayoutTests
                 GetBounds(previewSurface, previewPane);
             var frameInset = CombinedFrameInset(calibrationFrame);
             var dpi = VisualTreeHelper.GetDpi(window);
-            Assert.Equal(new Thickness(8), calibrationFrame.Padding);
+            Assert.Equal(new Thickness(0), calibrationFrame.Padding);
             Assert.Equal(new Thickness(1), calibrationFrame.BorderThickness);
             Assert.Equal(frameInset, aspectFrame.ContentInset);
             Assert.InRange(
@@ -1116,6 +1080,24 @@ public sealed class MainWindowLayoutTests
         FrameworkElement root,
         string name) =>
         Assert.IsAssignableFrom<FrameworkElement>(root.FindName(name));
+
+    private static IEnumerable<T> FindVisualDescendants<T>(DependencyObject parent)
+        where T : DependencyObject
+    {
+        for (var index = 0; index < VisualTreeHelper.GetChildrenCount(parent); index++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, index);
+            if (child is T match)
+            {
+                yield return match;
+            }
+
+            foreach (var descendant in FindVisualDescendants<T>(child))
+            {
+                yield return descendant;
+            }
+        }
+    }
 
     private static FrameworkElement? FindVisualElement(
         DependencyObject root,

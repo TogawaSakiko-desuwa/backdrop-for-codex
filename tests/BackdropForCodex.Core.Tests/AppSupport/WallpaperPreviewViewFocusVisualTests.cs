@@ -125,70 +125,40 @@ public sealed class WallpaperPreviewViewFocusVisualTests
     }
 
     [Fact]
-    public void CalibrationOverlayCarriesNestedSafeAreaAndLongCenterAxes()
+    public void FocusGuideShowsThirdsOnlyWhileTheCropFocusIsAdjustableAndHovered()
     {
         StaTest.Run(
             () =>
             {
                 var view = new WallpaperPreviewView(new ImagePreviewService());
-                var overlay = FindElement<Grid>(view, "CalibrationOverlay");
-                var proof = FindElement<Rectangle>(view, "ProofBoundary");
-                var proofUnderlay = FindElement<Rectangle>(
-                    view,
-                    "ProofBoundaryContrastUnderlay");
-                var safeArea = FindElement<Rectangle>(view, "SafeAreaBoundary");
-                var safeAreaUnderlay = FindElement<Rectangle>(
-                    view,
-                    "SafeAreaBoundaryContrastUnderlay");
-                var verticalAxis = FindElement<Border>(view, "VerticalProofAxis");
-                var verticalAxisUnderlay = FindElement<Border>(
-                    view,
-                    "VerticalProofAxisContrastUnderlay");
-                var horizontalAxis = FindElement<Border>(view, "HorizontalProofAxis");
-                var horizontalAxisUnderlay = FindElement<Border>(
-                    view,
-                    "HorizontalProofAxisContrastUnderlay");
+                var overlay = FindElement<Grid>(view, "FocusGuideOverlay");
+                var verticalLeft = FindElement<Border>(view, "FocusGuideVerticalLeft");
+                var verticalRight = FindElement<Border>(view, "FocusGuideVerticalRight");
+                var horizontalTop = FindElement<Border>(view, "FocusGuideHorizontalTop");
+                var horizontalBottom = FindElement<Border>(view, "FocusGuideHorizontalBottom");
 
                 Assert.False(overlay.IsHitTestVisible);
+                Assert.Equal(3, overlay.ColumnDefinitions.Count);
+                Assert.Equal(3, overlay.RowDefinitions.Count);
                 AssertStyleSetter(
                     overlay.Style,
                     UIElement.OpacityProperty,
-                    0.34d);
-                AssertFocusHoverEmphasis(overlay.Style, 0.62d);
-                Assert.Equal(new Thickness(8), proof.Margin);
-                Assert.Equal(proof.Margin, proofUnderlay.Margin);
-                Assert.Equal(1, proof.StrokeThickness);
-                Assert.Equal(2, proofUnderlay.StrokeThickness);
-                Assert.NotEqual(proof.Stroke, proofUnderlay.Stroke);
-                Assert.Equal(new Thickness(42, 32, 42, 32), safeArea.Margin);
-                Assert.Equal(safeArea.Margin, safeAreaUnderlay.Margin);
-                Assert.NotEmpty(safeArea.StrokeDashArray);
-                Assert.NotEmpty(safeAreaUnderlay.StrokeDashArray);
-                Assert.Equal(1, safeArea.StrokeThickness);
-                Assert.Equal(2, safeAreaUnderlay.StrokeThickness);
-                Assert.Equal(1, verticalAxis.Width);
-                Assert.Equal(2, verticalAxisUnderlay.Width);
-                Assert.Equal(1, horizontalAxis.Height);
-                Assert.Equal(2, horizontalAxisUnderlay.Height);
-                Assert.NotEqual(verticalAxis.Background, verticalAxisUnderlay.Background);
-                Assert.NotEqual(horizontalAxis.Background, horizontalAxisUnderlay.Background);
-
+                    0d);
+                AssertFocusHoverEmphasis(overlay.Style, 0.45d);
                 AssertHighContrastOverride(
                     overlay.Style,
                     UIElement.OpacityProperty,
                     1d);
-                AssertHighContrastOverride(
-                    proof.Style,
-                    Shape.StrokeProperty);
-                AssertHighContrastOverride(
-                    proofUnderlay.Style,
-                    Shape.StrokeProperty);
-                AssertHighContrastOverride(
-                    verticalAxis.Style,
-                    Border.BackgroundProperty);
-                AssertHighContrastOverride(
-                    verticalAxisUnderlay.Style,
-                    Border.BackgroundProperty);
+                Assert.Equal(1, verticalLeft.Width);
+                Assert.Equal(1, verticalRight.Width);
+                Assert.Equal(1, horizontalTop.Height);
+                Assert.Equal(1, horizontalBottom.Height);
+                Assert.Equal(0, Grid.GetColumn(verticalLeft));
+                Assert.Equal(1, Grid.GetColumn(verticalRight));
+                Assert.Equal(0, Grid.GetRow(horizontalTop));
+                Assert.Equal(1, Grid.GetRow(horizontalBottom));
+                Assert.Null(view.FindName("CalibrationOverlay"));
+                Assert.Null(view.FindName("SafeAreaBoundary"));
             });
     }
 

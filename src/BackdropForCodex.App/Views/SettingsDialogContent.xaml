@@ -2,44 +2,11 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:localization="clr-namespace:BackdropForCodex.App.Services.Localization"
-             xmlns:preferences="clr-namespace:BackdropForCodex.App.Services.Preferences"
              xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
              MinWidth="520"
              MaxWidth="600">
   <Grid>
     <TabControl>
-      <TabItem Header="{localization:Loc Section_Appearance, Fallback=Appearance}">
-        <ScrollViewer VerticalScrollBarVisibility="Auto">
-          <StackPanel Margin="4,18,4,4">
-            <ui:Card>
-              <StackPanel Margin="16">
-                <TextBlock Style="{StaticResource SectionHeadingStyle}"
-                           Text="{localization:Loc Label_Theme, Fallback='App theme'}" />
-                <TextBlock Margin="0,4,0,12"
-                           Style="{StaticResource CaptionTextStyle}"
-                           Text="{localization:Loc Settings_ThemeDescription, Fallback='Follow Windows by default, including high contrast.'}" />
-                <TextBlock x:Name="ProtectedPreferencesNotice"
-                           Margin="0,0,0,12"
-                           Style="{StaticResource CaptionTextStyle}"
-                           TextWrapping="Wrap"
-                           Visibility="Collapsed" />
-                <ComboBox x:Name="ThemeComboBox"
-                          AutomationProperties.Name="{localization:Loc Label_Theme, Fallback='App theme'}"
-                          SelectedValuePath="Tag"
-                          SelectionChanged="ThemeComboBox_SelectionChanged">
-                  <ComboBoxItem Content="{localization:Loc Theme_System, Fallback='Use system setting'}"
-                                Tag="{x:Static preferences:ThemeMode.System}" />
-                  <ComboBoxItem Content="{localization:Loc Theme_Light, Fallback=Light}"
-                                Tag="{x:Static preferences:ThemeMode.Light}" />
-                  <ComboBoxItem Content="{localization:Loc Theme_Dark, Fallback=Dark}"
-                                Tag="{x:Static preferences:ThemeMode.Dark}" />
-                </ComboBox>
-              </StackPanel>
-            </ui:Card>
-          </StackPanel>
-        </ScrollViewer>
-      </TabItem>
-
       <TabItem Header="{localization:Loc Section_SafetyPrivacy, Fallback='Safety &amp; privacy'}">
         <ScrollViewer VerticalScrollBarVisibility="Auto">
           <StackPanel Margin="4,18,4,4">
@@ -140,6 +107,11 @@
                 <TextBlock Foreground="{DynamicResource SystemFillColorCriticalBrush}"
                            FontWeight="SemiBold"
                            Text="{localization:Loc Section_DangerZone, Fallback='Danger zone'}" />
+                <TextBlock x:Name="ProtectedPreferencesNotice"
+                           Margin="0,8,0,0"
+                           Style="{StaticResource CaptionTextStyle}"
+                           TextWrapping="Wrap"
+                           Visibility="Collapsed" />
                 <TextBlock Margin="0,5,0,12"
                            Style="{StaticResource CaptionTextStyle}"
                            Text="{localization:Loc Settings_ResetSummary, Fallback='Restore the official background and permanently delete all app settings, recent media, acknowledgements, preferences, shortcuts, and protected backups.'}" />

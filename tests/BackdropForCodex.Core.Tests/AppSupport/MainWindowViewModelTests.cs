@@ -328,8 +328,7 @@ public sealed class MainWindowViewModelTests
         await viewModel.SourceLibrary.RefreshCommand.ExecuteAsync(parameter: null);
 
         Assert.False(viewModel.SourceLibrary.HasDiscoveryFailures);
-        Assert.Equal(UiStatusTone.Informational, viewModel.StatusTone);
-        Assert.Equal("Ready", viewModel.StatusTitle);
+        Assert.False(viewModel.IsStatusOpen);
     }
 
     [Fact]
@@ -1247,6 +1246,9 @@ public sealed class MainWindowViewModelTests
         using var preferencesStore = new FakeAppPreferencesStore();
         using var viewModel = CreateViewModel(wallpaper, preferencesStore);
         await viewModel.InitializeAsync();
+        Assert.False(viewModel.IsStatusOpen);
+        viewModel.ShowUnexpectedError(
+            new InvalidOperationException("fixture status before apply"));
         Assert.True(viewModel.IsStatusOpen);
 
         var apply = viewModel.ApplyAsync();
@@ -1591,7 +1593,7 @@ public sealed class MainWindowViewModelTests
             using var viewModel = CreateViewModel(wallpaper, preferencesStore);
 
             await viewModel.InitializeAsync();
-            Assert.Equal(ThemeMode.System, viewModel.ThemeMode);
+            Assert.Equal(ThemeMode.Dark, viewModel.ThemeMode);
             Assert.False(viewModel.HasShownTrayTip);
             Assert.False(viewModel.ShouldShowFirstCloseTip);
 
