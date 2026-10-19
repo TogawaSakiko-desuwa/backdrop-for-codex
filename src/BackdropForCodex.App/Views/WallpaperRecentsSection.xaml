@@ -222,7 +222,7 @@
                       VerticalAlignment="Center"
                       ToolTip="{Binding DisplayName}">
             <TextBlock Text="{Binding DisplayName}"
-                       FontSize="{DynamicResource WorkbenchTypeBody}"
+                       FontSize="{DynamicResource WorkbenchTypeControl}"
                        TextTrimming="CharacterEllipsis" />
             <TextBlock Margin="0,2,0,0"
                        TextTrimming="CharacterEllipsis"

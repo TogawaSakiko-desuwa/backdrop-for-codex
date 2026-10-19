@@ -582,7 +582,7 @@ public sealed class MainWindowLayoutTests
     [Theory]
     [InlineData("4")]
     [InlineData("2147483648")]
-    public async Task ProtectedPreferencesDisableThemeSelectionAndExplainResetRequirement(
+    public async Task ProtectedPreferencesExplainResetRequirement(
         string schemaVersion)
     {
         var preferencesPath = Path.Combine(
@@ -609,18 +609,15 @@ public sealed class MainWindowLayoutTests
                         var content = new SettingsDialogContent(
                             fixture.ViewModel,
                             fixture.Text);
-                        var theme = Assert.IsType<ComboBox>(
-                            content.FindName("ThemeComboBox"));
                         var notice = Assert.IsType<TextBlock>(
                             content.FindName("ProtectedPreferencesNotice"));
 
-                        Assert.False(theme.IsEnabled);
+                        Assert.Null(content.FindName("ThemeComboBox"));
                         Assert.Equal(Visibility.Visible, notice.Visibility);
                         Assert.Contains(
                             schemaVersion,
                             notice.Text,
                             StringComparison.Ordinal);
-                        Assert.Equal(fixture.ViewModel.ThemeMode, theme.SelectedValue);
                     });
             }
             finally
@@ -646,8 +643,6 @@ public sealed class MainWindowLayoutTests
                     var content = new SettingsDialogContent(
                         fixture.ViewModel,
                         fixture.Text);
-                    var theme = Assert.IsType<ComboBox>(
-                        content.FindName("ThemeComboBox"));
                     var notice = Assert.IsType<TextBlock>(
                         content.FindName("ProtectedPreferencesNotice"));
                     content.RaiseEvent(
@@ -666,14 +661,13 @@ public sealed class MainWindowLayoutTests
                         "2147483648");
                     protectedProperty.SetValue(fixture.ViewModel.Settings, true);
 
-                    Assert.False(theme.IsEnabled);
                     Assert.Equal(Visibility.Visible, notice.Visibility);
                     Assert.Contains("2147483648", notice.Text, StringComparison.Ordinal);
 
                     content.RaiseEvent(
                         new RoutedEventArgs(FrameworkElement.UnloadedEvent));
                     protectedProperty.SetValue(fixture.ViewModel.Settings, false);
-                    Assert.False(theme.IsEnabled);
+                    Assert.Equal(Visibility.Visible, notice.Visibility);
                 }
                 finally
                 {

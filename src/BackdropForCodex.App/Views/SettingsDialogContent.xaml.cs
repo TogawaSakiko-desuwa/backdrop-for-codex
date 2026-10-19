@@ -2,29 +2,16 @@ using System.ComponentModel;
 using System.Globalization;
 using System.Reflection;
 using System.Windows;
-using System.Windows.Automation;
 using System.Windows.Controls;
 using BackdropForCodex.App.Services.Localization;
 using BackdropForCodex.App.ViewModels;
-using AppThemeMode = BackdropForCodex.App.Services.Preferences.ThemeMode;
 
 namespace BackdropForCodex.App.Views;
-
-public sealed class ThemeModeChangedEventArgs : EventArgs
-{
-    public ThemeModeChangedEventArgs(AppThemeMode mode)
-    {
-        Mode = mode;
-    }
-
-    public AppThemeMode Mode { get; }
-}
 
 public partial class SettingsDialogContent : UserControl
 {
     private readonly MainWindowViewModel _viewModel;
     private readonly IAppTextProvider _text;
-    private bool _initialized;
     private bool _isViewModelSubscribed;
 
     public SettingsDialogContent(
@@ -34,7 +21,6 @@ public partial class SettingsDialogContent : UserControl
         _viewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
         _text = text ?? throw new ArgumentNullException(nameof(text));
         InitializeComponent();
-        ThemeComboBox.SelectedValue = _viewModel.ThemeMode;
         RefreshPreferencesProtectionState();
         VersionText.Text =
             $"v{Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.0.0"}";
@@ -45,10 +31,7 @@ public partial class SettingsDialogContent : UserControl
         RestoreBackupButton.IsEnabled = _viewModel.CanRestoreVersion1Backup;
         Loaded += SettingsDialogContent_Loaded;
         Unloaded += SettingsDialogContent_Unloaded;
-        _initialized = true;
     }
-
-    public event EventHandler<ThemeModeChangedEventArgs>? ThemeChangeRequested;
 
     public event EventHandler? RiskRevokeRequested;
 
@@ -95,11 +78,9 @@ public partial class SettingsDialogContent : UserControl
 
     private void RefreshPreferencesProtectionState()
     {
-        ThemeComboBox.IsEnabled = !_viewModel.HasProtectedPreferences;
         if (!_viewModel.HasProtectedPreferences)
         {
             ProtectedPreferencesNotice.Visibility = Visibility.Collapsed;
-            AutomationProperties.SetHelpText(ThemeComboBox, string.Empty);
             return;
         }
 
@@ -115,7 +96,6 @@ public partial class SettingsDialogContent : UserControl
                 "Settings_ProtectedPreferencesUnreadable",
                 "App preferences could not be safely read and are protected from replacement. Use Reset app to replace them.");
         ProtectedPreferencesNotice.Visibility = Visibility.Visible;
-        AutomationProperties.SetHelpText(ThemeComboBox, ProtectedPreferencesNotice.Text);
     }
 
     public void RefreshRiskState()
@@ -128,19 +108,6 @@ public partial class SettingsDialogContent : UserControl
         RevokeRiskButton.IsEnabled =
             _viewModel.Editor.AcceptedCdpRisk &&
             _viewModel.CanEdit;
-    }
-
-    private void ThemeComboBox_SelectionChanged(
-        object sender,
-        SelectionChangedEventArgs e)
-    {
-        if (!_initialized ||
-            ThemeComboBox.SelectedValue is not AppThemeMode mode)
-        {
-            return;
-        }
-
-        ThemeChangeRequested?.Invoke(this, new ThemeModeChangedEventArgs(mode));
     }
 
     private void RevokeRiskButton_Click(object sender, RoutedEventArgs e)
@@ -157,5 +124,4 @@ public partial class SettingsDialogContent : UserControl
 
     private void DiagnosticExportButton_Click(object sender, RoutedEventArgs e) =>
         DiagnosticExportRequested?.Invoke(this, EventArgs.Empty);
-
 }

@@ -180,7 +180,7 @@
             <StackPanel VerticalAlignment="Center"
                         ToolTip="{Binding MediaDisplayName}">
               <TextBlock Text="{Binding DisplayName}"
-                         FontSize="{DynamicResource WorkbenchTypeBody}"
+                         FontSize="{DynamicResource WorkbenchTypeControl}"
                          FontWeight="SemiBold"
                          TextTrimming="CharacterEllipsis" />
               <TextBlock Margin="0,2,0,0"

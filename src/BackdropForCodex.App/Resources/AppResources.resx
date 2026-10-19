@@ -101,7 +101,6 @@
   <data name="Source_UseForProfile" xml:space="preserve"><value>Use in current profile</value></data>
   <data name="Section_Wallpaper" xml:space="preserve"><value>Wallpaper</value></data>
   <data name="Section_RecentMedia" xml:space="preserve"><value>Recent media</value></data>
-  <data name="Section_Appearance" xml:space="preserve"><value>Appearance</value></data>
   <data name="Section_SafetyPrivacy" xml:space="preserve"><value>Safety &amp; privacy</value></data>
   <data name="Section_Privacy" xml:space="preserve"><value>Privacy</value></data>
   <data name="Section_About" xml:space="preserve"><value>About</value></data>
@@ -117,10 +116,6 @@
   <data name="Label_Blur" xml:space="preserve"><value>Background blur</value></data>
   <data name="Label_DarkOverlay" xml:space="preserve"><value>Dark theme overlay</value></data>
   <data name="Label_LightOverlay" xml:space="preserve"><value>Light theme overlay</value></data>
-  <data name="Label_Theme" xml:space="preserve"><value>App theme</value></data>
-  <data name="Theme_System" xml:space="preserve"><value>Use system setting</value></data>
-  <data name="Theme_Light" xml:space="preserve"><value>Light</value></data>
-  <data name="Theme_Dark" xml:space="preserve"><value>Dark</value></data>
   <data name="Fit_Cover" xml:space="preserve"><value>Crop to fill</value></data>
   <data name="Fit_Contain" xml:space="preserve"><value>Show entire media</value></data>
   <data name="Fit_Stretch" xml:space="preserve"><value>Stretch to fit</value></data>
@@ -249,7 +244,6 @@
   <data name="Risk_AcknowledgementSaved" xml:space="preserve"><value>Acknowledgement saved</value></data>
   <data name="Risk_NotAcknowledged" xml:space="preserve"><value>Not confirmed. You will be asked before enhanced launch.</value></data>
   <data name="Risk_Revoked" xml:space="preserve"><value>The acknowledgement has been revoked. You will be asked again before the next enhanced launch.</value></data>
-  <data name="Settings_ThemeDescription" xml:space="preserve"><value>Follow Windows by default, including high-contrast mode.</value></data>
   <data name="Settings_ProtectedPreferencesFuture" xml:space="preserve"><value>App preferences use newer schema version {0} and are read-only. Use Reset app to replace them.</value></data>
   <data name="Settings_ProtectedPreferencesUnreadable" xml:space="preserve"><value>App preferences could not be safely read and are protected from replacement. Use Reset app to replace them.</value></data>
   <data name="Settings_RiskDescription" xml:space="preserve"><value>Review or revoke the local debugging acknowledgement.</value></data>

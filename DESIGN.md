@@ -86,12 +86,12 @@ the wallpaper is the only thing in the window that is allowed to be loud.
    tooltips and accessibility help text, not in visible captions. There is no
    onboarding banner on launch; the footer already says whether the official
    background or a wallpaper is active.
-5. **An editor, dark by default.** New installs start in the dark theme. In dark the
-   shell uses the editor palette: a near-black stage (`#0F1012`), floating panes
-   (`#1B1D21` at 95 percent) with a `#2B2E33` hairline, and a `#161719` command bar.
-   The light theme keeps the stock Fluent roles, and high contrast swaps every surface
-   for system colors. The resolved state is published as the inherited attached
-   property `WorkbenchAppearance.IsDark`, which the theme styles trigger on.
+5. **An editor, dark by design.** The shell always runs the dark Fluent theme with the
+   editor palette: a near-black stage (`#0F1012`), floating panes (`#1B1D21` at 95
+   percent) with a `#2B2E33` hairline, and a `#161719` command bar. There is no theme
+   picker. Windows high contrast still replaces every surface with system colors; the
+   resolved state is published as the inherited attached property
+   `WorkbenchAppearance.IsDark`, which the theme styles trigger on.
 
 ## Layout
 
@@ -139,8 +139,9 @@ the wallpaper is the only thing in the window that is allowed to be loud.
 
 ### Inspector
 
-- Group heading 16 DIP semibold. Labels 14 DIP regular, values 14 DIP secondary,
-  right aligned. Sliders are native Fluent with 1 percent keyboard steps.
+- Group captions 12 DIP semibold in the secondary color. Labels 13 DIP regular, values
+  13 DIP secondary, right aligned. Sliders are native Fluent with 1 percent keyboard
+  steps.
 - Readability holds panel opacity, background blur, and the dark and light theme
   overlays. Composition holds media fit and, for Crop to fill, the crop focus with a
   Center button. The focus hint is a tooltip on that row.

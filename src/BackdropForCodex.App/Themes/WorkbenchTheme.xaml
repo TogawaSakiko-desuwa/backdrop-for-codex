@@ -35,6 +35,7 @@
   <sys:Double x:Key="WorkbenchTypeDisplay">20</sys:Double>
   <sys:Double x:Key="WorkbenchTypeSection">16</sys:Double>
   <sys:Double x:Key="WorkbenchTypeBody">14</sys:Double>
+  <sys:Double x:Key="WorkbenchTypeControl">13</sys:Double>
   <sys:Double x:Key="WorkbenchTypeCaption">12</sys:Double>
   <sys:Double x:Key="WorkbenchTargetMinimum">32</sys:Double>
   <sys:Double x:Key="WorkbenchPrimaryTargetMinimum">44</sys:Double>
@@ -186,6 +187,14 @@
     <Setter Property="TextTrimming" Value="CharacterEllipsis" />
   </Style>
 
+  <!-- Small muted group captions, the way an editor's properties panel labels its sections. -->
+  <Style x:Key="WorkbenchGroupCaptionTextStyle" TargetType="TextBlock">
+    <Setter Property="FontSize" Value="{DynamicResource WorkbenchTypeCaption}" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
+    <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+  </Style>
+
   <Style x:Key="WorkbenchBodyTextStyle" TargetType="TextBlock">
     <Setter Property="FontSize" Value="{DynamicResource WorkbenchTypeBody}" />
     <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
@@ -280,7 +289,7 @@
   </Style>
 
   <Style x:Key="WorkbenchInspectorLabelStyle" TargetType="TextBlock">
-    <Setter Property="FontSize" Value="{DynamicResource WorkbenchTypeBody}" />
+    <Setter Property="FontSize" Value="{DynamicResource WorkbenchTypeControl}" />
     <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
     <Setter Property="VerticalAlignment" Value="Center" />
     <Setter Property="TextTrimming" Value="CharacterEllipsis" />
@@ -288,7 +297,7 @@
 
   <!-- Readouts are plain right-aligned text; the slider carries the emphasis. -->
   <Style x:Key="WorkbenchValueTextStyle" TargetType="TextBlock">
-    <Setter Property="FontSize" Value="{DynamicResource WorkbenchTypeBody}" />
+    <Setter Property="FontSize" Value="{DynamicResource WorkbenchTypeControl}" />
     <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
     <Setter Property="VerticalAlignment" Value="Center" />
     <Setter Property="TextAlignment" Value="Right" />

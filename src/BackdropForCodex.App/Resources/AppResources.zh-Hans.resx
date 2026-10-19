@@ -101,7 +101,6 @@
   <data name="Source_UseForProfile" xml:space="preserve"><value>用于当前方案</value></data>
   <data name="Section_Wallpaper" xml:space="preserve"><value>壁纸</value></data>
   <data name="Section_RecentMedia" xml:space="preserve"><value>最近使用</value></data>
-  <data name="Section_Appearance" xml:space="preserve"><value>外观</value></data>
   <data name="Section_SafetyPrivacy" xml:space="preserve"><value>安全与隐私</value></data>
   <data name="Section_Privacy" xml:space="preserve"><value>隐私</value></data>
   <data name="Section_About" xml:space="preserve"><value>关于</value></data>
@@ -117,10 +116,6 @@
   <data name="Label_Blur" xml:space="preserve"><value>背景模糊</value></data>
   <data name="Label_DarkOverlay" xml:space="preserve"><value>深色主题遮罩</value></data>
   <data name="Label_LightOverlay" xml:space="preserve"><value>浅色主题遮罩</value></data>
-  <data name="Label_Theme" xml:space="preserve"><value>应用主题</value></data>
-  <data name="Theme_System" xml:space="preserve"><value>使用系统设置</value></data>
-  <data name="Theme_Light" xml:space="preserve"><value>浅色</value></data>
-  <data name="Theme_Dark" xml:space="preserve"><value>深色</value></data>
   <data name="Fit_Cover" xml:space="preserve"><value>裁剪填满</value></data>
   <data name="Fit_Contain" xml:space="preserve"><value>完整显示</value></data>
   <data name="Fit_Stretch" xml:space="preserve"><value>拉伸</value></data>
@@ -249,7 +244,6 @@
   <data name="Risk_AcknowledgementSaved" xml:space="preserve"><value>风险确认已保存</value></data>
   <data name="Risk_NotAcknowledged" xml:space="preserve"><value>尚未确认。使用增强启动前会再次询问。</value></data>
   <data name="Risk_Revoked" xml:space="preserve"><value>确认已撤销。下次增强启动前会再次询问。</value></data>
-  <data name="Settings_ThemeDescription" xml:space="preserve"><value>默认跟随 Windows，也会跟随高对比度模式。</value></data>
   <data name="Settings_ProtectedPreferencesFuture" xml:space="preserve"><value>应用偏好来自更新的架构版本 {0}，当前为只读。若要替换，请使用“重置应用”。</value></data>
   <data name="Settings_ProtectedPreferencesUnreadable" xml:space="preserve"><value>应用偏好无法安全读取，已保护为只读。若要替换，请使用“重置应用”。</value></data>
   <data name="Settings_RiskDescription" xml:space="preserve"><value>查看或撤销本机调试风险确认。</value></data>

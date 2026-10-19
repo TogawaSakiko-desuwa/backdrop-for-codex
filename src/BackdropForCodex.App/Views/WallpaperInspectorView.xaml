@@ -36,7 +36,7 @@
             <ColumnDefinition Width="Auto" />
           </Grid.ColumnDefinitions>
           <TextBlock Text="{localization:Loc Section_Wallpaper, Fallback=Wallpaper}"
-                     Style="{DynamicResource WorkbenchSectionHeadingTextStyle}"
+                     Style="{DynamicResource WorkbenchGroupCaptionTextStyle}"
                      VerticalAlignment="Center"
                      AutomationProperties.HeadingLevel="Level2" />
           <StackPanel Grid.Column="1" Orientation="Horizontal">
@@ -61,9 +61,10 @@
           </StackPanel>
         </Grid>
 
-        <StackPanel Margin="0,12,0,0">
+        <StackPanel Margin="0,10,0,0">
           <TextBlock Text="{Binding SelectedMediaName}"
                      Style="{DynamicResource WorkbenchBodyTextStyle}"
+                     FontSize="{DynamicResource WorkbenchTypeControl}"
                      TextWrapping="NoWrap"
                      TextTrimming="CharacterEllipsis"
                      ToolTip="{Binding SelectedMediaName}" />
@@ -74,14 +75,14 @@
                      Visibility="{Binding IsMediaMissing, Converter={StaticResource BooleanToVisibilityConverter}}" />
         </StackPanel>
 
-        <Border Margin="0,24,0,20" Style="{DynamicResource WorkbenchDividerStyle}" />
+        <Border Margin="0,20,0,16" Style="{DynamicResource WorkbenchDividerStyle}" />
 
         <!-- Composition -->
         <TextBlock Text="{localization:Loc Section_Composition, Fallback=Composition}"
-                   Style="{DynamicResource WorkbenchSectionHeadingTextStyle}"
+                   Style="{DynamicResource WorkbenchGroupCaptionTextStyle}"
                    AutomationProperties.HeadingLevel="Level2" />
 
-        <TextBlock Margin="0,16,0,6"
+        <TextBlock Margin="0,12,0,6"
                    Style="{DynamicResource WorkbenchInspectorLabelStyle}"
                    Text="{localization:Loc Label_Fit, Fallback='Media fit'}" />
         <ComboBox MinHeight="36"
@@ -122,14 +123,14 @@
                      Click="CenterFocus_Click" />
         </Grid>
 
-        <Border Margin="0,24,0,20" Style="{DynamicResource WorkbenchDividerStyle}" />
+        <Border Margin="0,20,0,16" Style="{DynamicResource WorkbenchDividerStyle}" />
 
         <!-- Readability -->
         <TextBlock Text="{localization:Loc Section_Readability, Fallback=Readability}"
-                   Style="{DynamicResource WorkbenchSectionHeadingTextStyle}"
+                   Style="{DynamicResource WorkbenchGroupCaptionTextStyle}"
                    AutomationProperties.HeadingLevel="Level2" />
 
-        <Grid Margin="0,16,0,0">
+        <Grid Margin="0,12,0,0">
           <TextBlock Style="{DynamicResource WorkbenchInspectorLabelStyle}"
                      Text="{localization:Loc Label_PanelOpacity, Fallback='Panel opacity'}" />
           <TextBlock HorizontalAlignment="Right"

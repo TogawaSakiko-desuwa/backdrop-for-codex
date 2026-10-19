@@ -227,11 +227,6 @@ public partial class MainWindow : FluentWindow
     private void ViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         _ = sender;
-        if (e.PropertyName == nameof(MainWindowViewModel.ThemeMode))
-        {
-            ApplyTheme();
-        }
-
         if (e.PropertyName is
             nameof(MainWindowViewModel.FooterStatusText) or
             nameof(MainWindowViewModel.StatusTitle) or
@@ -282,7 +277,7 @@ public partial class MainWindow : FluentWindow
 
     private void ApplyTheme()
     {
-        _themeController.Apply(_viewModel.ThemeMode);
+        _themeController.Apply();
         SetCurrentValue(
             IsWorkbenchHighContrastProperty,
             SystemParameters.HighContrast);
@@ -656,17 +651,6 @@ public partial class MainWindow : FluentWindow
         var restoreBackupRequested = false;
         ContentDialog? dialog = null;
 
-        content.ThemeChangeRequested += async (_, eventArgs) =>
-        {
-            try
-            {
-                await _viewModel.SetThemeModeAsync(eventArgs.Mode);
-            }
-            catch (Exception exception)
-            {
-                ReportUnexpectedError(exception);
-            }
-        };
         content.RiskRevokeRequested += async (_, _) =>
         {
             try
