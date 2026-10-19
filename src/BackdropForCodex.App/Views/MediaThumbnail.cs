@@ -10,8 +10,9 @@ namespace BackdropForCodex.App.Views;
 
 /// <summary>
 /// Draws a cover-fitted, rounded thumbnail for a wallpaper reference. Provider thumbnails come
-/// from the shared thumbnail service; local images fall back to the bounded in-memory decoder.
-/// Loading is best effort: a missing thumbnail leaves the placeholder fill in place.
+/// from the shared thumbnail service; local images use the bounded in-memory decoder and local
+/// videos render one still frame. Loading is best effort: a missing thumbnail leaves the
+/// placeholder fill in place.
 /// </summary>
 public sealed class MediaThumbnail : FrameworkElement
 {
@@ -212,6 +213,13 @@ public sealed class MediaThumbnail : FrameworkElement
                     typeof(ImageSource),
                     string.Empty,
                     CultureInfo.InvariantCulture) as BitmapSource;
+            }
+
+            if (bitmap is null && LocalVideoThumbnailCache.SupportsPath(localPath))
+            {
+                bitmap = await LocalVideoThumbnailCache
+                    .LoadAsync(localPath!, AppWallpaperSources.Preview)
+                    .ConfigureAwait(true);
             }
         }
         catch (Exception)

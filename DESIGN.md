@@ -116,7 +116,8 @@ the wallpaper is the only thing in the window that is allowed to be loud.
 - Profile selection is a neutral fill plus a 2 DIP accent outline on the thumbnail;
   recent rows keep a 3 DIP accent rail on the left. No accent-filled tiles.
 - Thumbnails come from the shared thumbnail service, so Wallpaper Engine projects show
-  their project preview, not a glyph. A glyph appears only while no image is available.
+  their project preview. Local videos show one still frame rendered through WPF's media
+  pipeline. A glyph appears only while no image is available.
 - The Wallpaper Engine entry is one persistent button with a status dot.
 
 ### Preview stage
