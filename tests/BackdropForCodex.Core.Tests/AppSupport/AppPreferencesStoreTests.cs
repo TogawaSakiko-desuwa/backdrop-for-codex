@@ -30,7 +30,7 @@ public sealed class AppPreferencesStoreTests
             var preferences = await store.LoadAsync();
 
             Assert.Equal(AppPreferencesV1.CurrentSchemaVersion, preferences.SchemaVersion);
-            Assert.Equal(ThemeMode.System, preferences.ThemeMode);
+            Assert.Equal(ThemeMode.Dark, preferences.ThemeMode);
             Assert.False(preferences.HasShownTrayTip);
             Assert.False(preferences.HasAcknowledgedWebWallpaperPrivacyNotice);
         }

@@ -1,7 +1,8 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:sys="clr-namespace:System;assembly=System.Runtime"
-                    xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml">
+                    xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                    xmlns:appearance="clr-namespace:BackdropForCodex.App.Services.Appearance">
   <!-- Precision-workbench scale. Values stay discrete so adjacent panes share one rhythm. -->
   <sys:Double x:Key="WorkbenchSpace4">4</sys:Double>
   <sys:Double x:Key="WorkbenchSpace8">8</sys:Double>
@@ -41,7 +42,13 @@
   <FontFamily x:Key="WorkbenchDisplayFontFamily">Segoe UI Variable Display, Segoe UI</FontFamily>
   <FontFamily x:Key="WorkbenchTextFontFamily">Segoe UI Variable Text, Segoe UI</FontFamily>
 
-  <!-- Fixed dark tiles for provider thumbnails; everything else follows the Windows theme. -->
+  <!-- Editor palette. Used while the resolved theme is dark; light theme keeps the Fluent roles. -->
+  <SolidColorBrush x:Key="WorkbenchEditorStageBrush" Color="#0F1012" />
+  <SolidColorBrush x:Key="WorkbenchEditorPaneBrush" Color="#F21B1D21" />
+  <SolidColorBrush x:Key="WorkbenchEditorToolbarBrush" Color="#161719" />
+  <SolidColorBrush x:Key="WorkbenchEditorHairlineBrush" Color="#2B2E33" />
+
+  <!-- Fixed dark tiles for provider thumbnails. -->
   <SolidColorBrush x:Key="WorkbenchStageMatBrush" Color="#151B22" />
   <SolidColorBrush x:Key="WorkbenchStageTextBrush" Color="#F5F7F9" />
   <SolidColorBrush x:Key="WorkbenchStageMutedTextBrush" Color="#AAB4BE" />
@@ -79,18 +86,34 @@
     <Setter Property="SnapsToDevicePixels" Value="True" />
   </Style>
 
+  <!-- Floating panes: rounded, hairlined, one tone above the stage. -->
   <Style x:Key="WorkbenchRailBorderStyle" TargetType="Border">
     <Setter Property="Background" Value="{DynamicResource LayerFillColorDefaultBrush}" />
     <Setter Property="BorderBrush" Value="{DynamicResource DividerStrokeColorDefaultBrush}" />
-    <Setter Property="BorderThickness" Value="0,0,1,0" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="{DynamicResource WorkbenchRadius12}" />
+    <Setter Property="Padding" Value="0,4" />
     <Setter Property="SnapsToDevicePixels" Value="True" />
+    <Style.Triggers>
+      <DataTrigger Binding="{Binding Path=(appearance:WorkbenchAppearance.IsDark), RelativeSource={RelativeSource Self}}" Value="True">
+        <Setter Property="Background" Value="{DynamicResource WorkbenchEditorPaneBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource WorkbenchEditorHairlineBrush}" />
+      </DataTrigger>
+    </Style.Triggers>
   </Style>
 
   <Style x:Key="WorkbenchInspectorBorderStyle" TargetType="Border">
     <Setter Property="Background" Value="{DynamicResource LayerFillColorAltBrush}" />
     <Setter Property="BorderBrush" Value="{DynamicResource DividerStrokeColorDefaultBrush}" />
-    <Setter Property="BorderThickness" Value="1,0,0,0" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="{DynamicResource WorkbenchRadius12}" />
     <Setter Property="SnapsToDevicePixels" Value="True" />
+    <Style.Triggers>
+      <DataTrigger Binding="{Binding Path=(appearance:WorkbenchAppearance.IsDark), RelativeSource={RelativeSource Self}}" Value="True">
+        <Setter Property="Background" Value="{DynamicResource WorkbenchEditorPaneBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource WorkbenchEditorHairlineBrush}" />
+      </DataTrigger>
+    </Style.Triggers>
   </Style>
 
   <!-- A single hairline frames the 16:9 preview; the stage itself carries the tone. -->
@@ -100,6 +123,9 @@
     <Setter Property="BorderThickness" Value="1" />
     <Setter Property="SnapsToDevicePixels" Value="True" />
     <Style.Triggers>
+      <DataTrigger Binding="{Binding Path=(appearance:WorkbenchAppearance.IsDark), RelativeSource={RelativeSource Self}}" Value="True">
+        <Setter Property="BorderBrush" Value="{DynamicResource WorkbenchEditorHairlineBrush}" />
+      </DataTrigger>
       <DataTrigger Binding="{Binding IsWorkbenchHighContrast, RelativeSource={RelativeSource AncestorType={x:Type Window}}}" Value="True">
         <Setter Property="Background" Value="{DynamicResource {x:Static SystemColors.WindowBrushKey}}" />
         <Setter Property="BorderBrush" Value="{DynamicResource {x:Static SystemColors.WindowTextBrushKey}}" />
@@ -107,12 +133,34 @@
     </Style.Triggers>
   </Style>
 
-  <!-- The stage sits one tone below the panes in light and dark themes alike. -->
+  <!-- The stage: near-black in the editor palette, one tone below the panes in light theme. -->
   <Style x:Key="WorkbenchStageStyle" TargetType="Grid">
     <Setter Property="Background" Value="{DynamicResource SolidBackgroundFillColorSecondaryBrush}" />
     <Style.Triggers>
+      <DataTrigger Binding="{Binding Path=(appearance:WorkbenchAppearance.IsDark), RelativeSource={RelativeSource Self}}" Value="True">
+        <Setter Property="Background" Value="{DynamicResource WorkbenchEditorStageBrush}" />
+      </DataTrigger>
       <DataTrigger Binding="{Binding IsWorkbenchHighContrast, RelativeSource={RelativeSource AncestorType={x:Type Window}}}" Value="True">
         <Setter Property="Background" Value="{DynamicResource {x:Static SystemColors.WindowBrushKey}}" />
+      </DataTrigger>
+    </Style.Triggers>
+  </Style>
+
+  <!-- Window shell behind the title bar; transparent so Mica shows in light theme. -->
+  <Style x:Key="WorkbenchShellStyle" TargetType="Grid">
+    <Setter Property="Background" Value="{DynamicResource WorkbenchTransparentBrush}" />
+    <Style.Triggers>
+      <DataTrigger Binding="{Binding Path=(appearance:WorkbenchAppearance.IsDark), RelativeSource={RelativeSource Self}}" Value="True">
+        <Setter Property="Background" Value="{DynamicResource WorkbenchEditorStageBrush}" />
+      </DataTrigger>
+    </Style.Triggers>
+  </Style>
+
+  <Style x:Key="WorkbenchToolbarStyle" TargetType="Grid">
+    <Setter Property="Background" Value="{DynamicResource LayerFillColorDefaultBrush}" />
+    <Style.Triggers>
+      <DataTrigger Binding="{Binding Path=(appearance:WorkbenchAppearance.IsDark), RelativeSource={RelativeSource Self}}" Value="True">
+        <Setter Property="Background" Value="{DynamicResource WorkbenchEditorToolbarBrush}" />
       </DataTrigger>
     </Style.Triggers>
   </Style>
@@ -223,6 +271,12 @@
     <Setter Property="BorderBrush" Value="{DynamicResource DividerStrokeColorDefaultBrush}" />
     <Setter Property="BorderThickness" Value="0,1,0,0" />
     <Setter Property="SnapsToDevicePixels" Value="True" />
+    <Style.Triggers>
+      <DataTrigger Binding="{Binding Path=(appearance:WorkbenchAppearance.IsDark), RelativeSource={RelativeSource Self}}" Value="True">
+        <Setter Property="Background" Value="{DynamicResource WorkbenchEditorToolbarBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource WorkbenchEditorHairlineBrush}" />
+      </DataTrigger>
+    </Style.Triggers>
   </Style>
 
   <Style x:Key="WorkbenchInspectorLabelStyle" TargetType="TextBlock">

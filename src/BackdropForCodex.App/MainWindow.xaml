@@ -29,6 +29,7 @@
   </ui:FluentWindow.Resources>
 
   <Grid x:Name="RootLayout"
+        Style="{DynamicResource WorkbenchShellStyle}"
         TextElement.FontFamily="{DynamicResource WorkbenchTextFontFamily}">
     <Grid.RowDefinitions>
       <RowDefinition Height="48" />
@@ -55,7 +56,10 @@
       </ui:TitleBar.TrailingContent>
     </ui:TitleBar>
 
-    <Grid x:Name="WorkbenchSurface" Grid.Row="1" ClipToBounds="True">
+    <Grid x:Name="WorkbenchSurface"
+          Grid.Row="1"
+          ClipToBounds="True"
+          Style="{DynamicResource WorkbenchStageStyle}">
       <Grid.RowDefinitions>
         <RowDefinition x:Name="MobileToolbarRow" Height="0" />
         <RowDefinition Height="*" />
@@ -72,7 +76,7 @@
             Grid.ColumnSpan="3"
             Height="48"
             Visibility="Collapsed"
-            Background="{DynamicResource LayerFillColorDefaultBrush}">
+            Style="{DynamicResource WorkbenchToolbarStyle}">
         <Grid.ColumnDefinitions>
           <ColumnDefinition Width="Auto" />
           <ColumnDefinition Width="*" />
@@ -152,6 +156,7 @@
       <views:WallpaperLibraryView x:Name="LibraryPane"
                                   Grid.Row="1"
                                   Grid.Column="0"
+                                  Margin="12,12,0,12"
                                   Panel.ZIndex="20"
                                   ProfileItemsSource="{Binding ProfileCards}"
                                   SelectedProfile="{Binding SelectedProfileCard, Mode=TwoWay}"
@@ -192,36 +197,12 @@
             Grid.Column="1"
             Style="{DynamicResource WorkbenchStageStyle}">
         <views:AspectRatioDecorator x:Name="PreviewAspectFrame"
-                                    Margin="24"
+                                    Margin="12"
                                     Ratio="1.7777777777777777"
                                     ContentInset="1">
-          <Grid>
-            <!-- A soft shadow lifts the preview off the stage. It is an empty surface so video playback is not re-rendered through the effect. -->
-            <Border x:Name="PreviewShadow"
-                    Background="{DynamicResource SolidBackgroundFillColorSecondaryBrush}"
-                    IsHitTestVisible="False">
-              <Border.Effect>
-                <DropShadowEffect BlurRadius="40"
-                                  ShadowDepth="12"
-                                  Direction="270"
-                                  Opacity="0.3"
-                                  Color="Black"
-                                  RenderingBias="Quality" />
-              </Border.Effect>
-              <Border.Style>
-                <Style TargetType="Border">
-                  <Style.Triggers>
-                    <DataTrigger Binding="{Binding IsWorkbenchHighContrast, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
-                                 Value="True">
-                      <Setter Property="Visibility" Value="Collapsed" />
-                    </DataTrigger>
-                  </Style.Triggers>
-                </Style>
-              </Border.Style>
-            </Border>
-            <Border x:Name="CalibrationFrame"
-                    Padding="0"
-                    Style="{DynamicResource WorkbenchCalibrationSurfaceStyle}">
+          <Border x:Name="CalibrationFrame"
+                  Padding="0"
+                  Style="{DynamicResource WorkbenchCalibrationSurfaceStyle}">
             <views:WallpaperPreviewView x:Name="PreviewView"
                                         HorizontalAlignment="Stretch"
                                         VerticalAlignment="Stretch"
@@ -235,14 +216,14 @@
                                         DarkOverlay="{Binding DarkOverlay}"
                                         LightOverlay="{Binding LightOverlay}"
                                         FocusChangeRequested="PreviewView_FocusChangeRequested" />
-            </Border>
-          </Grid>
+          </Border>
         </views:AspectRatioDecorator>
       </Grid>
 
       <Border x:Name="InspectorHost"
               Grid.Row="1"
               Grid.Column="2"
+              Margin="0,12,12,12"
               Style="{DynamicResource WorkbenchInspectorBorderStyle}">
         <views:WallpaperInspectorView x:Name="InspectorPane"
                                       DataContext="{Binding Editor}"

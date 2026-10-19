@@ -1590,7 +1590,7 @@ public sealed class MainWindowViewModelTests
             using var viewModel = CreateViewModel(wallpaper, preferencesStore);
 
             await viewModel.InitializeAsync();
-            Assert.Equal(ThemeMode.System, viewModel.ThemeMode);
+            Assert.Equal(ThemeMode.Dark, viewModel.ThemeMode);
             Assert.False(viewModel.HasShownTrayTip);
             Assert.False(viewModel.ShouldShowFirstCloseTip);
 

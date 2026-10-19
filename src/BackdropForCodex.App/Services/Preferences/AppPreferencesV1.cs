@@ -19,7 +19,10 @@ public sealed record AppPreferencesV1
 
     public int SchemaVersion { get; init; } = CurrentSchemaVersion;
 
-    public ThemeMode ThemeMode { get; init; } = ThemeMode.System;
+    /// <summary>
+    /// The workbench is designed as a dark editor; Windows theme following remains available.
+    /// </summary>
+    public ThemeMode ThemeMode { get; init; } = ThemeMode.Dark;
 
     public bool HasShownTrayTip { get; init; }
 

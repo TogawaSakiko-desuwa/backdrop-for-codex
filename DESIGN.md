@@ -86,9 +86,12 @@ the wallpaper is the only thing in the window that is allowed to be loud.
    tooltips and accessibility help text, not in visible captions. There is no
    onboarding banner on launch; the footer already says whether the official
    background or a wallpaper is active.
-5. **Theme follows Windows everywhere.** The stage uses the theme's secondary solid
-   background, one tone below the panes, so light theme does not get a black box in
-   the middle. High contrast swaps every surface for system colors.
+5. **An editor, dark by default.** New installs start in the dark theme. In dark the
+   shell uses the editor palette: a near-black stage (`#0F1012`), floating panes
+   (`#1B1D21` at 95 percent) with a `#2B2E33` hairline, and a `#161719` command bar.
+   The light theme keeps the stock Fluent roles, and high contrast swaps every surface
+   for system colors. The resolved state is published as the inherited attached
+   property `WorkbenchAppearance.IsDark`, which the theme styles trigger on.
 
 ## Layout
 
@@ -96,9 +99,10 @@ the wallpaper is the only thing in the window that is allowed to be loud.
   Pause, Restore official, and the single accent Apply button (44 DIP) on the right.
 - Library rail 224 DIP; collapses to a 56 DIP icon rail between 960 and 1279 DIP;
   below 960 DIP the panes stack and the rail opens as a drawer.
-- Preview stage: a 16:9 frame inset 24 DIP from the stage edges, bordered by a
-  single 1 DIP hairline and lifted by one soft shadow (blur 40, depth 12, 30 percent).
-  The stage color is `SolidBackgroundFillColorSecondary`. High contrast drops the shadow.
+- The stage spans the whole workbench behind the panes. Library and inspector float on
+  it as 12 DIP radius cards with a 12 DIP gutter (column widths are pane width plus the
+  gutter). The 16:9 preview sits in the remaining space with the same 12 DIP gutter and a
+  single 1 DIP hairline; there is no header, inset frame, or shadow.
 - Inspector: profile name pinned at the top (20 DIP display), then three groups
   separated by 1 DIP dividers: Wallpaper, Composition, Readability.
 - Spacing stays on an 8 DIP rhythm with 4 DIP half steps; 24 DIP between groups.
@@ -157,5 +161,5 @@ the wallpaper is the only thing in the window that is allowed to be loud.
 - Don't explain a control in a visible caption when a tooltip will do.
 - Don't show a status banner that only says the app is ready.
 - Don't fix the stage to a dark color in light theme.
-- Don't use gradients, oversized type, or all-caps kickers. The preview shadow is the
-  one shadow in the window; cards and panes stay flat.
+- Don't use gradients, oversized type, all-caps kickers, or decorative shadows; the
+  stage, gutters, and hairlines carry the depth.

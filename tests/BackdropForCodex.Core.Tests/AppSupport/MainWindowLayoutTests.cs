@@ -227,12 +227,14 @@ public sealed class MainWindowLayoutTests
                     var applyAction = Assert.IsAssignableFrom<Wpf.Ui.Controls.Button>(
                         FindElement(window, "ApplyActionButton"));
                     Assert.Equal(
-                        new GridLength(WallpaperLibraryView.ExpandedWidth),
+                        new GridLength(
+                            WallpaperLibraryView.ExpandedWidth + MainWindow.PaneGutter),
                         workbench.ColumnDefinitions[0].Width);
                     Assert.False(library.IsCompact);
                     Assert.Equal(Visibility.Visible, preview.Visibility);
                     Assert.Equal(Visibility.Visible, inspector.Visibility);
-                    Assert.Equal(new Thickness(1, 0, 0, 0), inspector.BorderThickness);
+                    Assert.Equal(new Thickness(1), inspector.BorderThickness);
+                    Assert.Equal(new CornerRadius(12), inspector.CornerRadius);
                     Assert.Equal(Visibility.Collapsed, mobileToolbar.Visibility);
                     Assert.Equal(2, Assert.IsType<Grid>(footerCommandBar.Child).RowDefinitions.Count);
                     Assert.Equal(Visibility.Visible, statusMessage.Visibility);
@@ -251,7 +253,8 @@ public sealed class MainWindowLayoutTests
 
                     ApplyResponsiveLayout(window, width: 1024);
                     Assert.Equal(
-                        new GridLength(WallpaperLibraryView.CompactWidth),
+                        new GridLength(
+                            WallpaperLibraryView.CompactWidth + MainWindow.PaneGutter),
                         workbench.ColumnDefinitions[0].Width);
                     Assert.True(library.IsCompact);
                     Assert.Equal(Visibility.Visible, inspector.Visibility);

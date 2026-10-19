@@ -68,6 +68,8 @@ public partial class MainWindow : FluentWindow
             typeof(MainWindow),
             new FrameworkPropertyMetadata(false));
 
+    internal const double PaneGutter = 12;
+    private const double InspectorWidth = 360;
     private const double MobileBreakpoint = 960;
     private const double ExpandedRailBreakpoint = 1280;
     private const double DesignedMinimumWidth = 640;
@@ -1193,7 +1195,16 @@ public partial class MainWindow : FluentWindow
         UpdateWallpaperEngineLibraryLayout(width);
         InspectorHost.BorderThickness = isMobile
             ? new Thickness(0)
-            : new Thickness(1, 0, 0, 0);
+            : new Thickness(1);
+        InspectorHost.CornerRadius = isMobile
+            ? new CornerRadius(0)
+            : new CornerRadius(12);
+        InspectorHost.Margin = isMobile
+            ? new Thickness(0)
+            : new Thickness(0, PaneGutter, PaneGutter, PaneGutter);
+        LibraryPane.Margin = isMobile
+            ? new Thickness(PaneGutter)
+            : new Thickness(PaneGutter, PaneGutter, 0, PaneGutter);
         FooterCommandBar.Padding = isMobile
             ? new Thickness(12, 8, 12, 8)
             : new Thickness(16, 10, 16, 10);
@@ -1230,11 +1241,11 @@ public partial class MainWindow : FluentWindow
             LibraryPane.IsCompact = useCompactRail;
             LibraryPane.HorizontalAlignment = HorizontalAlignment.Stretch;
             LibraryColumn.Width = new GridLength(
-                useCompactRail
+                (useCompactRail
                     ? WallpaperLibraryView.CompactWidth
-                    : WallpaperLibraryView.ExpandedWidth);
+                    : WallpaperLibraryView.ExpandedWidth) + PaneGutter);
             PreviewColumn.Width = new GridLength(1, GridUnitType.Star);
-            InspectorColumn.Width = new GridLength(360);
+            InspectorColumn.Width = new GridLength(InspectorWidth + PaneGutter);
             Grid.SetRow(LibraryPane, 1);
             Grid.SetRowSpan(LibraryPane, 1);
             Grid.SetColumn(LibraryPane, 0);
