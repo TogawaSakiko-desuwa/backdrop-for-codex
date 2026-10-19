@@ -121,8 +121,9 @@ public sealed class MainWindowLayoutTests
             {
                 var inspector = new WallpaperInspectorView();
 
-                Assert.Empty(FindVisualDescendants<Wpf.Ui.Controls.SymbolIcon>(inspector)
-                    .Where(icon => icon.Symbol != Wpf.Ui.Controls.SymbolRegular.Dismiss16));
+                Assert.DoesNotContain(
+                    FindVisualDescendants<Wpf.Ui.Controls.SymbolIcon>(inspector),
+                    icon => icon.Symbol != Wpf.Ui.Controls.SymbolRegular.Dismiss16);
                 Assert.Empty(FindVisualDescendants<Expander>(inspector));
             });
     }
