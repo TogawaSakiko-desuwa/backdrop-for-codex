@@ -1246,6 +1246,9 @@ public sealed class MainWindowViewModelTests
         using var preferencesStore = new FakeAppPreferencesStore();
         using var viewModel = CreateViewModel(wallpaper, preferencesStore);
         await viewModel.InitializeAsync();
+        Assert.False(viewModel.IsStatusOpen);
+        viewModel.ShowUnexpectedError(
+            new InvalidOperationException("fixture status before apply"));
         Assert.True(viewModel.IsStatusOpen);
 
         var apply = viewModel.ApplyAsync();
