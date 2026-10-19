@@ -196,6 +196,33 @@
             Grid.Row="1"
             Grid.Column="1"
             Style="{DynamicResource WorkbenchStageStyle}">
+        <!-- Ambient field: the preview itself, heavily blurred, fills the stage around the 16:9 frame. -->
+        <Rectangle x:Name="AmbientBackdrop"
+                   Margin="-64"
+                   IsHitTestVisible="False"
+                   RenderOptions.BitmapScalingMode="LowQuality">
+          <Rectangle.Fill>
+            <VisualBrush Visual="{Binding ElementName=PreviewView}"
+                         Stretch="UniformToFill"
+                         AlignmentX="Center"
+                         AlignmentY="Center" />
+          </Rectangle.Fill>
+          <Rectangle.Effect>
+            <BlurEffect Radius="96" RenderingBias="Performance" />
+          </Rectangle.Effect>
+          <Rectangle.Style>
+            <Style TargetType="Rectangle">
+              <Setter Property="Opacity" Value="0.42" />
+              <Setter Property="Visibility" Value="{Binding Editor.HasSelectedMedia, Converter={StaticResource BooleanToVisibilityConverter}}" />
+              <Style.Triggers>
+                <DataTrigger Binding="{Binding IsWorkbenchHighContrast, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
+                             Value="True">
+                  <Setter Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
+              </Style.Triggers>
+            </Style>
+          </Rectangle.Style>
+        </Rectangle>
         <views:AspectRatioDecorator x:Name="PreviewAspectFrame"
                                     Margin="12"
                                     Ratio="1.7777777777777777"

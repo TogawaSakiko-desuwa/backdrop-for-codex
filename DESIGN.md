@@ -99,6 +99,9 @@ the wallpaper is the only thing in the window that is allowed to be loud.
   Pause, Restore official, and the single accent Apply button (44 DIP) on the right.
 - Library rail 224 DIP; collapses to a 56 DIP icon rail between 960 and 1279 DIP;
   below 960 DIP the panes stack and the rail opens as a drawer.
+- The stage carries an ambient field: the preview rendered again through a 96 DIP blur at
+  42 percent, so the space above and below the 16:9 frame takes the wallpaper's color
+  instead of staying black. It is hidden without media and in high contrast.
 - The stage spans the whole workbench behind the panes. Library and inspector float on
   it as 12 DIP radius cards with a 12 DIP gutter (column widths are pane width plus the
   gutter). The 16:9 preview sits in the remaining space with the same 12 DIP gutter and a

@@ -45,9 +45,9 @@
 
   <!-- Editor palette. Used while the resolved theme is dark; light theme keeps the Fluent roles. -->
   <SolidColorBrush x:Key="WorkbenchEditorStageBrush" Color="#0F1012" />
-  <SolidColorBrush x:Key="WorkbenchEditorPaneBrush" Color="#F21B1D21" />
+  <SolidColorBrush x:Key="WorkbenchEditorPaneBrush" Color="#E61B1D21" />
   <SolidColorBrush x:Key="WorkbenchEditorToolbarBrush" Color="#161719" />
-  <SolidColorBrush x:Key="WorkbenchEditorHairlineBrush" Color="#2B2E33" />
+  <SolidColorBrush x:Key="WorkbenchEditorHairlineBrush" Color="#34373D" />
 
   <!-- Fixed dark tiles for provider thumbnails. -->
   <SolidColorBrush x:Key="WorkbenchStageMatBrush" Color="#151B22" />
