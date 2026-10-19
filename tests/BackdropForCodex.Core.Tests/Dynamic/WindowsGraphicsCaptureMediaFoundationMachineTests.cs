@@ -850,7 +850,8 @@ public sealed class WindowsGraphicsCaptureMediaFoundationMachineTests
     {
         var field = typeof(WindowsGraphicsCaptureFactory.WindowsGraphicsCapturedFrame)
             .GetField("_frame", BindingFlags.Instance | BindingFlags.NonPublic);
-        return Assert.IsType<Direct3D11CaptureFrame>(field?.GetValue(frame));
+        return Assert.IsType<RetryableNativeDisposalSlot<Direct3D11CaptureFrame>>(
+            field?.GetValue(frame)).Value;
     }
 
     private sealed class FixedCaptureAuthority(nint windowHandle)
