@@ -65,7 +65,7 @@ public sealed class DynamicWallpaperFrameFlowTests
     }
 
     [Fact]
-    public void FixedPointPacerNeverBurstsAndReanchorsAfterMissedSlots()
+    public void FixedPointPacerHandsOutMissedSlotsOnTheAbsoluteClock()
     {
         var pacer = new FixedPointWallpaperFramePacer(frameRate: 15);
         pacer.Start(TimeSpan.Zero);
@@ -83,21 +83,72 @@ public sealed class DynamicWallpaperFrameFlowTests
         Assert.True(wait > TimeSpan.Zero);
         Assert.False(reanchored);
 
-        var missed = new FixedPointWallpaperFramePacer(frameRate: 15);
-        missed.Start(TimeSpan.Zero);
-        Assert.True(missed.TryTakeDueSample(
-            TimeSpan.FromTicks(2_000_001),
-            out wait,
-            out reanchored));
+        // Three slots (666,667 / 1,333,333 / 2,000,000 ticks) elapsed during one late wake.
+        var late = new FixedPointWallpaperFramePacer(frameRate: 15);
+        late.Start(TimeSpan.Zero);
+        var now = TimeSpan.FromTicks(2_000_001);
+        for (var slot = 0; slot < 3; slot++)
+        {
+            Assert.True(late.IsBehind(now));
+            Assert.True(late.TryTakeDueSample(now, out wait, out reanchored));
+            Assert.Equal(TimeSpan.Zero, wait);
+            Assert.False(reanchored);
+        }
 
+        Assert.False(late.IsBehind(now));
+        Assert.False(late.TryTakeDueSample(now, out wait, out reanchored));
+        Assert.Equal(TimeSpan.FromTicks(666_666), wait);
+        Assert.False(reanchored);
+    }
+
+    [Fact]
+    public void FixedPointPacerReanchorsOnlyWhenTheBacklogExceedsItsCatchUpBound()
+    {
+        // 200 ms at 15 fps allows three missed slots beyond the one being taken.
+        var bounded = new FixedPointWallpaperFramePacer(
+            frameRate: 15,
+            maximumCatchUp: TimeSpan.FromMilliseconds(200));
+        bounded.Start(TimeSpan.Zero);
+        var withinBound = TimeSpan.FromTicks(2_666_667);
+        for (var slot = 0; slot < 4; slot++)
+        {
+            Assert.True(bounded.TryTakeDueSample(withinBound, out _, out var caughtUp));
+            Assert.False(caughtUp);
+        }
+
+        Assert.False(bounded.TryTakeDueSample(withinBound, out _, out _));
+
+        var overrun = new FixedPointWallpaperFramePacer(
+            frameRate: 15,
+            maximumCatchUp: TimeSpan.FromMilliseconds(200));
+        overrun.Start(TimeSpan.Zero);
+        var beyondBound = TimeSpan.FromTicks(3_333_334);
+        Assert.True(overrun.TryTakeDueSample(beyondBound, out var wait, out var reanchored));
         Assert.Equal(TimeSpan.Zero, wait);
         Assert.True(reanchored);
-        Assert.False(missed.TryTakeDueSample(
-            TimeSpan.FromTicks(2_000_001),
-            out wait,
-            out reanchored));
+        Assert.False(overrun.IsBehind(beyondBound));
+        Assert.False(overrun.TryTakeDueSample(beyondBound, out wait, out reanchored));
         Assert.Equal(TimeSpan.FromTicks(666_667), wait);
         Assert.False(reanchored);
+
+        var noCatchUp = new FixedPointWallpaperFramePacer(
+            frameRate: 15,
+            maximumCatchUp: TimeSpan.Zero);
+        noCatchUp.Start(TimeSpan.Zero);
+        Assert.True(noCatchUp.TryTakeDueSample(
+            TimeSpan.FromTicks(1_333_334),
+            out _,
+            out reanchored));
+        Assert.True(reanchored);
+    }
+
+    [Fact]
+    public void FixedPointPacerRejectsANegativeCatchUpBound()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            new FixedPointWallpaperFramePacer(
+                frameRate: 30,
+                maximumCatchUp: TimeSpan.FromTicks(-1)));
     }
 
     [Fact]

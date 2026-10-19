@@ -1069,20 +1069,24 @@ public sealed class DynamicWallpaperActivationFactoryTests
         Assert.Single(fallbackEncoder.EncodedFrames);
         Assert.Same(capture.Frames[0], fallbackEncoder.EncodedFrames[0]);
         Assert.Equal(1, capture.Frames[0].DisposeCount);
+        // 100 ms spans one 15 fps slot or three 30 fps slots, and every elapsed slot is encoded.
+        var elapsedSlots = fallback ? 1 : 3;
         pacerClock.Advance(TimeSpan.FromMilliseconds(100));
         await WaitUntilAsync(
             () => pacerClock.HasPendingWaitWithin(TimeSpan.FromSeconds(1)) &&
-                fallbackEncoder.EncodedFrames.Count == 2,
+                fallbackEncoder.EncodedFrames.Count == 1 + elapsedSlots,
             TimeSpan.FromSeconds(5));
 
-        Assert.Same(capture.Frames[1], fallbackEncoder.EncodedFrames[1]);
+        Assert.All(
+            fallbackEncoder.EncodedFrames.Skip(1),
+            frame => Assert.Same(capture.Frames[1], frame));
         Assert.Equal(1, pacerClock.PendingWaitCount);
         pacerClock.Advance(TimeSpan.FromTicks(333_334));
         await WaitUntilAsync(
-            () => fallbackEncoder.EncodedFrames.Count == 3,
+            () => fallbackEncoder.EncodedFrames.Count == 2 + elapsedSlots,
             TimeSpan.FromSeconds(5));
 
-        Assert.Same(capture.Frames[1], fallbackEncoder.EncodedFrames[2]);
+        Assert.Same(capture.Frames[1], fallbackEncoder.EncodedFrames[^1]);
         var pause = Assert.IsAssignableFrom<IPausableActiveWallpaperLease>(active);
         await pause.SetPausedAsync(paused: true);
         Assert.True(events.IndexOf("frame-dispose:1") <
@@ -1133,7 +1137,7 @@ public sealed class DynamicWallpaperActivationFactoryTests
     }
 
     [Fact]
-    public async Task FallbackPacerSkipsMissedSlotsWithoutBurstingOrFaulting()
+    public async Task FallbackPacerCatchesUpMissedSlotsWithoutFaulting()
     {
         var events = new List<string>();
         var capture = new FakeCaptureFactory(events)
@@ -1162,17 +1166,102 @@ public sealed class DynamicWallpaperActivationFactoryTests
             () => pacerClock.HasPendingWaitWithin(TimeSpan.FromSeconds(1)),
             TimeSpan.FromSeconds(5));
 
+        // Three 15 fps slots elapse in one late wake. Encoding each keeps the stream timeline on
+        // wall time; dropping them would leave the player 200 ms short of media.
         pacerClock.Advance(TimeSpan.FromTicks(2_000_001));
         await WaitUntilAsync(
-            () => fallbackEncoder.EncodedFrames.Count == 2,
+            () => fallbackEncoder.EncodedFrames.Count == 4 &&
+                pacerClock.HasPendingWaitWithin(TimeSpan.FromSeconds(1)),
             TimeSpan.FromSeconds(5));
+
+        Assert.False(health.Completion.IsCompleted);
+        Assert.Equal(4, fallbackEncoder.EncodedFrames.Count);
+        Assert.Equal(1, pacerClock.PendingWaitCount);
+    }
+
+    [Fact]
+    public async Task FallbackPacerDropsABacklogBeyondItsCatchUpBound()
+    {
+        var events = new List<string>();
+        var capture = new FakeCaptureFactory(events)
+        {
+            FailStarts = 1,
+            StartFailureReason =
+                DynamicWallpaperCapabilityReasonCode.PrimaryRenderTierUnavailable,
+        };
+        var encoder = new FakeEncoderFactory(events);
+        var pacerClock = new ManualWallpaperFramePacerClock();
+        var factory = new DynamicWallpaperActivationFactory(
+            new FakeWindowRenderer(events),
+            capture,
+            encoder,
+            new FakePageSessionFactory(events),
+            TimeSpan.FromSeconds(15),
+            new ManualCaptureFrameDeadlineScheduler(),
+            pacerClock);
+        var project = new FakeProjectLease(Resolution(), events);
+        await using var active = (await factory.ActivateAsync(
+            Request(project.Resolution),
+            project)).Lease;
+        var health = Assert.IsAssignableFrom<IActiveWallpaperHealthSource>(active);
+        var fallbackEncoder = encoder.Encoders[^1];
         await WaitUntilAsync(
             () => pacerClock.HasPendingWaitWithin(TimeSpan.FromSeconds(1)),
+            TimeSpan.FromSeconds(5));
+
+        pacerClock.Advance(TimeSpan.FromSeconds(3));
+        await WaitUntilAsync(
+            () => fallbackEncoder.EncodedFrames.Count == 2 &&
+                pacerClock.HasPendingWaitWithin(TimeSpan.FromSeconds(1)),
             TimeSpan.FromSeconds(5));
 
         Assert.False(health.Completion.IsCompleted);
         Assert.Equal(2, fallbackEncoder.EncodedFrames.Count);
         Assert.Equal(1, pacerClock.PendingWaitCount);
+    }
+
+    [Fact]
+    public async Task SustainedLatenessStillLowersTheRenderTierWhileCatchingUp()
+    {
+        var events = new List<string>();
+        var capture = new FakeCaptureFactory(events);
+        var pacerClock = new ManualWallpaperFramePacerClock();
+        // Every encode takes three 30 fps slots, so catch-up can never close the gap.
+        var encoder = new FakeEncoderFactory(events)
+        {
+            EncodeCallback = () => pacerClock.Advance(TimeSpan.FromMilliseconds(100)),
+        };
+        var pages = new FakePageSessionFactory(events);
+        var factory = new DynamicWallpaperActivationFactory(
+            new FakeWindowRenderer(events),
+            capture,
+            encoder,
+            pages,
+            TimeSpan.FromSeconds(15),
+            new ManualCaptureFrameDeadlineScheduler(),
+            pacerClock);
+        var project = new FakeProjectLease(Resolution(), events);
+        await using var active = (await factory.ActivateAsync(
+            Request(project.Resolution),
+            project)).Lease;
+        var health = Assert.IsAssignableFrom<IActiveWallpaperHealthSource>(active);
+        await WaitUntilAsync(
+            () => pacerClock.HasPendingWaitWithin(TimeSpan.FromSeconds(1)),
+            TimeSpan.FromSeconds(5));
+
+        // From the first paced slot on, only the encodes themselves move the clock.
+        pacerClock.Advance(TimeSpan.FromTicks(333_334));
+        await WaitUntilAsync(() => encoder.Encoders.Count >= 2, TimeSpan.FromSeconds(10));
+
+        Assert.Equal(
+            DynamicWallpaperRenderProfiles.Primary.Width,
+            encoder.Descriptors[0].Width);
+        Assert.Equal(
+            DynamicWallpaperRenderProfiles.Fallback.Width,
+            encoder.Descriptors[1].Width);
+        // Ten seconds of continuous lateness at 100 ms per encode.
+        Assert.InRange(encoder.Encoders[0].EncodedFrames.Count, 100, 110);
+        Assert.False(health.Completion.IsCompleted);
     }
 
     [Fact]
@@ -3149,6 +3238,8 @@ public sealed class DynamicWallpaperActivationFactoryTests
 
         public bool IgnoreBlockedEncodeCancellation { get; set; }
 
+        public Action? EncodeCallback { get; set; }
+
         public List<EncodedWallpaperStreamDescriptor> Descriptors { get; } = [];
 
         public List<FakeEncoder> Encoders { get; } = [];
@@ -3175,7 +3266,8 @@ public sealed class DynamicWallpaperActivationFactoryTests
                 BlockOnFirstEncode,
                 BlockCancellationCallback,
                 BlockDispose,
-                IgnoreBlockedEncodeCancellation);
+                IgnoreBlockedEncodeCancellation,
+                EncodeCallback);
             Encoders.Add(encoder);
             return ValueTask.FromResult<IFragmentedMp4WallpaperEncoder>(
                 MissingPauseBoundary
@@ -3211,7 +3303,8 @@ public sealed class DynamicWallpaperActivationFactoryTests
         bool blockOnFirstEncode,
         bool blockCancellationCallback,
         bool blockDispose,
-        bool ignoreBlockedEncodeCancellation) :
+        bool ignoreBlockedEncodeCancellation,
+        Action? encodeCallback) :
         IFragmentedMp4WallpaperEncoder,
         ICapturePauseBoundaryFragmentedMp4WallpaperEncoder
     {
@@ -3263,6 +3356,7 @@ public sealed class DynamicWallpaperActivationFactoryTests
                 EncodedFrames.Add(frame);
             }
 
+            encodeCallback?.Invoke();
             var encodeCall = Interlocked.Increment(ref _encodeCalls);
             if ((blockOnFirstEncode && encodeCall == 1) ||
                 (blockAfterFirstEncode && encodeCall > 1))

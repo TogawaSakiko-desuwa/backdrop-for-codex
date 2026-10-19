@@ -237,6 +237,117 @@ public sealed class MediaFoundationFragmentedMp4EncoderFactoryTests
     }
 
     [Fact]
+    public async Task NextFragmentWriterIsPreparedOffThePacedPathAndAdoptedForItsDevice()
+    {
+        var prefetch = new MediaFoundationFragmentWriterPrefetch<FakeFragmentWriter>();
+        using var releaseBuild = new ManualResetEventSlim();
+        var writer = new FakeFragmentWriter();
+        var builds = 0;
+
+        prefetch.Start(new nint(7), () =>
+        {
+            Interlocked.Increment(ref builds);
+            releaseBuild.Wait();
+            return writer;
+        });
+
+        Assert.True(prefetch.IsPending);
+        var take = prefetch.TakeAsync(new nint(7)).AsTask();
+        await Task.Delay(TimeSpan.FromMilliseconds(50));
+        Assert.False(take.IsCompleted);
+
+        releaseBuild.Set();
+
+        Assert.Same(writer, await take.WaitAsync(TimeSpan.FromSeconds(5)));
+        Assert.Equal(1, builds);
+        Assert.Equal(0, writer.DisposeCount);
+        Assert.False(prefetch.IsPending);
+        Assert.Null(await prefetch.TakeAsync(new nint(7)));
+    }
+
+    [Fact]
+    public async Task FailedWriterPreparationLeavesTheBoundaryToBuildItsOwnWriter()
+    {
+        var prefetch = new MediaFoundationFragmentWriterPrefetch<FakeFragmentWriter>();
+        prefetch.Start(
+            new nint(7),
+            () => throw new InvalidOperationException("fixture encoder activation failed"));
+
+        Assert.Null(await prefetch.TakeAsync(new nint(7)));
+        Assert.False(prefetch.IsPending);
+
+        var writer = new FakeFragmentWriter();
+        prefetch.Start(new nint(7), () => writer);
+        Assert.Same(writer, await prefetch.TakeAsync(new nint(7)));
+    }
+
+    [Fact]
+    public async Task WriterPreparedForAnotherDeviceIsReleasedInsteadOfAdopted()
+    {
+        var prefetch = new MediaFoundationFragmentWriterPrefetch<FakeFragmentWriter>();
+        var writer = new FakeFragmentWriter();
+        prefetch.Start(new nint(7), () => writer);
+
+        Assert.Null(await prefetch.TakeAsync(new nint(8)));
+
+        Assert.Equal(1, writer.DisposeCount);
+        Assert.False(prefetch.IsPending);
+    }
+
+    [Fact]
+    public async Task DiscardWaitsForARunningPreparationAndReleasesItsWriter()
+    {
+        var prefetch = new MediaFoundationFragmentWriterPrefetch<FakeFragmentWriter>();
+        await prefetch.DiscardAsync();
+
+        using var releaseBuild = new ManualResetEventSlim();
+        var writer = new FakeFragmentWriter();
+        prefetch.Start(new nint(7), () =>
+        {
+            releaseBuild.Wait();
+            return writer;
+        });
+        var discard = prefetch.DiscardAsync().AsTask();
+        await Task.Delay(TimeSpan.FromMilliseconds(50));
+        Assert.False(discard.IsCompleted);
+
+        releaseBuild.Set();
+        await discard.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Equal(1, writer.DisposeCount);
+        Assert.False(prefetch.IsPending);
+        prefetch.Start(
+            new nint(7),
+            () => throw new InvalidOperationException("fixture encoder activation failed"));
+        await prefetch.DiscardAsync();
+        Assert.False(prefetch.IsPending);
+    }
+
+    [Fact]
+    public async Task OnlyOneWriterPreparationForAKnownDeviceMayBePending()
+    {
+        var prefetch = new MediaFoundationFragmentWriterPrefetch<FakeFragmentWriter>();
+
+        Assert.Throws<ArgumentException>(() =>
+            prefetch.Start(nint.Zero, static () => new FakeFragmentWriter()));
+        Assert.False(prefetch.IsPending);
+
+        using var releaseBuild = new ManualResetEventSlim();
+        var writer = new FakeFragmentWriter();
+        prefetch.Start(new nint(7), () =>
+        {
+            releaseBuild.Wait();
+            return writer;
+        });
+
+        Assert.Throws<InvalidOperationException>(() =>
+            prefetch.Start(new nint(7), static () => new FakeFragmentWriter()));
+        releaseBuild.Set();
+        await prefetch.DiscardAsync();
+        Assert.Equal(1, writer.DisposeCount);
+    }
+
+    [Fact]
     public async Task EncoderDisposalAdmissionCanRetryAfterTheFirstCleanupFails()
     {
         var gate = new MediaFoundationEncoderOperationGate();
@@ -252,5 +363,14 @@ public sealed class MediaFoundationFragmentedMp4EncoderFactoryTests
 
         Assert.True(gate.IsDisposeCompleted);
         Assert.False(gate.TryBeginDispose());
+    }
+
+    private sealed class FakeFragmentWriter : IDisposable
+    {
+        private int _disposeCount;
+
+        public int DisposeCount => Volatile.Read(ref _disposeCount);
+
+        public void Dispose() => Interlocked.Increment(ref _disposeCount);
     }
 }
