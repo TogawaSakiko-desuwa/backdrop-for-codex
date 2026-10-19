@@ -195,9 +195,33 @@
                                     Margin="24"
                                     Ratio="1.7777777777777777"
                                     ContentInset="1">
-          <Border x:Name="CalibrationFrame"
-                  Padding="0"
-                  Style="{DynamicResource WorkbenchCalibrationSurfaceStyle}">
+          <Grid>
+            <!-- A soft shadow lifts the preview off the stage. It is an empty surface so video playback is not re-rendered through the effect. -->
+            <Border x:Name="PreviewShadow"
+                    Background="{DynamicResource SolidBackgroundFillColorSecondaryBrush}"
+                    IsHitTestVisible="False">
+              <Border.Effect>
+                <DropShadowEffect BlurRadius="40"
+                                  ShadowDepth="12"
+                                  Direction="270"
+                                  Opacity="0.3"
+                                  Color="Black"
+                                  RenderingBias="Quality" />
+              </Border.Effect>
+              <Border.Style>
+                <Style TargetType="Border">
+                  <Style.Triggers>
+                    <DataTrigger Binding="{Binding IsWorkbenchHighContrast, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
+                                 Value="True">
+                      <Setter Property="Visibility" Value="Collapsed" />
+                    </DataTrigger>
+                  </Style.Triggers>
+                </Style>
+              </Border.Style>
+            </Border>
+            <Border x:Name="CalibrationFrame"
+                    Padding="0"
+                    Style="{DynamicResource WorkbenchCalibrationSurfaceStyle}">
             <views:WallpaperPreviewView x:Name="PreviewView"
                                         HorizontalAlignment="Stretch"
                                         VerticalAlignment="Stretch"
@@ -211,7 +235,8 @@
                                         DarkOverlay="{Binding DarkOverlay}"
                                         LightOverlay="{Binding LightOverlay}"
                                         FocusChangeRequested="PreviewView_FocusChangeRequested" />
-          </Border>
+            </Border>
+          </Grid>
         </views:AspectRatioDecorator>
       </Grid>
 

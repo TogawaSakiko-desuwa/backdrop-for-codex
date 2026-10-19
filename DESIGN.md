@@ -97,7 +97,8 @@ the wallpaper is the only thing in the window that is allowed to be loud.
 - Library rail 224 DIP; collapses to a 56 DIP icon rail between 960 and 1279 DIP;
   below 960 DIP the panes stack and the rail opens as a drawer.
 - Preview stage: a 16:9 frame inset 24 DIP from the stage edges, bordered by a
-  single 1 DIP hairline. The stage color is `SolidBackgroundFillColorSecondary`.
+  single 1 DIP hairline and lifted by one soft shadow (blur 40, depth 12, 30 percent).
+  The stage color is `SolidBackgroundFillColorSecondary`. High contrast drops the shadow.
 - Inspector: profile name pinned at the top (20 DIP display), then three groups
   separated by 1 DIP dividers: Wallpaper, Composition, Readability.
 - Spacing stays on an 8 DIP rhythm with 4 DIP half steps; 24 DIP between groups.
@@ -112,7 +113,10 @@ the wallpaper is the only thing in the window that is allowed to be loud.
   below in 14 DIP semibold, caption only for the official background or a missing
   file, an overflow button that appears on hover or selection.
 - Recent row: 64 by 36 thumbnail, name, optional caption, hover-only remove button.
-- Selection is a neutral fill plus a 3 DIP accent rail on the left. No accent tiles.
+- Profile selection is a neutral fill plus a 2 DIP accent outline on the thumbnail;
+  recent rows keep a 3 DIP accent rail on the left. No accent-filled tiles.
+- Thumbnails come from the shared thumbnail service, so Wallpaper Engine projects show
+  their project preview, not a glyph. A glyph appears only while no image is available.
 - The Wallpaper Engine entry is one persistent button with a status dot.
 
 ### Preview stage
@@ -123,7 +127,9 @@ the wallpaper is the only thing in the window that is allowed to be loud.
   legible without media.
 - Media name pill bottom left; static-preview pill bottom right when the preview is
   a thumbnail rather than live output.
-- Crop focus reticle: 40 DIP, idles at 58 percent opacity, full while dragging.
+- Crop focus reticle: 40 DIP, idles at 58 percent opacity, full while dragging. It is
+  shown only while the pointer is over the preview or the focus surface has keyboard
+  focus, so it never sits on the artwork at rest.
 - Empty and unavailable states are two lines of text in theme colors. No icon tiles.
 
 ### Inspector
@@ -150,4 +156,5 @@ the wallpaper is the only thing in the window that is allowed to be loud.
 - Don't explain a control in a visible caption when a tooltip will do.
 - Don't show a status banner that only says the app is ready.
 - Don't fix the stage to a dark color in light theme.
-- Don't use gradients, oversized type, all-caps kickers, or decorative shadows.
+- Don't use gradients, oversized type, or all-caps kickers. The preview shadow is the
+  one shadow in the window; cards and panes stay flat.

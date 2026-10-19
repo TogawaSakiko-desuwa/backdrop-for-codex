@@ -21,12 +21,12 @@
 
     <!-- Placeholder text lines inside the Codex mock. -->
     <Style x:Key="TextLineStyle" TargetType="Rectangle">
-      <Setter Property="Height" Value="6" />
-      <Setter Property="RadiusX" Value="3" />
-      <Setter Property="RadiusY" Value="3" />
+      <Setter Property="Height" Value="5" />
+      <Setter Property="RadiusX" Value="2.5" />
+      <Setter Property="RadiusY" Value="2.5" />
       <Setter Property="HorizontalAlignment" Value="Left" />
       <Setter Property="Fill" Value="{DynamicResource TextFillColorSecondaryBrush}" />
-      <Setter Property="Opacity" Value="0.55" />
+      <Setter Property="Opacity" Value="0.38" />
     </Style>
 
     <Style x:Key="FocusGuideLineStyle" TargetType="Border">
@@ -175,12 +175,11 @@
                   </StackPanel>
                 </Border>
                 <StackPanel Grid.Row="2" Margin="6,22,0,0">
-                  <Rectangle Width="40" Height="5" Style="{StaticResource TextLineStyle}" Opacity="0.35" />
-                  <Rectangle Width="128" Margin="0,14,0,0" Style="{StaticResource TextLineStyle}" />
-                  <Rectangle Width="96" Margin="0,12,0,0" Style="{StaticResource TextLineStyle}" />
-                  <Rectangle Width="140" Margin="0,12,0,0" Style="{StaticResource TextLineStyle}" />
-                  <Rectangle Width="84" Margin="0,12,0,0" Style="{StaticResource TextLineStyle}" />
-                  <Rectangle Width="118" Margin="0,12,0,0" Style="{StaticResource TextLineStyle}" />
+                  <Rectangle Width="36" Height="4" Style="{StaticResource TextLineStyle}" Opacity="0.25" />
+                  <Rectangle Width="124" Margin="0,14,0,0" Style="{StaticResource TextLineStyle}" />
+                  <Rectangle Width="92" Margin="0,14,0,0" Style="{StaticResource TextLineStyle}" />
+                  <Rectangle Width="136" Margin="0,14,0,0" Style="{StaticResource TextLineStyle}" />
+                  <Rectangle Width="80" Margin="0,14,0,0" Style="{StaticResource TextLineStyle}" />
                 </StackPanel>
                 <StackPanel Grid.Row="3" Orientation="Horizontal">
                   <Ellipse Width="18"
@@ -239,10 +238,9 @@
                   </StackPanel>
                 </Grid>
                 <StackPanel Grid.Row="2" Margin="4,26,0,0">
-                  <Rectangle Width="380" Style="{StaticResource TextLineStyle}" Fill="{DynamicResource TextFillColorPrimaryBrush}" Opacity="0.75" />
-                  <Rectangle Width="440" Margin="0,11,0,0" Style="{StaticResource TextLineStyle}" Fill="{DynamicResource TextFillColorPrimaryBrush}" Opacity="0.75" />
-                  <Rectangle Width="300" Margin="0,11,0,0" Style="{StaticResource TextLineStyle}" Fill="{DynamicResource TextFillColorPrimaryBrush}" Opacity="0.75" />
-                  <Rectangle Width="410" Margin="0,11,0,0" Style="{StaticResource TextLineStyle}" Fill="{DynamicResource TextFillColorPrimaryBrush}" Opacity="0.75" />
+                  <Rectangle Width="360" Style="{StaticResource TextLineStyle}" Opacity="0.5" />
+                  <Rectangle Width="420" Margin="0,12,0,0" Style="{StaticResource TextLineStyle}" Opacity="0.5" />
+                  <Rectangle Width="280" Margin="0,12,0,0" Style="{StaticResource TextLineStyle}" Opacity="0.5" />
                 </StackPanel>
               </Grid>
 
@@ -386,7 +384,23 @@
                   MouseLeftButtonUp="FocusInteractionSurface_MouseLeftButtonUp"
                   LostMouseCapture="FocusInteractionSurface_LostMouseCapture"
                   KeyDown="FocusInteractionSurface_KeyDown">
+            <!-- The reticle stays out of the picture until the pointer or keyboard is on the preview. -->
             <Canvas IsHitTestVisible="False">
+              <Canvas.Style>
+                <Style TargetType="Canvas">
+                  <Setter Property="Opacity" Value="0" />
+                  <Style.Triggers>
+                    <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType={x:Type views:WallpaperPreviewView}}}"
+                                 Value="True">
+                      <Setter Property="Opacity" Value="1" />
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding IsKeyboardFocusWithin, ElementName=FocusInteractionSurface}"
+                                 Value="True">
+                      <Setter Property="Opacity" Value="1" />
+                    </DataTrigger>
+                  </Style.Triggers>
+                </Style>
+              </Canvas.Style>
               <Grid x:Name="FocusIndicator"
                     Width="40"
                     Height="40"

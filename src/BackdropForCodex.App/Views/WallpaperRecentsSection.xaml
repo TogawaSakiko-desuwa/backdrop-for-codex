@@ -3,9 +3,9 @@
              x:Name="Root"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:converters="clr-namespace:BackdropForCodex.App.Converters"
              xmlns:localization="clr-namespace:BackdropForCodex.App.Services.Localization"
              xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+             xmlns:views="clr-namespace:BackdropForCodex.App.Views"
              Focusable="False"
              Style="{DynamicResource WorkbenchRootStyle}">
   <UserControl.Resources>
@@ -13,8 +13,6 @@
       <ResourceDictionary.MergedDictionaries>
         <ResourceDictionary Source="/BackdropForCodex;component/Themes/WorkbenchTheme.xaml" />
       </ResourceDictionary.MergedDictionaries>
-
-      <converters:MediaThumbnailConverter x:Key="RecentThumbnailConverter" />
 
       <Style x:Key="RecentListItemStyle" TargetType="ListBoxItem">
         <Setter Property="MinHeight" Value="48" />
@@ -119,14 +117,12 @@
 
       <DataTemplate x:Key="RecentPreviewTemplate">
         <Grid>
-          <Rectangle RadiusX="5" RadiusY="5"
-                     Fill="{DynamicResource ControlFillColorSecondaryBrush}" />
-          <Rectangle x:Name="RecentThumbnail" RadiusX="5" RadiusY="5">
-            <Rectangle.Fill>
-              <ImageBrush ImageSource="{Binding Path, Converter={StaticResource RecentThumbnailConverter}}"
-                          Stretch="UniformToFill" />
-            </Rectangle.Fill>
-          </Rectangle>
+          <views:MediaThumbnail x:Name="RecentThumbnail"
+                                Reference="{Binding Reference}"
+                                LocalPath="{Binding Path}"
+                                CornerRadius="5"
+                                Fill="{DynamicResource ControlFillColorSecondaryBrush}"
+                                Stroke="{DynamicResource ControlStrokeColorDefaultBrush}" />
           <ui:SymbolIcon Symbol="VideoClip24"
                          FontSize="16"
                          Foreground="{DynamicResource TextFillColorSecondaryBrush}"
@@ -140,6 +136,7 @@
                     <MultiDataTrigger.Conditions>
                       <Condition Binding="{Binding ContentKind}" Value="Video" />
                       <Condition Binding="{Binding Exists}" Value="True" />
+                      <Condition Binding="{Binding HasImage, ElementName=RecentThumbnail}" Value="False" />
                     </MultiDataTrigger.Conditions>
                     <Setter Property="Visibility" Value="Visible" />
                   </MultiDataTrigger>
@@ -160,6 +157,7 @@
                     <MultiDataTrigger.Conditions>
                       <Condition Binding="{Binding ContentKind}" Value="Scene" />
                       <Condition Binding="{Binding Exists}" Value="True" />
+                      <Condition Binding="{Binding HasImage, ElementName=RecentThumbnail}" Value="False" />
                     </MultiDataTrigger.Conditions>
                     <Setter Property="Visibility" Value="Visible" />
                   </MultiDataTrigger>
@@ -180,6 +178,7 @@
                     <MultiDataTrigger.Conditions>
                       <Condition Binding="{Binding ContentKind}" Value="Web" />
                       <Condition Binding="{Binding Exists}" Value="True" />
+                      <Condition Binding="{Binding HasImage, ElementName=RecentThumbnail}" Value="False" />
                     </MultiDataTrigger.Conditions>
                     <Setter Property="Visibility" Value="Visible" />
                   </MultiDataTrigger>
@@ -203,9 +202,6 @@
               </Style>
             </ui:SymbolIcon.Style>
           </ui:SymbolIcon>
-          <Rectangle RadiusX="5" RadiusY="5"
-                     Stroke="{DynamicResource ControlStrokeColorDefaultBrush}"
-                     StrokeThickness="1" />
         </Grid>
       </DataTemplate>
 
