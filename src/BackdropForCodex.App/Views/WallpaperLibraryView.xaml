@@ -113,8 +113,9 @@
     </VisualStateManager.VisualStateGroups>
 
     <Border Style="{DynamicResource WorkbenchRailBorderStyle}">
+      <!-- The rail scrolls with the wheel and keyboard focus; a visible bar would cut the floating card. -->
       <ScrollViewer HorizontalScrollBarVisibility="Disabled"
-                    VerticalScrollBarVisibility="Auto"
+                    VerticalScrollBarVisibility="Hidden"
                     CanContentScroll="False"
                     PanningMode="VerticalOnly"
                     Focusable="False">

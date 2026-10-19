@@ -202,7 +202,7 @@
                    IsHitTestVisible="False"
                    RenderOptions.BitmapScalingMode="LowQuality">
           <Rectangle.Fill>
-            <VisualBrush Visual="{Binding ElementName=PreviewView}"
+            <VisualBrush Visual="{Binding PreviewBackdropVisual, ElementName=PreviewView}"
                          Stretch="UniformToFill"
                          AlignmentX="Center"
                          AlignmentY="Center" />
@@ -227,6 +227,30 @@
                                     Margin="12"
                                     Ratio="1.7777777777777777"
                                     ContentInset="1">
+          <Grid>
+            <!-- Depth against the ambient field. An empty surface so playback is not re-rendered through the effect. -->
+            <Border x:Name="PreviewShadow"
+                    Background="{DynamicResource WorkbenchEditorStageBrush}"
+                    IsHitTestVisible="False">
+              <Border.Effect>
+                <DropShadowEffect BlurRadius="48"
+                                  ShadowDepth="10"
+                                  Direction="270"
+                                  Opacity="0.55"
+                                  Color="Black"
+                                  RenderingBias="Performance" />
+              </Border.Effect>
+              <Border.Style>
+                <Style TargetType="Border">
+                  <Style.Triggers>
+                    <DataTrigger Binding="{Binding IsWorkbenchHighContrast, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
+                                 Value="True">
+                      <Setter Property="Visibility" Value="Collapsed" />
+                    </DataTrigger>
+                  </Style.Triggers>
+                </Style>
+              </Border.Style>
+            </Border>
           <Border x:Name="CalibrationFrame"
                   Padding="0"
                   Style="{DynamicResource WorkbenchCalibrationSurfaceStyle}">
@@ -244,6 +268,7 @@
                                         LightOverlay="{Binding LightOverlay}"
                                         FocusChangeRequested="PreviewView_FocusChangeRequested" />
           </Border>
+          </Grid>
         </views:AspectRatioDecorator>
       </Grid>
 
