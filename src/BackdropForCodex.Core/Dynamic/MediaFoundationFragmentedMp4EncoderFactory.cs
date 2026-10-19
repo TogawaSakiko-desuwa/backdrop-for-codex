@@ -235,6 +235,11 @@ public sealed class MediaFoundationFragmentedMp4EncoderFactory :
         // MFByteStream(Stream) creates a managed COM proxy. Keeping it encoder-scoped
         // prevents one proxy from being destroyed while native fragment work retires.
         private MediaFoundationChunkOutput? _chunkOutput;
+        // The next fragment's writer is prepared on its own output while the current fragment
+        // is still being written; the two outputs trade roles when that writer is adopted.
+        private MediaFoundationChunkOutput? _spareChunkOutput;
+        private readonly MediaFoundationFragmentWriterPrefetch<MediaFoundationChunkWriter>
+            _nextChunk = new();
         private readonly MediaFoundationFragmentedMp4Segmenter _segmenter;
         private readonly GenerationScopedWallpaperFrameOrder _frameOrder;
         private readonly DynamicWallpaperBackpressureMonitor _backpressureMonitor = new();
@@ -251,6 +256,7 @@ public sealed class MediaFoundationFragmentedMp4EncoderFactory :
             Descriptor = descriptor;
             _lifetime = MediaFoundationLifetime.Acquire();
             _chunkOutput = new MediaFoundationChunkOutput(MaximumFinalizedChunkBytes);
+            _spareChunkOutput = new MediaFoundationChunkOutput(MaximumFinalizedChunkBytes);
             _segmenter = new MediaFoundationFragmentedMp4Segmenter(descriptor.Generation);
             _frameOrder = new GenerationScopedWallpaperFrameOrder(descriptor.Generation);
             _isPrimary = Matches(descriptor, DynamicWallpaperRenderProfiles.Primary);
@@ -283,7 +289,17 @@ public sealed class MediaFoundationFragmentedMp4EncoderFactory :
                 }
 
                 cancellationToken.ThrowIfCancellationRequested();
-                DiscardPendingFragmentForCapturePause();
+                try
+                {
+                    DiscardPendingFragmentForCapturePause();
+                }
+                finally
+                {
+                    // The resumed capture session renders on a new Direct3D device. A writer
+                    // prepared for the old device can never be adopted, and keeping it would
+                    // hold that device and a hardware encoder session for the whole pause.
+                    await _nextChunk.DiscardAsync().ConfigureAwait(false);
+                }
             }
             catch (OperationCanceledException)
             {
@@ -342,7 +358,13 @@ public sealed class MediaFoundationFragmentedMp4EncoderFactory :
                 _frameOrder.Accept(frame);
                 using var surfaceFrame =
                     MediaFoundationDxgiSurfaceFrame.Create(windowsFrame.Surface);
-                _chunk ??= CreateChunkWriter(surfaceFrame.Device);
+                if (_chunk is null)
+                {
+                    _chunk = await TakeOrCreateChunkWriterAsync(surfaceFrame.Device)
+                        .ConfigureAwait(false);
+                    PrepareNextChunkWriter(surfaceFrame.Device);
+                }
+
                 _chunk.WriteFrame(
                     surfaceFrame.Buffer,
                     checked(_sampleDuration * _fragmentBoundary.PendingFrameCount),
@@ -404,6 +426,7 @@ public sealed class MediaFoundationFragmentedMp4EncoderFactory :
 
                 _completed = true;
                 output.Complete();
+                await _nextChunk.DiscardAsync().ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -449,6 +472,15 @@ public sealed class MediaFoundationFragmentedMp4EncoderFactory :
                     _chunk = null;
                 }
 
+                // A preparation still running uses the spare output and Media Foundation, so it
+                // must retire before either is released.
+                await _nextChunk.DiscardAsync().ConfigureAwait(false);
+                if (_spareChunkOutput is not null)
+                {
+                    _spareChunkOutput.Dispose();
+                    _spareChunkOutput = null;
+                }
+
                 if (_chunkOutput is not null)
                 {
                     _chunkOutput.Dispose();
@@ -472,7 +504,50 @@ public sealed class MediaFoundationFragmentedMp4EncoderFactory :
             }
         }
 
-        private MediaFoundationChunkWriter CreateChunkWriter(ComObject device) =>
+        private async ValueTask<MediaFoundationChunkWriter> TakeOrCreateChunkWriterAsync(
+            ComObject device)
+        {
+            var prepared = await _nextChunk.TakeAsync(device.NativePointer).ConfigureAwait(false);
+            if (prepared is null)
+            {
+                return CreateChunkWriter(
+                    device,
+                    _chunkOutput ?? throw new ObjectDisposedException(GetType().Name));
+            }
+
+            // The prepared writer owns the spare output. The finished fragment's bytes were
+            // copied when it was finalized, so its output becomes the next spare.
+            (_chunkOutput, _spareChunkOutput) = (_spareChunkOutput, _chunkOutput);
+            return prepared;
+        }
+
+        private void PrepareNextChunkWriter(ComObject device)
+        {
+            var output = _spareChunkOutput ?? throw new ObjectDisposedException(GetType().Name);
+            // The surface frame releases its device reference when this encode returns. The
+            // background build keeps its own until the writer's DXGI manager holds the device.
+            Marshal.AddRef(device.NativePointer);
+            var buildDevice = new ComObject(device.NativePointer);
+            try
+            {
+                _nextChunk.Start(device.NativePointer, () =>
+                {
+                    using (buildDevice)
+                    {
+                        return CreateChunkWriter(buildDevice, output);
+                    }
+                });
+            }
+            catch
+            {
+                buildDevice.Dispose();
+                throw;
+            }
+        }
+
+        private MediaFoundationChunkWriter CreateChunkWriter(
+            ComObject device,
+            MediaFoundationChunkOutput output) =>
             new(
                 Descriptor.Width,
                 Descriptor.Height,
@@ -484,7 +559,7 @@ public sealed class MediaFoundationFragmentedMp4EncoderFactory :
                 HighProfile,
                 Level40,
                 device,
-                _chunkOutput ?? throw new ObjectDisposedException(GetType().Name));
+                output);
 
         private async ValueTask FlushChunkAsync(
             IEncodedWallpaperSegmentSink output,
@@ -627,32 +702,61 @@ public sealed class MediaFoundationFragmentedMp4EncoderFactory :
                     .CheckError();
                 outputType.Set(MediaTypeAttributeKeys.Mpeg2Level, checked((uint)level))
                     .CheckError();
-                MediaFactory.MFCreateFMPEG4MediaSink(
-                    _output.ByteStream,
-                    outputType,
-                    null!,
-                    out _sink).CheckError();
-                _deviceManager = MediaFactory.MFCreateDXGIDeviceManager();
-                _deviceManager.ResetDevice(device).CheckError();
-                using var attributes = MediaFactory.MFCreateAttributes(4);
-                attributes.Set(
-                    SinkWriterAttributeKeys.ReadwriteEnableHardwareTransforms,
-                    1u).CheckError();
-                attributes.Set(SinkWriterAttributeKeys.LowLatency, 1u).CheckError();
-                attributes.Set(SinkWriterAttributeKeys.DisableThrottling, 1u).CheckError();
-                attributes.Set(
-                    SinkWriterAttributeKeys.D3DManager,
-                    _deviceManager).CheckError();
-                _writer = MediaFactory.MFCreateSinkWriterFromMediaSink(
-                    _sink,
-                    attributes);
-                using var inputType = CreateMediaType(
-                    VideoFormatGuids.Argb32,
-                    width,
-                    height,
-                    frameRate);
-                _writer.SetInputMediaType(0, inputType, null!);
-                _writer.BeginWriting();
+                IMFMediaSink? sink = null;
+                IMFDXGIDeviceManager? deviceManager = null;
+                IMFSinkWriter? writer = null;
+                try
+                {
+                    MediaFactory.MFCreateFMPEG4MediaSink(
+                        _output.ByteStream,
+                        outputType,
+                        null!,
+                        out sink).CheckError();
+                    deviceManager = MediaFactory.MFCreateDXGIDeviceManager();
+                    deviceManager.ResetDevice(device).CheckError();
+                    using var attributes = MediaFactory.MFCreateAttributes(4);
+                    attributes.Set(
+                        SinkWriterAttributeKeys.ReadwriteEnableHardwareTransforms,
+                        1u).CheckError();
+                    attributes.Set(SinkWriterAttributeKeys.LowLatency, 1u).CheckError();
+                    attributes.Set(SinkWriterAttributeKeys.DisableThrottling, 1u).CheckError();
+                    attributes.Set(
+                        SinkWriterAttributeKeys.D3DManager,
+                        deviceManager).CheckError();
+                    writer = MediaFactory.MFCreateSinkWriterFromMediaSink(
+                        sink,
+                        attributes);
+                    using var inputType = CreateMediaType(
+                        VideoFormatGuids.Argb32,
+                        width,
+                        height,
+                        frameRate);
+                    // Activates the hardware encoder; this costs several frame intervals.
+                    writer.SetInputMediaType(0, inputType, null!);
+                    writer.BeginWriting();
+                }
+                catch (Exception primaryFailure)
+                {
+                    // A prepared writer may fail and be rebuilt at the boundary, so a failed
+                    // build must not keep its encoder session or device reference alive.
+                    try
+                    {
+                        writer?.Dispose();
+                        sink?.Shutdown();
+                        sink?.Dispose();
+                        deviceManager?.Dispose();
+                    }
+                    catch (Exception cleanupFailure)
+                    {
+                        throw new AggregateException(primaryFailure, cleanupFailure);
+                    }
+
+                    throw;
+                }
+
+                _sink = sink;
+                _deviceManager = deviceManager;
+                _writer = writer;
             }
 
             internal void WriteFrame(
@@ -1147,6 +1251,97 @@ internal sealed class MediaFoundationEncoderOperationGate
     }
 
     internal void Release() => _gate.Release();
+}
+
+/// <summary>
+/// Builds the next fragment writer while the current fragment is still being written. Activating
+/// a hardware encoder takes several frame intervals; doing it between two paced samples stalls
+/// the frame path and starves the player at every fragment boundary. A prepared writer is adopted
+/// only for the device it was built on. Callers serialize access; only the build runs elsewhere.
+/// </summary>
+internal sealed class MediaFoundationFragmentWriterPrefetch<TWriter>
+    where TWriter : class, IDisposable
+{
+    private Task<TWriter>? _pending;
+    private nint _pendingDevice;
+
+    internal bool IsPending => _pending is not null;
+
+    internal void Start(nint device, Func<TWriter> build)
+    {
+        ArgumentNullException.ThrowIfNull(build);
+        if (device == nint.Zero)
+        {
+            throw new ArgumentException(
+                "A fragment writer must be prepared for a known device.",
+                nameof(device));
+        }
+
+        if (_pending is not null)
+        {
+            throw new InvalidOperationException(
+                "The next fragment writer is already being prepared.");
+        }
+
+        _pendingDevice = device;
+        _pending = Task.Run(build);
+    }
+
+    /// <summary>
+    /// Returns the writer prepared for <paramref name="device"/>, waiting for a build that is
+    /// still running. Null means nothing usable was prepared; the caller then builds the writer
+    /// itself, so a persistent failure still surfaces at the boundary as it did before.
+    /// </summary>
+    internal async ValueTask<TWriter?> TakeAsync(nint device)
+    {
+        var pending = _pending;
+        if (pending is null)
+        {
+            return null;
+        }
+
+        _pending = null;
+        TWriter writer;
+        try
+        {
+            writer = await pending.ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+
+        if (_pendingDevice == device)
+        {
+            return writer;
+        }
+
+        writer.Dispose();
+        return null;
+    }
+
+    internal async ValueTask DiscardAsync()
+    {
+        var pending = _pending;
+        if (pending is null)
+        {
+            return;
+        }
+
+        _pending = null;
+        TWriter writer;
+        try
+        {
+            writer = await pending.ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            // A failed build owns nothing, and no boundary is waiting for it any more.
+            return;
+        }
+
+        writer.Dispose();
+    }
 }
 
 internal static class MediaFoundationFragmentCadence

@@ -105,6 +105,96 @@ public sealed class WindowsGraphicsCaptureMediaFoundationMachineTests
 
     [RealDynamicWallpaperFact]
     [Trait("Category", "RealDynamicWallpaper")]
+    public async Task PrimaryFragmentStartsDoNotStallTheFramePath()
+    {
+        const int measuredFragmentStarts = 6;
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+        var profile = DynamicWallpaperRenderProfiles.Primary;
+        var descriptor = new EncodedWallpaperStreamDescriptor(
+            generation: 58,
+            "video/mp4; codecs=\"avc1.640028\"",
+            profile.Width,
+            profile.Height,
+            profile.FrameRate);
+        var captureFactory = new WindowsGraphicsCaptureFactory();
+        var encoderFactory = new MediaFoundationFragmentedMp4EncoderFactory();
+        var captureCapability = await captureFactory.ProbeAsync(timeout.Token);
+        var encoderCapability = await encoderFactory.ProbeAsync(timeout.Token);
+        Assert.True(
+            captureCapability.IsAvailable,
+            $"WGC unavailable: reason={captureCapability.ReasonCode}");
+        Assert.True(
+            encoderCapability.IsAvailable,
+            $"MF H264 unavailable: reason={encoderCapability.ReasonCode}");
+
+        using var window = new SyntheticCaptureWindow(
+            descriptor.Width,
+            descriptor.Height,
+            timerPeriodMilliseconds: 8);
+        await using var capture = await captureFactory.StartAsync(
+            new WallpaperWindowCaptureRequest(
+                descriptor.Generation,
+                CreateCaptureTarget(window.Handle),
+                descriptor.Width,
+                descriptor.Height,
+                profile.CaptureFrameRate),
+            timeout.Token);
+        await using var encoder = await encoderFactory.StartAsync(
+            descriptor,
+            timeout.Token);
+        var sink = new DiscardingSegmentSink(descriptor);
+        var initialFramesPerFragment =
+            MediaFoundationFragmentCadence.GetInitialFrameCount(descriptor.FrameRate);
+        var steadyStateFramesPerFragment =
+            MediaFoundationFragmentCadence.GetSteadyStateFrameCount(
+                descriptor.FrameRate,
+                isPrimary: true);
+        var fragmentStartDurations = new List<TimeSpan>();
+        var encodedFrames = 0;
+
+        await foreach (var frame in capture.ReadFramesAsync(timeout.Token))
+        {
+            await using (frame)
+            {
+                var encodeStarted = System.Diagnostics.Stopwatch.GetTimestamp();
+                await encoder.EncodeAsync(frame, sink, timeout.Token);
+                // The first fragment builds its writer inline; every later fragment must adopt
+                // the writer prepared while the previous fragment was written.
+                if (encodedFrames > 0 &&
+                    MediaFoundationFragmentCadence.IsFragmentBoundary(
+                        encodedFrames,
+                        initialFramesPerFragment,
+                        steadyStateFramesPerFragment))
+                {
+                    fragmentStartDurations.Add(
+                        System.Diagnostics.Stopwatch.GetElapsedTime(encodeStarted));
+                }
+            }
+
+            encodedFrames++;
+            if (fragmentStartDurations.Count >= measuredFragmentStarts)
+            {
+                break;
+            }
+        }
+
+        await encoder.CompleteAsync(sink, timeout.Token);
+        var frameInterval = TimeSpan.FromSeconds(1 / descriptor.FrameRate);
+        _output.WriteLine(
+            "primary=fragment-starts count={0} avgMs={1:F3} maxMs={2:F3}",
+            fragmentStartDurations.Count,
+            fragmentStartDurations.Average(static duration => duration.TotalMilliseconds),
+            fragmentStartDurations.Max(static duration => duration.TotalMilliseconds));
+        Assert.Equal(measuredFragmentStarts, fragmentStartDurations.Count);
+        Assert.All(
+            fragmentStartDurations,
+            duration => Assert.True(
+                duration < frameInterval * 2,
+                $"A fragment start blocked the frame path for {duration.TotalMilliseconds:F1} ms."));
+    }
+
+    [RealDynamicWallpaperFact]
+    [Trait("Category", "RealDynamicWallpaper")]
     public async Task OwnedSyntheticHwndProducesHighProfileFragmentsDecodedByRealEdgeMse()
     {
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(45));
