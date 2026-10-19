@@ -3102,8 +3102,9 @@ public sealed class DynamicWallpaperActivationFactory :
                         cancellationToken)
                     .ConfigureAwait(false);
                 var completedAt = _framePacerClock.GetMonotonicNow();
-                var isBehind = pacerReanchored ||
-                    pacer.ReanchorIfSampleCompletionIsBehind(completedAt);
+                // A slot missed while this sample encoded is taken on the next loop turn, so the
+                // encoded timeline keeps pace with the player instead of draining its buffer.
+                var isBehind = pacerReanchored || pacer.IsBehind(completedAt);
                 if (cadenceMonitor.Observe(isBehind, completedAt) &&
                     _profile != DynamicWallpaperRenderProfiles.Compatibility)
                 {

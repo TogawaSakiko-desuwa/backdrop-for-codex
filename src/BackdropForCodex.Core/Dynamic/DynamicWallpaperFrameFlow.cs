@@ -44,17 +44,25 @@ internal sealed class GenerationScopedWallpaperFrameOrder
 }
 
 /// <summary>
-/// Maintains an absolute fixed-point media clock. A late wake skips missed slots and reanchors,
-/// emitting at most one sample instead of producing a catch-up burst.
+/// Maintains an absolute fixed-point media clock. Every encoded sample advances the stream by one
+/// fixed duration, so a late wake hands out the missed slots one at a time until the encoded
+/// timeline is back on wall time; otherwise the player drains its buffer by the lost time. A
+/// backlog beyond the catch-up bound (sleep, debugger, sustained overload) is dropped by
+/// reanchoring instead.
 /// </summary>
 internal sealed class FixedPointWallpaperFramePacer
 {
+    internal static readonly TimeSpan DefaultMaximumCatchUp = TimeSpan.FromSeconds(1);
+
     private readonly decimal _frameRate;
+    private readonly long _maximumCatchUpSamples;
     private long _anchorTicks;
     private long _nextSampleIndex;
     private bool _started;
 
-    internal FixedPointWallpaperFramePacer(double frameRate)
+    internal FixedPointWallpaperFramePacer(
+        double frameRate,
+        TimeSpan? maximumCatchUp = null)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(frameRate);
         if (!double.IsFinite(frameRate))
@@ -62,7 +70,14 @@ internal sealed class FixedPointWallpaperFramePacer
             throw new ArgumentOutOfRangeException(nameof(frameRate));
         }
 
+        var resolvedMaximumCatchUp = maximumCatchUp ?? DefaultMaximumCatchUp;
+        ArgumentOutOfRangeException.ThrowIfLessThan(
+            resolvedMaximumCatchUp,
+            TimeSpan.Zero,
+            nameof(maximumCatchUp));
         _frameRate = (decimal)frameRate;
+        _maximumCatchUpSamples = checked((long)decimal.Ceiling(
+            resolvedMaximumCatchUp.Ticks * _frameRate / TimeSpan.TicksPerSecond));
     }
 
     internal void Start(TimeSpan monotonicNow)
@@ -99,7 +114,7 @@ internal sealed class FixedPointWallpaperFramePacer
             return false;
         }
 
-        if (nowTicks >= GetDueTicks(checked(_nextSampleIndex + 1)))
+        if (nowTicks >= GetDueTicks(checked(_nextSampleIndex + _maximumCatchUpSamples + 1)))
         {
             Reanchor(monotonicNow);
             wait = TimeSpan.Zero;
@@ -113,7 +128,10 @@ internal sealed class FixedPointWallpaperFramePacer
         return true;
     }
 
-    internal bool ReanchorIfSampleCompletionIsBehind(TimeSpan monotonicNow)
+    /// <summary>
+    /// Reports whether the next slot is already due, i.e. the caller is still catching up.
+    /// </summary>
+    internal bool IsBehind(TimeSpan monotonicNow)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(monotonicNow, TimeSpan.Zero);
         if (!_started)
@@ -121,13 +139,7 @@ internal sealed class FixedPointWallpaperFramePacer
             throw new InvalidOperationException("The wallpaper frame pacer has not started.");
         }
 
-        if ((decimal)monotonicNow.Ticks < GetDueTicks(_nextSampleIndex))
-        {
-            return false;
-        }
-
-        Reanchor(monotonicNow);
-        return true;
+        return (decimal)monotonicNow.Ticks >= GetDueTicks(_nextSampleIndex);
     }
 
     internal void ResetForCapturePause()
