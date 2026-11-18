@@ -578,8 +578,18 @@
         [data-app-shell-main-content-top-fade],
       __BFC_ADVANCED_BODY_SELECTOR__ main
         [data-app-shell-main-content-top-fade]
-        > [aria-hidden="true"]:is([class^="_MainContentTopFade_"], [class*=" _MainContentTopFade_"]) {
+        > [aria-hidden="true"]:is([class^="_MainContentTopFade_"], [class*=" _MainContentTopFade_"],
+                                  [class^="MainContentTopFade-"], [class*=" MainContentTopFade-"]) {
         background-image: none !important;
+      }
+      /* 26.1111 paints the fade and bottom fill on the wrapper around the marked footer. */
+      __BFC_ADVANCED_BODY_SELECTOR__ main[data-app-shell-main-surface="default"]
+        .thread-scroll-container
+        > .pointer-events-none.absolute.inset-x-0.bottom-0:has(> [data-thread-scroll-footer="true"])::before,
+      __BFC_ADVANCED_BODY_SELECTOR__ main[data-app-shell-main-surface="default"]
+        .thread-scroll-container
+        > .pointer-events-none.absolute.inset-x-0.bottom-0:has(> [data-thread-scroll-footer="true"])::after {
+        background: transparent !important;
       }
       __BFC_ADVANCED_BODY_SELECTOR__ main .thread-scroll-container
         [class~="bg-gradient-to-t"][class~="from-token-main-surface-primary"][class~="via-token-main-surface-primary"],

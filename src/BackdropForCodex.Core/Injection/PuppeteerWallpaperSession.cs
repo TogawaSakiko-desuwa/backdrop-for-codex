@@ -543,6 +543,7 @@ public sealed class PuppeteerWallpaperSession :
 
         var scan = await _pageSelector.ScanAsync(_browser, _endpoint, cancellationToken)
             .ConfigureAwait(false);
+        _endpoint = scan.Endpoint;
         _pageRegistry.PruneClosedPages(scan.ActivePages);
         foreach (var page in scan.ActivePages)
         {

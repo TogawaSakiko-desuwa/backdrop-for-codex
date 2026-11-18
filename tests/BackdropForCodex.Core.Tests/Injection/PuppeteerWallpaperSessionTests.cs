@@ -473,6 +473,54 @@ public sealed class PuppeteerWallpaperSessionTests
             CancellationToken.None));
     }
 
+    [Theory]
+    [InlineData("replacement", true)]
+    [InlineData("reused-pid", false)]
+    [InlineData("different-browser", false)]
+    [InlineData("two-windows", false)]
+    [InlineData("auxiliary", false)]
+    public async Task PageSelector_ReverifiesReplacementForClosedStartupWindow(string scenario, bool expected)
+    {
+        var startup = VerifiedEndpoint("startup");
+        var replacement = VerifiedEndpoint("restored");
+        var owner = scenario == "reused-pid"
+            ? startup.Candidate with { StartTimeUtc = startup.Candidate.StartTimeUtc.AddSeconds(1) }
+            : startup.Candidate;
+        var browser = scenario == "different-browser"
+            ? startup.Browser with { WebSocketDebuggerUrl = "ws://127.0.0.1:9222/devtools/browser/other" }
+            : startup.Browser;
+        var target = Assert.Single(replacement.InjectableTargets);
+        CdpTargetDescriptor[] targets = scenario switch
+        {
+            "two-windows" => [target, Assert.Single(startup.InjectableTargets)],
+            "auxiliary" => [target with { Url = target.Url + "?initialRoute=%2Favatar-overlay" }],
+            _ => [target],
+        };
+        var transport = new Codex.CdpEndpointDiscoveryTests.StubTransport(new Dictionary<string, string>
+        {
+            ["/json/version"] = JsonSerializer.Serialize(browser),
+            ["/json/list"] = JsonSerializer.Serialize(targets),
+        });
+        var discovery = new CdpEndpointDiscovery(
+            new Codex.CdpEndpointDiscoveryTests.StubCandidateSource([owner]), transport);
+        var original = startup with { DiscoverySource = discovery };
+        var restored = CreatePage("restored").Page;
+        var liveBrowser = CreateBrowser(restored);
+        var selector = new VerifiedCodexPageSelector();
+
+        var scan = await selector.ScanAsync(liveBrowser, original, CancellationToken.None);
+
+        Assert.Equal(expected, scan.EligiblePages.Contains(restored));
+        Assert.Equal(expected, await selector.IsEligibleVerifiedPageAsync(restored, scan.Endpoint, CancellationToken.None));
+        if (expected)
+        {
+            var calls = transport.CallCount;
+            var next = await selector.ScanAsync(liveBrowser, scan.Endpoint, CancellationToken.None);
+            Assert.Same(restored, Assert.Single(next.EligiblePages));
+            Assert.Equal(calls, transport.CallCount);
+        }
+    }
+
     [Fact]
     public async Task PageSelector_DeadlineCancelsAHangingCdpDetach()
     {

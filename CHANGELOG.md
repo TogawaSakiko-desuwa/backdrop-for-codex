@@ -4,6 +4,8 @@
 
 ## 未发布
 
+## [1.5.4] - 2026-11-18
+
 ### Changed
 
 - 重新整理工作台界面：预览区去掉标题条、裁剪标记、安全框和中心轴线，只在调整裁剪焦点并悬停时显示三分线；预览中的 Codex 线框按真实布局重画（侧栏、对话头、消息、输入框），面板随面板不透明度变化并带细描边。
@@ -19,6 +21,7 @@
 
 ### Fixed
 
+- 适配 Codex `26.1111` 启动时替换主窗口的行为，重新核验同一进程和调试端点上的新主窗口；修复聊天页和设置页的顶部渐变，以及输入框周围的整宽底色遮挡壁纸的问题。
 - 适配 Codex `26.1013` 的设置页、站点等共享页面、dot 消息画布、右侧面板和新标签页外框，恢复玻璃效果；设置卡片、消息气泡、编辑器及内嵌网页保留原生表面。
 - 修复输入区背景层改用 CSS 模块类名后留下的大块黑色底板与渐变；覆盖窗口顶部、右侧和底部的预留空隙，保持原生布局和点击区域。
 - 为 Security Cloud 等扩展页面的宿主外框补充玻璃效果；不改变内嵌扩展文档的绘制。
@@ -336,6 +339,7 @@
 - 复验完整 MSIX 包名、激活 PID、进程启动时间、Windows 会话和监听器所有权；媒体服务保持已校验文件的只读句柄。
 - 明确禁止 CSP bypass；关闭、更换或 lease 到期时移除媒体 `src`、撤销 `blob:` URL，并仅删除带有本项目 owner/generation 的节点和样式。
 
+[1.5.4]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.5.3...v1.5.4
 [1.5.3]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.5.2...v1.5.3
 [1.5.2]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.5.1...v1.5.2
 [1.5.1]: https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/compare/v1.5.0...v1.5.1
