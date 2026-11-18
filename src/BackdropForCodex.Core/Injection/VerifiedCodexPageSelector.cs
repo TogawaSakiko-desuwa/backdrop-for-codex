@@ -35,6 +35,33 @@ internal sealed class VerifiedCodexPageSelector
             _targetIds.Remove(oldPage);
         }
 
+        var eligiblePages = await FindEligiblePagesAsync(activePages, endpoint, cancellationToken)
+            .ConfigureAwait(false);
+        // Codex can replace its primary window during startup. A matching URL is only a
+        // reason to repeat discovery. The new target ID and socket need their own proof.
+        if (eligiblePages.Count == 0 && endpoint.DiscoverySource is { } discovery &&
+            activePages.Any(page => Uri.TryCreate(page.Url, UriKind.Absolute, out var uri) &&
+                endpoint.InjectableTargets.Any(target => IsSameReviewedDocument(uri, target.Url))))
+        {
+            var refreshed = await discovery.RefreshAsync(endpoint, cancellationToken).ConfigureAwait(false);
+            if (refreshed is not null &&
+                Uri.TryCreate(refreshed.InjectableTargets[0].Url, UriKind.Absolute, out var replacement) &&
+                endpoint.InjectableTargets.Any(target => IsSameReviewedDocument(replacement, target.Url)))
+            {
+                endpoint = refreshed;
+                eligiblePages = await FindEligiblePagesAsync(activePages, endpoint, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+        }
+
+        return new VerifiedCodexPageScan(activePages, eligiblePages, endpoint);
+    }
+
+    private async Task<List<IPage>> FindEligiblePagesAsync(
+        IReadOnlySet<IPage> activePages,
+        VerifiedCdpEndpoint endpoint,
+        CancellationToken cancellationToken)
+    {
         var eligiblePages = new List<IPage>();
         foreach (var page in activePages)
         {
@@ -45,7 +72,7 @@ internal sealed class VerifiedCodexPageSelector
             }
         }
 
-        return new VerifiedCodexPageScan(activePages, eligiblePages);
+        return eligiblePages;
     }
 
     public void Reset() => _targetIds.Clear();
@@ -216,13 +243,17 @@ internal sealed class VerifiedCodexPageScan
 {
     public VerifiedCodexPageScan(
         IReadOnlySet<IPage> activePages,
-        IReadOnlyList<IPage> eligiblePages)
+        IReadOnlyList<IPage> eligiblePages,
+        VerifiedCdpEndpoint endpoint)
     {
         ActivePages = activePages ?? throw new ArgumentNullException(nameof(activePages));
         EligiblePages = eligiblePages ?? throw new ArgumentNullException(nameof(eligiblePages));
+        Endpoint = endpoint;
     }
 
     public IReadOnlySet<IPage> ActivePages { get; }
 
     public IReadOnlyList<IPage> EligiblePages { get; }
+
+    public VerifiedCdpEndpoint Endpoint { get; }
 }

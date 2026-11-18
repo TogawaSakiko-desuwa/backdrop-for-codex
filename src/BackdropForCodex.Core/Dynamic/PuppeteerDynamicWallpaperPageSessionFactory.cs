@@ -1246,7 +1246,7 @@ internal sealed class PuppeteerDynamicWallpaperBrowserConnection :
     IDynamicWallpaperBrowserConnection
 {
     private readonly IBrowser _browser;
-    private readonly VerifiedCdpEndpoint _endpoint;
+    private VerifiedCdpEndpoint _endpoint;
     private readonly VerifiedCodexPageSelector _selector = new();
     private readonly SemaphoreSlim _stateGate = new(1, 1);
     private readonly Dictionary<IPage, PuppeteerDynamicWallpaperVerifiedPage> _pages =
@@ -1278,6 +1278,7 @@ internal sealed class PuppeteerDynamicWallpaperBrowserConnection :
             var scan = await _selector
                 .ScanAsync(_browser, _endpoint, cancellationToken)
                 .ConfigureAwait(false);
+            _endpoint = scan.Endpoint;
             if (Volatile.Read(ref _disconnectRequested) != 0 ||
                 Volatile.Read(ref _disconnected) != 0 ||
                 !_browser.IsConnected)

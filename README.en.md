@@ -12,11 +12,11 @@ Backdrop for Codex is an unofficial, open-source companion for **Windows 11 x64*
 [![CI](https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/actions/workflows/ci.yml/badge.svg)](https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-[Quick start](#download-and-quick-start) · [What's new](#whats-new-in-v153) · [Features](#features) · [Compatibility](#compatibility-and-limitations) · [Build](#build-from-source)
+[Quick start](#download-and-quick-start) · [What's new](#whats-new-in-v154) · [Features](#features) · [Compatibility](#compatibility-and-limitations) · [Build](#build-from-source)
 
 [**Download the Windows 11 x64 portable build →**](https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/releases/latest)
 
-`v1.5.3` · No installer · Runs as a standard user · Supports local media, Wallpaper Engine Image/Video, and experimental Scene/Web
+`v1.5.4` · No installer · Runs as a standard user · Supports local media, Wallpaper Engine Image/Video, and experimental Scene/Web
 
 > [!CAUTION]
 > Backdrop for Codex is an independent community project. It is not affiliated with, sponsored, endorsed, or supported by OpenAI or Microsoft. It works through the Chrome DevTools Protocol (CDP) on a local loopback address. Never run the companion as administrator or expose the debugging port beyond loopback, and fully exit Codex when finished. See the [security policy](SECURITY.md) and [threat model](THREAT_MODEL.md).
@@ -44,40 +44,35 @@ Backdrop for Codex is an unofficial, open-source companion for **Windows 11 x64*
 
 <p align="center"><sub>Example media is shown only to demonstrate local backdrop rendering and is not distributed with the project or its releases.</sub></p>
 
-## What's new in v1.5.3
+## What's new in v1.5.4
 
-### Wallpaper Engine playback fixes
-
-- Supports both 32-bit and 64-bit Wallpaper Engine and starts the engine when applying a Scene/Web project. Fixes unavailable live playback and failures when reselecting a project already in the library.
-- Low frame rates, window movement, and brief performance dips no longer immediately stop playback or lower quality. Sustained pressure still adjusts quality and retries recovery.
-
-### First application and Codex layout compatibility
-
-- Fixes wallpapers needing to be applied again after the companion launches Codex, and resumes playback when the page becomes visible again.
-- Supports the workspace, sidebar, and composer surfaces in Codex `26.924` / `26.1007`, while preserving native browser content, editors, and controls.
+- Wallpapers now attach to the replacement main window that Codex `26.1111` opens during startup.
+- The wallpaper shows through the top of chats and settings and around the message composer.
+- Fixed periodic stalls at video fragment boundaries in Wallpaper Engine Scene and Web projects.
+- The workbench adds wallpaper thumbnails and reorganizes the preview, profiles, and wallpaper settings.
 
 > [!IMPORTANT]
-> Scene/Web remains experimental in v1.5.3. Image/Video is the stable path.
+> Scene/Web remains experimental in v1.5.4. Image/Video is the stable path.
 
-[Read the full changelog](CHANGELOG.md#152---2026-09-20)
+[Read the full changelog](CHANGELOG.md#154---2026-11-18)
 
 ## Download and quick start
 
 | Release file | Purpose |
 | --- | --- |
-| `BackdropForCodex-v1.5.3-win-x64.zip` | The portable app most users should download |
-| `BackdropForCodex-v1.5.3-SHA256SUMS.txt` | SHA-256 checksums for downloaded artifacts |
-| `BackdropForCodex-v1.5.3-win-x64.spdx.json` | Machine-readable SPDX SBOM |
+| `BackdropForCodex-v1.5.4-win-x64.zip` | The portable app most users should download |
+| `BackdropForCodex-v1.5.4-SHA256SUMS.txt` | SHA-256 checksums for downloaded artifacts |
+| `BackdropForCodex-v1.5.4-win-x64.spdx.json` | Machine-readable SPDX SBOM |
 
 1. Install the official Microsoft Store/MSIX x64 Codex desktop app on Windows 11 x64.
-2. Download `BackdropForCodex-v1.5.3-win-x64.zip` from [GitHub Releases](https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/releases/latest), then extract it into an empty directory writable by your standard user account.
+2. Download `BackdropForCodex-v1.5.4-win-x64.zip` from [GitHub Releases](https://github.com/TogawaSakiko-desuwa/backdrop-for-codex/releases/latest), then extract it into an empty directory writable by your standard user account.
 3. Fully exit every Codex process. When upgrading, also exit the previous Backdrop version from the notification area before starting the new `BackdropForCodex.exe`.
 4. Create or select a backdrop profile, add local media or an installed Wallpaper Engine project, adjust the preview, and select **Apply & launch Codex**.
 5. Read the CDP risk notice that appears next. After you accept it, the companion launches Codex and applies the backdrop.
 6. After the first successful media activation, the companion attempts to create `Codex（动态背景）.lnk` on your desktop for future enhanced launches.
 
 > [!NOTE]
-> The `v1.5.3` portable build is not Authenticode-signed. If Windows SmartScreen appears, first confirm that the file came from this repository's Release page and verify its SHA-256 or GitHub artifact attestation.
+> The `v1.5.4` portable build is not Authenticode-signed. If Windows SmartScreen appears, first confirm that the file came from this repository's Release page and verify its SHA-256 or GitHub artifact attestation.
 
 <details>
 <summary><strong>Verify SHA-256 and GitHub build provenance</strong></summary>
@@ -85,14 +80,14 @@ Backdrop for Codex is an unofficial, open-source companion for **Windows 11 x64*
 Open PowerShell in the download directory:
 
 ```powershell
-Get-FileHash .\BackdropForCodex-v1.5.3-win-x64.zip -Algorithm SHA256
-Get-Content .\BackdropForCodex-v1.5.3-SHA256SUMS.txt
+Get-FileHash .\BackdropForCodex-v1.5.4-win-x64.zip -Algorithm SHA256
+Get-Content .\BackdropForCodex-v1.5.4-SHA256SUMS.txt
 ```
 
 Confirm that the ZIP hash exactly matches the checksum manifest. If [GitHub CLI](https://cli.github.com/) is installed, you can also verify build provenance:
 
 ```powershell
-gh attestation verify .\BackdropForCodex-v1.5.3-win-x64.zip `
+gh attestation verify .\BackdropForCodex-v1.5.4-win-x64.zip `
   --repo TogawaSakiko-desuwa/backdrop-for-codex
 ```
 

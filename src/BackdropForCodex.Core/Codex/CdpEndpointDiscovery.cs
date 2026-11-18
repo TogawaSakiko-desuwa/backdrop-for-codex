@@ -381,9 +381,26 @@ public sealed class CdpEndpointDiscovery
         _transport = transport ?? throw new ArgumentNullException(nameof(transport));
     }
 
-    public async ValueTask<CdpDiscoveryResult> DiscoverAsync(
+    public ValueTask<CdpDiscoveryResult> DiscoverAsync(
         VerifiedCodexIdentity verifiedIdentity,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        DiscoverAsync(verifiedIdentity, null, cancellationToken);
+
+    internal async ValueTask<VerifiedCdpEndpoint?> RefreshAsync(
+        VerifiedCdpEndpoint previous,
+        CancellationToken cancellationToken)
+    {
+        var result = await DiscoverAsync(previous.Identity, previous.Candidate, cancellationToken)
+            .ConfigureAwait(false);
+        return result.Endpoints is [var current] &&
+            current.BrowserWebSocketUri == previous.BrowserWebSocketUri &&
+            current.InjectableTargets.Count == 1 ? current : null;
+    }
+
+    private async ValueTask<CdpDiscoveryResult> DiscoverAsync(
+        VerifiedCodexIdentity verifiedIdentity,
+        CdpEndpointCandidate? requiredOwner,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(verifiedIdentity);
         var candidates = await _candidateSource
@@ -395,6 +412,11 @@ public sealed class CdpEndpointDiscovery
         foreach (var candidate in candidates)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (requiredOwner is not null && !IsSameCandidate(requiredOwner, candidate))
+            {
+                continue;
+            }
+
             if (!IsSafeCandidate(candidate))
             {
                 rejections.Add(new CdpEndpointProbe(
@@ -447,7 +469,7 @@ public sealed class CdpEndpointDiscovery
                     targets);
                 if (endpointIdentity.IsVerified)
                 {
-                    endpoints.Add(endpointIdentity.Endpoint!);
+                    endpoints.Add(endpointIdentity.Endpoint! with { DiscoverySource = this });
                 }
                 else
                 {

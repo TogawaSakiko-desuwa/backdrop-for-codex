@@ -120,6 +120,9 @@ public sealed record VerifiedCdpEndpoint
 
     public DateTimeOffset VerifiedAtUtc { get; }
 
+    // Only live discovery can revalidate a replacement window against the original listener.
+    internal CdpEndpointDiscovery? DiscoverySource { get; init; }
+
     /// <summary>
     /// An immutable snapshot of targets classified as reviewed Codex work pages.
     /// </summary>

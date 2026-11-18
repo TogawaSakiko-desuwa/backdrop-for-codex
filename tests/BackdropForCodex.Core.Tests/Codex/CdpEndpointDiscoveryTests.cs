@@ -420,7 +420,7 @@ public sealed class CdpEndpointDiscoveryTests
         }]
         """;
 
-    private sealed class StubCandidateSource(IReadOnlyList<CdpEndpointCandidate> candidates)
+    internal sealed class StubCandidateSource(IReadOnlyList<CdpEndpointCandidate> candidates)
         : ICdpEndpointCandidateSource
     {
         public ValueTask<IReadOnlyList<CdpEndpointCandidate>> GetCandidatesAsync(
@@ -451,7 +451,7 @@ public sealed class CdpEndpointDiscoveryTests
         }
     }
 
-    private sealed class StubTransport(IReadOnlyDictionary<string, string> responses)
+    internal sealed class StubTransport(IReadOnlyDictionary<string, string> responses)
         : ICdpJsonTransport
     {
         public int CallCount { get; private set; }
