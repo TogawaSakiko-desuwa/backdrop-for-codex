@@ -12,8 +12,8 @@
       },
       "Microsoft.Extensions.DependencyInjection.Abstractions": {
         "type": "Transitive",
-        "resolved": "8.0.0",
-        "contentHash": "cjWrLkJXK0rs4zofsK4bSdg+jhDLTaxrkXu4gS6Y7MAlCvRyNNgwY/lJi5RDlQOnSZweHqoyvgvbdvQsRIW+hg=="
+        "resolved": "8.0.2",
+        "contentHash": "3iE7UF7MQkCv1cxzCahz+Y/guQbTqieyxyaWKhrRO91itI9cOKO76OHeQDahqG4MmW5umr3CcCvGmK92lWNlbg=="
       },
       "Microsoft.Extensions.Logging": {
         "type": "Transitive",
@@ -43,6 +43,11 @@
         "type": "Transitive",
         "resolved": "3.0.1",
         "contentHash": "s/s20YTVY9r9TPfTrN5g8zPF1YhwxyqO6PxUkrYTGI2B+OGPe9AdajWZrLhFqXIvqIW23fnUE4+ztrUWNU1+9g=="
+      },
+      "ReactiveExtensionsSharp": {
+        "type": "Transitive",
+        "resolved": "0.3.0",
+        "contentHash": "7rF0x9AnfwuDl20ojNmGBK53Cqqr9aaxiCQ5MMnZHlhAiXZr8STN1IjTZJoA75GZVxv1ugz++UNphEy/bcSMMg=="
       },
       "SharpGen.Runtime": {
         "type": "Transitive",
@@ -74,35 +79,36 @@
       },
       "WebDriverBiDi": {
         "type": "Transitive",
-        "resolved": "0.0.54",
-        "contentHash": "yo9iqgBySD7tpwQMk1rgkTGwZaE9gSehirixwtPVFyllsT+qM3POB95SryE3n1g+bZ+/POoSokSbMiS0ETbBog=="
+        "resolved": "0.0.61",
+        "contentHash": "UJGHt0DqU2nNHf8l12QvJZvj47dFb0VUcKsY6KTn+Cm6tlwXfcmkftfsED9ce+KJCmx4ZgvcaBZjWlae3GKunw=="
       },
       "backdropforcodex.core": {
         "type": "Project",
         "dependencies": {
-          "Microsoft.Extensions.Logging.Abstractions": "[8.0.0, )",
-          "PuppeteerSharp": "[25.3.4, )",
+          "Microsoft.Extensions.Logging.Abstractions": "[8.0.3, )",
+          "PuppeteerSharp": "[25.17.1, )",
           "Vortice.MediaFoundation": "[3.8.3, )"
         }
       },
       "Microsoft.Extensions.Logging.Abstractions": {
         "type": "CentralTransitive",
-        "requested": "[8.0.0, )",
-        "resolved": "8.0.0",
-        "contentHash": "arDBqTgFCyS0EvRV7O3MZturChstm50OJ0y9bDJvAcmEPJm0FFpFyjU/JLYyStNGGey081DvnQYlncNX5SJJGA==",
+        "requested": "[8.0.3, )",
+        "resolved": "8.0.3",
+        "contentHash": "dL0QGToTxggRLMYY4ZYX5AMwBb+byQBd/5dMiZE07Nv73o6I5Are3C7eQTh7K2+A4ct0PVISSr7TZANbiNb2yQ==",
         "dependencies": {
-          "Microsoft.Extensions.DependencyInjection.Abstractions": "8.0.0"
+          "Microsoft.Extensions.DependencyInjection.Abstractions": "8.0.2"
         }
       },
       "PuppeteerSharp": {
         "type": "CentralTransitive",
-        "requested": "[25.3.4, )",
-        "resolved": "25.3.4",
-        "contentHash": "SlycvZU3UtV3qju7L2ZjiccWXrVOsSc/s4ClQ2IWf6VVJumk8PaZROy5b4NLOkDprDGkyoifcTwa6YJb1Bl6ig==",
+        "requested": "[25.17.1, )",
+        "resolved": "25.17.1",
+        "contentHash": "tGqe1GKfGdGyjjLHG2Er3bSchP8ifjMk4DM/0P1OwhQoD/vkUUKqymc7TvLYlRjwpmhU49s86A3kqSwIaYWE4g==",
         "dependencies": {
           "Microsoft.Extensions.Logging": "8.0.0",
           "Microsoft.IO.RecyclableMemoryStream": "3.0.1",
-          "WebDriverBiDi": "0.0.54"
+          "ReactiveExtensionsSharp": "0.3.0",
+          "WebDriverBiDi": "0.0.61"
         }
       },
       "Vortice.MediaFoundation": {
